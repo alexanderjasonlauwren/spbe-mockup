@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "manager" | "staff" | "viewer";
+export type UserRole = "admin" | "manager" | "finance" | "driver" | "staff" | "viewer";
 
 export interface User {
   id: string;
@@ -7,6 +7,8 @@ export interface User {
   role: UserRole;
   permissions: string[];
   avatar?: string;
+  branch?: string;
+  phone?: string;
 }
 
 export interface AuthResponse {

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { PageHeader } from "@/components/common/pageHeader";
-import { StatsCard } from "@/components/common/statsCard";
+import { PageHeader } from "@/components/common/PageHeader";
+import { StatsCard } from "@/components/common/StatsCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

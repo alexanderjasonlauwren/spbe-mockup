@@ -1,6 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Users, Package, ShoppingCart } from "lucide-react";
+import {
+  LayoutDashboard,
+  FileText,
+  Truck,
+  CreditCard,
+  Settings,
+} from "lucide-react";
 
 interface MobileNavProps {
   className?: string;
@@ -8,9 +14,10 @@ interface MobileNavProps {
 
 const mobileNav = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Users", href: "/users", icon: Users },
-  { name: "Products", href: "/products", icon: Package },
-  { name: "Orders", href: "/orders", icon: ShoppingCart },
+  { name: "SA", href: "/sa", icon: FileText },
+  { name: "Distribusi", href: "/distribution", icon: Truck },
+  { name: "Bayar", href: "/payments", icon: CreditCard },
+  { name: "Pengaturan", href: "/settings", icon: Settings },
 ];
 
 export function MobileNav({ className }: MobileNavProps) {
@@ -19,8 +26,8 @@ export function MobileNav({ className }: MobileNavProps) {
   return (
     <nav
       className={cn(
-        "fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50",
-        "pb-safe", // Safe area for iOS
+        "fixed bottom-0 left-0 right-0 bg-white dark:bg-dark-900 border-t border-gray-200 dark:border-dark-800 z-50",
+        "pb-safe",
         className,
       )}
     >
@@ -36,11 +43,11 @@ export function MobileNav({ className }: MobileNavProps) {
                 "flex flex-col items-center justify-center flex-1 h-full gap-1",
                 "transition-colors",
                 isActive
-                  ? "text-blue-600"
-                  : "text-gray-500 hover:text-gray-900",
+                  ? "text-blue-600 dark:text-blue-400"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100",
               )}
             >
-              <item.icon className="h-6 w-6" />
+              <item.icon className="h-5 w-5" />
               <span className="text-xs font-medium">{item.name}</span>
             </Link>
           );

@@ -10,7 +10,7 @@ export function DashboardLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-dark-950">
+    <div className="min-h-screen bg-gray-50 dark:bg-dark-950 layout-bg">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div

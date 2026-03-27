@@ -8,9 +8,14 @@ import { LoginPage } from "./pages/auth/LoginPage";
 import { DashboardPage } from "./pages/dashboard/DashboardPage";
 import { UserListPage } from "./pages/users/UserListPage";
 import { ProductListPage } from "./pages/products/ProductListPage";
+import { ProductFormPage } from "./pages/products/ProductFormPage";
 import { OrderListPage } from "./pages/orders/OrderListPage";
 import { ReportsPage } from "./pages/reports/ReportsPage";
 import { SettingsPage } from "./pages/settings/SettingsPage";
+import { SAManagementPage } from "./pages/sa/SAManagementPage";
+import { DistributionPage } from "./pages/distribution/DistributionPage";
+import { PaymentPage } from "./pages/payments/PaymentPage";
+import { DriverPage } from "./pages/drivers/DriverPage";
 import { NotFoundPage } from "./pages/errors/NotFoundPage";
 import { ErrorBoundary } from "./pages/errors/ErrorBoundary";
 import { ProtectedRoute } from "./features/auth/components/ProtectedRoutes";
@@ -39,12 +44,32 @@ const router = createBrowserRouter([
         element: <DashboardPage />,
       },
       {
+        path: "sa",
+        element: <SAManagementPage />,
+      },
+      {
+        path: "distribution",
+        element: <DistributionPage />,
+      },
+      {
+        path: "payments",
+        element: <PaymentPage />,
+      },
+      {
+        path: "drivers",
+        element: <DriverPage />,
+      },
+      {
         path: "users",
         element: <UserListPage />,
       },
       {
         path: "products",
         element: <ProductListPage />,
+      },
+      {
+        path: "products/new",
+        element: <ProductFormPage />,
       },
       {
         path: "orders",

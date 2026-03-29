@@ -203,13 +203,7 @@ const PangkalanTooltip = ({
 };
 
 // Progress bar component
-function QuotaProgress({
-  used,
-  total,
-}: {
-  used: number;
-  total: number;
-}) {
+function QuotaProgress({ used, total }: { used: number; total: number }) {
   const pct = Math.round((used / total) * 100);
   const isLow = pct >= 90;
   const isMedium = pct >= 70 && pct < 90;
@@ -218,7 +212,8 @@ function QuotaProgress({
     <div className="space-y-1.5">
       <div className="flex justify-between text-xs">
         <span className="text-gray-600 dark:text-gray-400">
-          {used.toLocaleString("id-ID")} / {total.toLocaleString("id-ID")} tabung
+          {used.toLocaleString("id-ID")} / {total.toLocaleString("id-ID")}{" "}
+          tabung
         </span>
         <span
           className={cn(
@@ -237,11 +232,7 @@ function QuotaProgress({
         <div
           className={cn(
             "h-2 rounded-full transition-all",
-            isLow
-              ? "bg-red-500"
-              : isMedium
-                ? "bg-yellow-500"
-                : "bg-green-500",
+            isLow ? "bg-red-500" : isMedium ? "bg-yellow-500" : "bg-green-500",
           )}
           style={{ width: `${pct}%` }}
         />
@@ -284,7 +275,9 @@ export function DashboardPage() {
             </p>
             <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">
               Sisa {sisaKuota.toLocaleString("id-ID")} tabung dari{" "}
-              {totalKuota.toLocaleString("id-ID")} ({Math.round((sisaKuota / totalKuota) * 100)}%). Segera hubungi SPBE untuk SA berikutnya.
+              {totalKuota.toLocaleString("id-ID")} (
+              {Math.round((sisaKuota / totalKuota) * 100)}%). Segera hubungi
+              SPBE untuk SA berikutnya.
             </p>
           </div>
           <Button
@@ -304,8 +297,8 @@ export function DashboardPage() {
               8 Pembayaran Menunggu Verifikasi
             </p>
             <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">
-              Total{" "}
-              {formatCurrency(45500000)} belum diverifikasi oleh tim keuangan.
+              Total {formatCurrency(45500000)} belum diverifikasi oleh tim
+              keuangan.
             </p>
           </div>
           <Button
@@ -329,7 +322,6 @@ export function DashboardPage() {
             icon={Package}
             iconColor="text-amber-600 dark:text-amber-400"
             iconBgColor="bg-amber-50 dark:bg-amber-500/10"
-            accentBg="bg-amber-500"
           />
         </CanAccess>
 
@@ -342,7 +334,6 @@ export function DashboardPage() {
             icon={Truck}
             iconColor="text-cyan-600 dark:text-cyan-400"
             iconBgColor="bg-cyan-50 dark:bg-cyan-500/10"
-            accentBg="bg-cyan-500"
           />
         </CanAccess>
 
@@ -355,7 +346,6 @@ export function DashboardPage() {
             icon={CreditCard}
             iconColor="text-red-600 dark:text-red-400"
             iconBgColor="bg-red-50 dark:bg-red-500/10"
-            accentBg="bg-red-500"
           />
         </CanAccess>
 
@@ -368,7 +358,6 @@ export function DashboardPage() {
             icon={MapPin}
             iconColor="text-indigo-600 dark:text-indigo-400"
             iconBgColor="bg-indigo-50 dark:bg-indigo-500/10"
-            accentBg="bg-indigo-500"
           />
         </CanAccess>
       </div>
@@ -377,9 +366,7 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Quota Usage Card */}
         <CanAccess permission={PERMISSIONS.SA_VIEW}>
-          <div className="relative lg:col-span-1">
-            <div className="absolute top-0 inset-x-0 h-0.5 bg-red-500 z-10 rounded-t-xl" />
-            <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-lg h-full">
+          <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-lg lg:col-span-1">
             <CardHeader className="border-b border-gray-100 dark:border-dark-700 pb-4">
               <CardTitle className="text-base font-bold text-gray-900 dark:text-white">
                 Sisa Kuota SA
@@ -460,14 +447,11 @@ export function DashboardPage() {
               </div>
             </CardContent>
           </Card>
-          </div>
         </CanAccess>
 
         {/* Daily Distribution Chart */}
         <CanAccess permission={PERMISSIONS.DISTRIBUTION_VIEW}>
-          <div className="relative lg:col-span-2">
-            <div className="absolute top-0 inset-x-0 h-0.5 bg-cyan-500 z-10 rounded-t-xl" />
-            <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-lg h-full">
+          <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-lg lg:col-span-2">
             <CardHeader className="border-b border-gray-100 dark:border-dark-700 pb-4">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base font-bold text-gray-900 dark:text-white">
@@ -529,7 +513,6 @@ export function DashboardPage() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
-          </div>
         </CanAccess>
       </div>
 
@@ -537,9 +520,7 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Pangkalan Chart */}
         <CanAccess permission={PERMISSIONS.DISTRIBUTION_VIEW}>
-          <div className="relative">
-            <div className="absolute top-0 inset-x-0 h-0.5 bg-violet-500 z-10 rounded-t-xl" />
-            <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-lg">
+          <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-lg">
             <CardHeader className="border-b border-gray-100 dark:border-dark-700 pb-4">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base font-bold text-gray-900 dark:text-white">
@@ -585,14 +566,11 @@ export function DashboardPage() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
-          </div>
         </CanAccess>
 
         {/* Recent Distribution Activity */}
         <CanAccess permission={PERMISSIONS.DISTRIBUTION_VIEW}>
-          <div className="relative">
-            <div className="absolute top-0 inset-x-0 h-0.5 bg-emerald-500 z-10 rounded-t-xl" />
-            <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-lg">
+          <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between border-b border-gray-100 dark:border-dark-700 pb-4">
               <CardTitle className="text-base font-bold text-gray-900 dark:text-white">
                 Aktivitas Distribusi Terkini
@@ -643,7 +621,6 @@ export function DashboardPage() {
               </div>
             </CardContent>
           </Card>
-          </div>
         </CanAccess>
       </div>
     </div>

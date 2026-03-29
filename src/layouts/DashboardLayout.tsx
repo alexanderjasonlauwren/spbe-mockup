@@ -23,7 +23,7 @@ export function DashboardLayout() {
       <aside
         className={cn(
           "hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col z-50 transition-all duration-300",
-          sidebarCollapsed ? "lg:w-20" : "lg:w-64",
+          sidebarCollapsed ? "lg:w-[72px]" : "lg:w-60",
         )}
       >
         <Sidebar
@@ -35,7 +35,7 @@ export function DashboardLayout() {
       {/* Mobile Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 lg:hidden",
+          "fixed inset-y-0 left-0 z-50 w-60 transform transition-transform duration-300 lg:hidden",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -46,7 +46,7 @@ export function DashboardLayout() {
       <div
         className={cn(
           "transition-all duration-300",
-          sidebarCollapsed ? "lg:pl-20" : "lg:pl-64",
+          sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-60",
         )}
       >
         {/* Header */}

@@ -55,30 +55,118 @@ interface Payment {
 }
 
 const mockPayments: Payment[] = [
-  { id: "1", noPembayaran: "PAY-2026-0089", pangkalan: "UD Maju Jaya", noSJ: "SJ-2026-0342", nominal: 15600000, tanggal: "26 Mar 2026", metodePembayaran: "Transfer BCA", buktiBayar: true, status: "menunggu_verifikasi" },
-  { id: "2", noPembayaran: "PAY-2026-0088", pangkalan: "Toko Berkah", noSJ: "SJ-2026-0335", nominal: 10400000, tanggal: "25 Mar 2026", metodePembayaran: "Transfer BRI", buktiBayar: true, status: "menunggu_verifikasi" },
-  { id: "3", noPembayaran: "PAY-2026-0087", pangkalan: "CV Sejahtera", noSJ: "SJ-2026-0328", nominal: 13000000, tanggal: "25 Mar 2026", metodePembayaran: "Transfer Mandiri", buktiBayar: false, status: "menunggu_verifikasi" },
-  { id: "4", noPembayaran: "PAY-2026-0086", pangkalan: "Kios Makmur", noSJ: "SJ-2026-0321", nominal: 7800000, tanggal: "24 Mar 2026", metodePembayaran: "Transfer BCA", buktiBayar: true, status: "terverifikasi", verifiedBy: "Siti Rahayu" },
-  { id: "5", noPembayaran: "PAY-2026-0085", pangkalan: "UD Harapan", noSJ: "SJ-2026-0314", nominal: 11700000, tanggal: "24 Mar 2026", metodePembayaran: "Transfer BRI", buktiBayar: true, status: "terverifikasi", verifiedBy: "Siti Rahayu" },
-  { id: "6", noPembayaran: "PAY-2026-0084", pangkalan: "Toko Sumber Rejeki", noSJ: "SJ-2026-0307", nominal: 9100000, tanggal: "23 Mar 2026", metodePembayaran: "Transfer BCA", buktiBayar: true, status: "terverifikasi", verifiedBy: "Ahmad Fauzi" },
-  { id: "7", noPembayaran: "PAY-2026-0083", pangkalan: "UD Maju Jaya", noSJ: "SJ-2026-0300", nominal: 15600000, tanggal: "22 Mar 2026", metodePembayaran: "Transfer BCA", buktiBayar: false, status: "ditolak", catatan: "Bukti bayar tidak valid, nominal tidak sesuai" },
-  { id: "8", noPembayaran: "PAY-2026-0082", pangkalan: "Toko Berkah", noSJ: "SJ-2026-0293", nominal: 10400000, tanggal: "22 Mar 2026", metodePembayaran: "Transfer BRI", buktiBayar: true, status: "terverifikasi", verifiedBy: "Ahmad Fauzi" },
+  {
+    id: "1",
+    noPembayaran: "PAY-2026-0089",
+    pangkalan: "UD Maju Jaya",
+    noSJ: "SJ-2026-0342",
+    nominal: 15600000,
+    tanggal: "26 Mar 2026",
+    metodePembayaran: "Transfer BCA",
+    buktiBayar: true,
+    status: "menunggu_verifikasi",
+  },
+  {
+    id: "2",
+    noPembayaran: "PAY-2026-0088",
+    pangkalan: "Toko Berkah",
+    noSJ: "SJ-2026-0335",
+    nominal: 10400000,
+    tanggal: "25 Mar 2026",
+    metodePembayaran: "Transfer BRI",
+    buktiBayar: true,
+    status: "menunggu_verifikasi",
+  },
+  {
+    id: "3",
+    noPembayaran: "PAY-2026-0087",
+    pangkalan: "CV Sejahtera",
+    noSJ: "SJ-2026-0328",
+    nominal: 13000000,
+    tanggal: "25 Mar 2026",
+    metodePembayaran: "Transfer Mandiri",
+    buktiBayar: false,
+    status: "menunggu_verifikasi",
+  },
+  {
+    id: "4",
+    noPembayaran: "PAY-2026-0086",
+    pangkalan: "Kios Makmur",
+    noSJ: "SJ-2026-0321",
+    nominal: 7800000,
+    tanggal: "24 Mar 2026",
+    metodePembayaran: "Transfer BCA",
+    buktiBayar: true,
+    status: "terverifikasi",
+    verifiedBy: "Siti Rahayu",
+  },
+  {
+    id: "5",
+    noPembayaran: "PAY-2026-0085",
+    pangkalan: "UD Harapan",
+    noSJ: "SJ-2026-0314",
+    nominal: 11700000,
+    tanggal: "24 Mar 2026",
+    metodePembayaran: "Transfer BRI",
+    buktiBayar: true,
+    status: "terverifikasi",
+    verifiedBy: "Siti Rahayu",
+  },
+  {
+    id: "6",
+    noPembayaran: "PAY-2026-0084",
+    pangkalan: "Toko Sumber Rejeki",
+    noSJ: "SJ-2026-0307",
+    nominal: 9100000,
+    tanggal: "23 Mar 2026",
+    metodePembayaran: "Transfer BCA",
+    buktiBayar: true,
+    status: "terverifikasi",
+    verifiedBy: "Ahmad Fauzi",
+  },
+  {
+    id: "7",
+    noPembayaran: "PAY-2026-0083",
+    pangkalan: "UD Maju Jaya",
+    noSJ: "SJ-2026-0300",
+    nominal: 15600000,
+    tanggal: "22 Mar 2026",
+    metodePembayaran: "Transfer BCA",
+    buktiBayar: false,
+    status: "ditolak",
+    catatan: "Bukti bayar tidak valid, nominal tidak sesuai",
+  },
+  {
+    id: "8",
+    noPembayaran: "PAY-2026-0082",
+    pangkalan: "Toko Berkah",
+    noSJ: "SJ-2026-0293",
+    nominal: 10400000,
+    tanggal: "22 Mar 2026",
+    metodePembayaran: "Transfer BRI",
+    buktiBayar: true,
+    status: "terverifikasi",
+    verifiedBy: "Ahmad Fauzi",
+  },
 ];
 
 const statusConfig = {
   menunggu_verifikasi: {
     label: "Menunggu Verifikasi",
-    className: "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-500/10 dark:text-yellow-400 dark:border-yellow-500/30",
+    className:
+      "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-500/10 dark:text-yellow-400 dark:border-yellow-500/30",
     icon: Clock,
   },
   terverifikasi: {
     label: "Terverifikasi",
-    className: "bg-green-100 text-green-700 border-green-300 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/30",
+    className:
+      "bg-green-100 text-green-700 border-green-300 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/30",
     icon: CheckCircle2,
   },
   ditolak: {
     label: "Ditolak",
-    className: "bg-red-100 text-red-700 border-red-300 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30",
+    className:
+      "bg-red-100 text-red-700 border-red-300 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30",
     icon: XCircle,
   },
 };
@@ -99,20 +187,33 @@ export function PaymentPage() {
       (activeTab === "pending" && p.status === "menunggu_verifikasi") ||
       (activeTab === "terverifikasi" && p.status === "terverifikasi");
 
-    const matchesMethod = methodFilter === "all" || p.metodePembayaran.includes(methodFilter);
+    const matchesMethod =
+      methodFilter === "all" || p.metodePembayaran.includes(methodFilter);
 
     return matchesSearch && matchesTab && matchesMethod;
   });
 
-  const totalPending = mockPayments.filter(p => p.status === "menunggu_verifikasi").reduce((s, p) => s + p.nominal, 0);
-  const totalVerified = mockPayments.filter(p => p.status === "terverifikasi").reduce((s, p) => s + p.nominal, 0);
-  const countPending = mockPayments.filter(p => p.status === "menunggu_verifikasi").length;
-  const countWithoutProof = mockPayments.filter(p => !p.buktiBayar && p.status === "menunggu_verifikasi").length;
+  const totalPending = mockPayments
+    .filter((p) => p.status === "menunggu_verifikasi")
+    .reduce((s, p) => s + p.nominal, 0);
+  const totalVerified = mockPayments
+    .filter((p) => p.status === "terverifikasi")
+    .reduce((s, p) => s + p.nominal, 0);
+  const countPending = mockPayments.filter(
+    (p) => p.status === "menunggu_verifikasi",
+  ).length;
+  const countWithoutProof = mockPayments.filter(
+    (p) => !p.buktiBayar && p.status === "menunggu_verifikasi",
+  ).length;
 
   const tabs: { key: PaymentTab; label: string; count: number }[] = [
     { key: "semua", label: "Semua Pembayaran", count: mockPayments.length },
     { key: "pending", label: "Menunggu Verifikasi", count: countPending },
-    { key: "terverifikasi", label: "Terverifikasi", count: mockPayments.filter(p => p.status === "terverifikasi").length },
+    {
+      key: "terverifikasi",
+      label: "Terverifikasi",
+      count: mockPayments.filter((p) => p.status === "terverifikasi").length,
+    },
   ];
 
   return (
@@ -139,7 +240,8 @@ export function PaymentPage() {
               {countWithoutProof} Pembayaran Tanpa Bukti Transfer
             </p>
             <p className="text-xs text-orange-700 dark:text-orange-400 mt-0.5">
-              Minta pangkalan untuk mengunggah bukti transfer sebelum verifikasi dilakukan.
+              Minta pangkalan untuk mengunggah bukti transfer sebelum verifikasi
+              dilakukan.
             </p>
           </div>
         </div>
@@ -159,7 +261,7 @@ export function PaymentPage() {
         <StatsCard
           title="Total Terverifikasi"
           value={formatCurrency(totalVerified)}
-          change={`${mockPayments.filter(p => p.status === "terverifikasi").length} transaksi`}
+          change={`${mockPayments.filter((p) => p.status === "terverifikasi").length} transaksi`}
           changeType="positive"
           icon={CheckCircle2}
           iconColor="text-green-600 dark:text-green-400"
@@ -176,7 +278,9 @@ export function PaymentPage() {
         />
         <StatsCard
           title="Rata-rata per Transaksi"
-          value={formatCurrency(Math.round((totalPending + totalVerified) / mockPayments.length))}
+          value={formatCurrency(
+            Math.round((totalPending + totalVerified) / mockPayments.length),
+          )}
           change="Rata-rata nilai pembayaran"
           changeType="neutral"
           icon={TrendingUp}
@@ -203,9 +307,14 @@ export function PaymentPage() {
                   )}
                 >
                   {tab.label}
-                  <span className={cn("text-xs px-1.5 py-0.5 rounded-full",
-                    activeTab === tab.key ? "bg-white/20 text-white" : "bg-gray-100 dark:bg-dark-700 text-gray-600 dark:text-gray-400"
-                  )}>
+                  <span
+                    className={cn(
+                      "text-xs px-1.5 py-0.5 rounded-full",
+                      activeTab === tab.key
+                        ? "bg-white/20 text-white"
+                        : "bg-gray-100 dark:bg-dark-700 text-gray-600 dark:text-gray-400",
+                    )}
+                  >
                     {tab.count}
                   </span>
                 </button>
@@ -249,20 +358,39 @@ export function PaymentPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-gray-50 dark:bg-dark-850 hover:bg-gray-50 dark:hover:bg-dark-850 border-b border-gray-200 dark:border-dark-700">
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">No. Pembayaran</TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">Pangkalan</TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">No. Surat Jalan</TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-right">Nominal</TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">Metode</TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">Bukti Bayar</TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">Status</TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">Aksi</TableHead>
+                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
+                    No. Pembayaran
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
+                    Pangkalan
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
+                    No. Surat Jalan
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-right">
+                    Nominal
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
+                    Metode
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
+                    Bukti Bayar
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
+                    Status
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
+                    Aksi
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-32 text-center text-gray-500 dark:text-gray-400">
+                    <TableCell
+                      colSpan={8}
+                      className="h-32 text-center text-gray-500 dark:text-gray-400"
+                    >
                       Tidak ada data pembayaran yang ditemukan.
                     </TableCell>
                   </TableRow>
@@ -271,23 +399,40 @@ export function PaymentPage() {
                     const conf = statusConfig[payment.status];
                     const StatusIcon = conf.icon;
                     return (
-                      <TableRow key={payment.id} className="border-b border-gray-100 dark:border-dark-700 hover:bg-emerald-50/30 dark:hover:bg-emerald-500/5 transition-colors">
+                      <TableRow
+                        key={payment.id}
+                        className="border-b border-gray-100 dark:border-dark-700 hover:bg-emerald-50/30 dark:hover:bg-emerald-500/5 transition-colors"
+                      >
                         <TableCell className="px-4 py-4">
-                          <p className="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">{payment.noPembayaran}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{payment.tanggal}</p>
+                          <p className="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">
+                            {payment.noPembayaran}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            {payment.tanggal}
+                          </p>
                         </TableCell>
                         <TableCell className="px-4 py-4">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white">{payment.pangkalan}</p>
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">
+                            {payment.pangkalan}
+                          </p>
                         </TableCell>
                         <TableCell className="px-4 py-4">
-                          <span className="font-mono text-xs text-gray-700 dark:text-gray-300">{payment.noSJ}</span>
+                          <span className="font-mono text-xs text-gray-700 dark:text-gray-300">
+                            {payment.noSJ}
+                          </span>
                         </TableCell>
                         <TableCell className="px-4 py-4 text-right">
-                          <p className="font-bold text-gray-900 dark:text-white">{formatCurrency(payment.nominal)}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{payment.metodePembayaran}</p>
+                          <p className="font-bold text-gray-900 dark:text-white">
+                            {formatCurrency(payment.nominal)}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {payment.metodePembayaran}
+                          </p>
                         </TableCell>
                         <TableCell className="px-4 py-4">
-                          <span className="text-sm text-gray-700 dark:text-gray-300">{payment.metodePembayaran}</span>
+                          <span className="text-sm text-gray-700 dark:text-gray-300">
+                            {payment.metodePembayaran}
+                          </span>
                         </TableCell>
                         <TableCell className="px-4 py-4 text-center">
                           {payment.buktiBayar ? (
@@ -304,22 +449,37 @@ export function PaymentPage() {
                         </TableCell>
                         <TableCell className="px-4 py-4">
                           <div className="space-y-1">
-                            <Badge variant="outline" className={cn("flex items-center gap-1 w-fit text-xs font-medium", conf.className)}>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "flex items-center gap-1 w-fit text-xs font-medium",
+                                conf.className,
+                              )}
+                            >
                               <StatusIcon className="h-3 w-3" />
                               {conf.label}
                             </Badge>
                             {payment.verifiedBy && (
-                              <p className="text-xs text-gray-500 dark:text-gray-400">oleh {payment.verifiedBy}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                oleh {payment.verifiedBy}
+                              </p>
                             )}
                             {payment.catatan && (
-                              <p className="text-xs text-red-500 dark:text-red-400 max-w-[160px] truncate" title={payment.catatan}>{payment.catatan}</p>
+                              <p
+                                className="text-xs text-red-500 dark:text-red-400 max-w-[160px] truncate"
+                                title={payment.catatan}
+                              >
+                                {payment.catatan}
+                              </p>
                             )}
                           </div>
                         </TableCell>
                         <TableCell className="px-4 py-4 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             {payment.status === "menunggu_verifikasi" && (
-                              <CanAccess permission={PERMISSIONS.PAYMENTS_VERIFY}>
+                              <CanAccess
+                                permission={PERMISSIONS.PAYMENTS_VERIFY}
+                              >
                                 <Button
                                   size="sm"
                                   className={cn(
@@ -336,12 +496,19 @@ export function PaymentPage() {
                               </CanAccess>
                             )}
                             {payment.status === "terverifikasi" && (
-                              <Badge variant="outline" className="text-xs text-green-700 dark:text-green-400 border-green-300 dark:border-green-500/30">
+                              <Badge
+                                variant="outline"
+                                className="text-xs text-green-700 dark:text-green-400 border-green-300 dark:border-green-500/30"
+                              >
                                 ✓ Selesai
                               </Badge>
                             )}
                             {payment.status === "ditolak" && (
-                              <Button size="sm" variant="outline" className="text-xs h-7 border-orange-300 dark:border-orange-500/30 text-orange-700 dark:text-orange-400 hover:bg-orange-50">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs h-7 border-orange-300 dark:border-orange-500/30 text-orange-700 dark:text-orange-400 hover:bg-orange-50"
+                              >
                                 Kirim Ulang
                               </Button>
                             )}

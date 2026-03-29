@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatsCard } from "@/components/common/StatsCard";
+import {
+  SortableTableHead,
+  type SortDirection,
+} from "@/components/common/SortableTableHead";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,30 +54,150 @@ interface UserRecord {
 }
 
 const mockUsers: UserRecord[] = [
-  { id: "1", nama: "Alex Lawrence", email: "alex@gasdistrib.id", role: "admin", cabang: "Pusat - Jakarta", status: "aktif", bergabungSejak: "Jan 2024", terakhirLogin: "Hari ini, 09:15", avatar: "" },
-  { id: "2", nama: "Budi Hartono", email: "budi@gasdistrib.id", role: "manager", cabang: "Pusat - Jakarta", status: "aktif", bergabungSejak: "Mar 2024", terakhirLogin: "Hari ini, 08:30" },
-  { id: "3", nama: "Siti Rahayu", email: "siti@gasdistrib.id", role: "finance", cabang: "Pusat - Jakarta", status: "aktif", bergabungSejak: "Feb 2024", terakhirLogin: "Kemarin, 16:45" },
-  { id: "4", nama: "Ahmad Fauzi", email: "ahmad@gasdistrib.id", role: "finance", cabang: "Cabang Depok", status: "aktif", bergabungSejak: "Jun 2024", terakhirLogin: "Hari ini, 10:00" },
-  { id: "5", nama: "Budi Santoso", email: "budi.s@gasdistrib.id", role: "driver", cabang: "Pusat - Jakarta", status: "aktif", bergabungSejak: "Jan 2024", terakhirLogin: "Hari ini, 07:30" },
-  { id: "6", nama: "Hendra Wijaya", email: "hendra@gasdistrib.id", role: "driver", cabang: "Pusat - Jakarta", status: "aktif", bergabungSejak: "Mar 2024", terakhirLogin: "Hari ini, 08:05" },
-  { id: "7", nama: "Ahmad Yani", email: "ahmad.y@gasdistrib.id", role: "driver", cabang: "Cabang Depok", status: "aktif", bergabungSejak: "Nov 2023", terakhirLogin: "Hari ini, 08:30" },
-  { id: "8", nama: "Slamet Riyadi", email: "slamet@gasdistrib.id", role: "driver", cabang: "Pusat - Jakarta", status: "aktif", bergabungSejak: "Aug 2023", terakhirLogin: "Hari ini, 07:00" },
-  { id: "9", nama: "Eko Prasetyo", email: "eko@gasdistrib.id", role: "driver", cabang: "Cabang Bogor", status: "aktif", bergabungSejak: "Jun 2025", terakhirLogin: "26 Mar 2026" },
-  { id: "10", nama: "Dewi Kusuma", email: "dewi@gasdistrib.id", role: "staff", cabang: "Cabang Bogor", status: "nonaktif", bergabungSejak: "Sep 2024", terakhirLogin: "5 Mar 2026" },
+  {
+    id: "1",
+    nama: "Alex Lawrence",
+    email: "alex@gasdistrib.id",
+    role: "admin",
+    cabang: "Pusat - Jakarta",
+    status: "aktif",
+    bergabungSejak: "Jan 2024",
+    terakhirLogin: "Hari ini, 09:15",
+    avatar: "",
+  },
+  {
+    id: "2",
+    nama: "Budi Hartono",
+    email: "budi@gasdistrib.id",
+    role: "manager",
+    cabang: "Pusat - Jakarta",
+    status: "aktif",
+    bergabungSejak: "Mar 2024",
+    terakhirLogin: "Hari ini, 08:30",
+  },
+  {
+    id: "3",
+    nama: "Siti Rahayu",
+    email: "siti@gasdistrib.id",
+    role: "finance",
+    cabang: "Pusat - Jakarta",
+    status: "aktif",
+    bergabungSejak: "Feb 2024",
+    terakhirLogin: "Kemarin, 16:45",
+  },
+  {
+    id: "4",
+    nama: "Ahmad Fauzi",
+    email: "ahmad@gasdistrib.id",
+    role: "finance",
+    cabang: "Cabang Depok",
+    status: "aktif",
+    bergabungSejak: "Jun 2024",
+    terakhirLogin: "Hari ini, 10:00",
+  },
+  {
+    id: "5",
+    nama: "Budi Santoso",
+    email: "budi.s@gasdistrib.id",
+    role: "driver",
+    cabang: "Pusat - Jakarta",
+    status: "aktif",
+    bergabungSejak: "Jan 2024",
+    terakhirLogin: "Hari ini, 07:30",
+  },
+  {
+    id: "6",
+    nama: "Hendra Wijaya",
+    email: "hendra@gasdistrib.id",
+    role: "driver",
+    cabang: "Pusat - Jakarta",
+    status: "aktif",
+    bergabungSejak: "Mar 2024",
+    terakhirLogin: "Hari ini, 08:05",
+  },
+  {
+    id: "7",
+    nama: "Ahmad Yani",
+    email: "ahmad.y@gasdistrib.id",
+    role: "driver",
+    cabang: "Cabang Depok",
+    status: "aktif",
+    bergabungSejak: "Nov 2023",
+    terakhirLogin: "Hari ini, 08:30",
+  },
+  {
+    id: "8",
+    nama: "Slamet Riyadi",
+    email: "slamet@gasdistrib.id",
+    role: "driver",
+    cabang: "Pusat - Jakarta",
+    status: "aktif",
+    bergabungSejak: "Aug 2023",
+    terakhirLogin: "Hari ini, 07:00",
+  },
+  {
+    id: "9",
+    nama: "Eko Prasetyo",
+    email: "eko@gasdistrib.id",
+    role: "driver",
+    cabang: "Cabang Bogor",
+    status: "aktif",
+    bergabungSejak: "Jun 2025",
+    terakhirLogin: "26 Mar 2026",
+  },
+  {
+    id: "10",
+    nama: "Dewi Kusuma",
+    email: "dewi@gasdistrib.id",
+    role: "staff",
+    cabang: "Cabang Bogor",
+    status: "nonaktif",
+    bergabungSejak: "Sep 2024",
+    terakhirLogin: "5 Mar 2026",
+  },
 ];
 
 const roleConfig = {
-  admin: { label: "Administrator", className: "bg-red-100 text-red-700 border-red-300 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30", icon: Shield },
-  manager: { label: "Manajer", className: "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/30", icon: UserCheck },
-  finance: { label: "Keuangan", className: "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30", icon: CreditCard },
-  driver: { label: "Driver", className: "bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/30", icon: Truck },
-  staff: { label: "Staff", className: "bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-500/10 dark:text-gray-400 dark:border-gray-500/30", icon: Settings },
+  admin: {
+    label: "Administrator",
+    className:
+      "bg-red-100 text-red-700 border-red-300 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30",
+    icon: Shield,
+  },
+  manager: {
+    label: "Manajer",
+    className:
+      "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/30",
+    icon: UserCheck,
+  },
+  finance: {
+    label: "Keuangan",
+    className:
+      "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30",
+    icon: CreditCard,
+  },
+  driver: {
+    label: "Driver",
+    className:
+      "bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/30",
+    icon: Truck,
+  },
+  staff: {
+    label: "Staff",
+    className:
+      "bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-500/10 dark:text-gray-400 dark:border-gray-500/30",
+    icon: Settings,
+  },
 };
 
 export function UserListPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [sortKey, setSortKey] = useState<
+    "nama" | "role" | "cabang" | "bergabungSejak" | "terakhirLogin" | "status"
+  >("nama");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
   const filtered = mockUsers.filter((u) => {
     const matchesSearch =
@@ -84,10 +208,65 @@ export function UserListPage() {
     return matchesSearch && matchesRole && matchesStatus;
   });
 
+  const handleSort = (
+    nextSortKey:
+      | "nama"
+      | "role"
+      | "cabang"
+      | "bergabungSejak"
+      | "terakhirLogin"
+      | "status",
+  ) => {
+    if (sortKey === nextSortKey) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortKey(nextSortKey);
+    setSortDirection("asc");
+  };
+
+  const sortedFiltered = [...filtered].sort((left, right) => {
+    let compareValue = 0;
+
+    if (sortKey === "nama") {
+      compareValue = left.nama.localeCompare(right.nama, "id-ID");
+    }
+
+    if (sortKey === "role") {
+      compareValue = left.role.localeCompare(right.role, "id-ID");
+    }
+
+    if (sortKey === "cabang") {
+      compareValue = left.cabang.localeCompare(right.cabang, "id-ID");
+    }
+
+    if (sortKey === "bergabungSejak") {
+      compareValue =
+        new Date(left.bergabungSejak).getTime() -
+        new Date(right.bergabungSejak).getTime();
+    }
+
+    if (sortKey === "terakhirLogin") {
+      compareValue = left.terakhirLogin.localeCompare(
+        right.terakhirLogin,
+        "id-ID",
+      );
+    }
+
+    if (sortKey === "status") {
+      compareValue = left.status.localeCompare(right.status, "id-ID");
+    }
+
+    return sortDirection === "asc" ? compareValue : -compareValue;
+  });
+
   const totalUsers = mockUsers.length;
-  const admins = mockUsers.filter(u => u.role === "admin" || u.role === "manager").length;
-  const financeStaff = mockUsers.filter(u => u.role === "finance").length;
-  const drivers = mockUsers.filter(u => u.role === "driver").length;
+  const admins = mockUsers.filter(
+    (u) => u.role === "admin" || u.role === "manager",
+  ).length;
+  const financeStaff = mockUsers.filter((u) => u.role === "finance").length;
+  const drivers = mockUsers.filter((u) => u.role === "driver").length;
 
   return (
     <div className="space-y-6">
@@ -109,7 +288,7 @@ export function UserListPage() {
         <StatsCard
           title="Total Pengguna"
           value={`${totalUsers} Pengguna`}
-          change={`${mockUsers.filter(u => u.status === "aktif").length} aktif`}
+          change={`${mockUsers.filter((u) => u.status === "aktif").length} aktif`}
           changeType="positive"
           icon={Users}
           iconColor="text-sky-600 dark:text-sky-400"
@@ -146,8 +325,8 @@ export function UserListPage() {
 
       {/* User Table */}
       <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-xl">
-        <CardHeader className="border-b border-gray-100 dark:border-dark-700 bg-gray-50 dark:bg-dark-850">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <CardHeader className="p-0 border-b border-gray-100 dark:border-dark-700 bg-gray-50 dark:bg-dark-850">
+          <div className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <CardTitle className="text-lg font-bold text-gray-900 dark:text-white">
                 Daftar Pengguna
@@ -197,21 +376,62 @@ export function UserListPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-gray-50 dark:bg-dark-850 hover:bg-gray-50 dark:hover:bg-dark-850 border-b border-gray-200 dark:border-dark-700">
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">Pengguna</TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">Peran</TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">Cabang</TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">Bergabung</TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">Terakhir Login</TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">Status</TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">Aksi</TableHead>
+                  <SortableTableHead
+                    label="Pengguna"
+                    sortKey="nama"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Peran"
+                    sortKey="role"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Cabang"
+                    sortKey="cabang"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Bergabung"
+                    sortKey="bergabungSejak"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Terakhir Login"
+                    sortKey="terakhirLogin"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Status"
+                    sortKey="status"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
+                    Aksi
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((user) => {
+                {sortedFiltered.map((user) => {
                   const roleConf = roleConfig[user.role];
                   const RoleIcon = roleConf.icon;
                   return (
-                    <TableRow key={user.id} className="border-b border-gray-100 dark:border-dark-700 hover:bg-sky-50/30 dark:hover:bg-sky-500/5 transition-colors">
+                    <TableRow
+                      key={user.id}
+                      className="border-b border-gray-100 dark:border-dark-700 hover:bg-sky-50/30 dark:hover:bg-sky-500/5 transition-colors"
+                    >
                       <TableCell className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <Avatar className="h-9 w-9 shrink-0">
@@ -221,16 +441,26 @@ export function UserListPage() {
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white">{user.nama}</p>
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                              {user.nama}
+                            </p>
                             <div className="flex items-center gap-1 mt-0.5">
                               <Mail className="h-3 w-3 text-gray-400" />
-                              <p className="text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {user.email}
+                              </p>
                             </div>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell className="px-4 py-3">
-                        <Badge variant="outline" className={cn("flex items-center gap-1 w-fit text-xs font-medium", roleConf.className)}>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "flex items-center gap-1 w-fit text-xs font-medium",
+                            roleConf.className,
+                          )}
+                        >
                           <RoleIcon className="h-3 w-3" />
                           {roleConf.label}
                         </Badge>
@@ -238,14 +468,20 @@ export function UserListPage() {
                       <TableCell className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           <Building2 className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                          <span className="text-sm text-gray-700 dark:text-gray-300">{user.cabang}</span>
+                          <span className="text-sm text-gray-700 dark:text-gray-300">
+                            {user.cabang}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell className="px-4 py-3">
-                        <span className="text-sm text-gray-700 dark:text-gray-300">{user.bergabungSejak}</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">
+                          {user.bergabungSejak}
+                        </span>
                       </TableCell>
                       <TableCell className="px-4 py-3">
-                        <span className="text-sm text-gray-700 dark:text-gray-300">{user.terakhirLogin}</span>
+                        <span className="text-sm text-gray-700 dark:text-gray-300">
+                          {user.terakhirLogin}
+                        </span>
                       </TableCell>
                       <TableCell className="px-4 py-3">
                         <Badge
@@ -263,13 +499,23 @@ export function UserListPage() {
                       <TableCell className="px-4 py-3 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <CanAccess permission={PERMISSIONS.USERS_EDIT}>
-                            <Button size="sm" variant="outline" className="text-xs h-7 border-sky-300 dark:border-sky-500/30 text-sky-700 dark:text-sky-400 hover:bg-sky-50">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7 border-sky-300 dark:border-sky-500/30 text-sky-700 dark:text-sky-400 hover:bg-sky-50"
+                            >
                               Edit
                             </Button>
                           </CanAccess>
                           <CanAccess permission={PERMISSIONS.USERS_DELETE}>
-                            <Button size="sm" variant="outline" className="text-xs h-7 border-red-300 dark:border-red-500/30 text-red-700 dark:text-red-400 hover:bg-red-50">
-                              {user.status === "aktif" ? "Nonaktifkan" : "Aktifkan"}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-7 border-red-300 dark:border-red-500/30 text-red-700 dark:text-red-400 hover:bg-red-50"
+                            >
+                              {user.status === "aktif"
+                                ? "Nonaktifkan"
+                                : "Aktifkan"}
                             </Button>
                           </CanAccess>
                         </div>

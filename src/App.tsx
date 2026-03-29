@@ -8,7 +8,8 @@ import { LoginPage } from "./pages/auth/LoginPage";
 import { DashboardPage } from "./pages/dashboard/DashboardPage";
 import { UserListPage } from "./pages/users/UserListPage";
 import { ProductListPage } from "./pages/products/ProductListPage";
-import { ProductFormPage } from "./pages/products/ProductFormPage";
+import { PangkalanFormPage } from "./pages/pangkalan/PangkalanFormPage";
+import { PangkalanListPage } from "./pages/pangkalan/PangkalanListPage";
 import { OrderListPage } from "./pages/orders/OrderListPage";
 import { ReportsPage } from "./pages/reports/ReportsPage";
 import { SettingsPage } from "./pages/settings/SettingsPage";
@@ -68,8 +69,12 @@ const router = createBrowserRouter([
         element: <ProductListPage />,
       },
       {
+        path: "pangkalan",
+        element: <PangkalanListPage />,
+      },
+      {
         path: "products/new",
-        element: <ProductFormPage />,
+        element: <PangkalanFormPage />,
       },
       {
         path: "orders",

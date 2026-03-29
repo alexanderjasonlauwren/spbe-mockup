@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatsCard } from "@/components/common/StatsCard";
+import {
+  SortableTableHead,
+  type SortDirection,
+} from "@/components/common/SortableTableHead";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -175,6 +179,16 @@ export function PaymentPage() {
   const [activeTab, setActiveTab] = useState<PaymentTab>("semua");
   const [searchQuery, setSearchQuery] = useState("");
   const [methodFilter, setMethodFilter] = useState("all");
+  const [sortKey, setSortKey] = useState<
+    | "noPembayaran"
+    | "tanggal"
+    | "pangkalan"
+    | "noSJ"
+    | "nominal"
+    | "metodePembayaran"
+    | "status"
+  >("noPembayaran");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   const filtered = mockPayments.filter((p) => {
     const matchesSearch =
@@ -191,6 +205,66 @@ export function PaymentPage() {
       methodFilter === "all" || p.metodePembayaran.includes(methodFilter);
 
     return matchesSearch && matchesTab && matchesMethod;
+  });
+
+  const handleSort = (
+    nextSortKey:
+      | "noPembayaran"
+      | "tanggal"
+      | "pangkalan"
+      | "noSJ"
+      | "nominal"
+      | "metodePembayaran"
+      | "status",
+  ) => {
+    if (sortKey === nextSortKey) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortKey(nextSortKey);
+    setSortDirection("asc");
+  };
+
+  const sortedFiltered = [...filtered].sort((left, right) => {
+    let compareValue = 0;
+
+    if (sortKey === "noPembayaran") {
+      compareValue = left.noPembayaran.localeCompare(
+        right.noPembayaran,
+        "id-ID",
+      );
+    }
+
+    if (sortKey === "tanggal") {
+      compareValue =
+        new Date(left.tanggal).getTime() - new Date(right.tanggal).getTime();
+    }
+
+    if (sortKey === "pangkalan") {
+      compareValue = left.pangkalan.localeCompare(right.pangkalan, "id-ID");
+    }
+
+    if (sortKey === "noSJ") {
+      compareValue = left.noSJ.localeCompare(right.noSJ, "id-ID");
+    }
+
+    if (sortKey === "nominal") {
+      compareValue = left.nominal - right.nominal;
+    }
+
+    if (sortKey === "metodePembayaran") {
+      compareValue = left.metodePembayaran.localeCompare(
+        right.metodePembayaran,
+        "id-ID",
+      );
+    }
+
+    if (sortKey === "status") {
+      compareValue = left.status.localeCompare(right.status, "id-ID");
+    }
+
+    return sortDirection === "asc" ? compareValue : -compareValue;
   });
 
   const totalPending = mockPayments
@@ -291,8 +365,8 @@ export function PaymentPage() {
 
       {/* Payment Table */}
       <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-xl">
-        <CardHeader className="border-b border-gray-100 dark:border-dark-700 bg-gray-50 dark:bg-dark-850">
-          <div className="space-y-4">
+        <CardHeader className="p-0 border-b border-gray-100 dark:border-dark-700 bg-gray-50 dark:bg-dark-850">
+          <div className="px-6 py-4">
             {/* Tab navigation */}
             <div className="flex flex-wrap gap-2">
               {tabs.map((tab) => (
@@ -320,33 +394,37 @@ export function PaymentPage() {
                 </button>
               ))}
             </div>
+          </div>
 
+          <div className="px-6 py-4 border-t border-gray-100 dark:border-dark-700">
             {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
-                <Input
-                  placeholder="Cari pangkalan, no pembayaran, no SJ..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 bg-white dark:bg-dark-900 border-gray-300 dark:border-dark-600 text-gray-900 dark:text-white"
-                />
+            <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+              <div className="flex flex-col sm:flex-row gap-3 lg:flex-1 lg:max-w-3xl">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
+                  <Input
+                    placeholder="Cari pangkalan, no pembayaran, no SJ..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 bg-white dark:bg-dark-900 border-gray-300 dark:border-dark-600 text-gray-900 dark:text-white"
+                  />
+                </div>
+                <Select value={methodFilter} onValueChange={setMethodFilter}>
+                  <SelectTrigger className="w-full sm:w-44 bg-white dark:bg-dark-900 border-gray-300 dark:border-dark-600 text-gray-900 dark:text-white">
+                    <div className="flex items-center gap-2">
+                      <Filter className="h-4 w-4 text-gray-400" />
+                      <SelectValue placeholder="Metode Bayar" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent className="bg-white dark:bg-dark-800 border-gray-200 dark:border-dark-700">
+                    <SelectItem value="all">Semua Metode</SelectItem>
+                    <SelectItem value="BCA">BCA</SelectItem>
+                    <SelectItem value="BRI">BRI</SelectItem>
+                    <SelectItem value="Mandiri">Mandiri</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <Select value={methodFilter} onValueChange={setMethodFilter}>
-                <SelectTrigger className="w-full sm:w-44 bg-white dark:bg-dark-900 border-gray-300 dark:border-dark-600 text-gray-900 dark:text-white">
-                  <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4 text-gray-400" />
-                    <SelectValue placeholder="Metode Bayar" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-dark-800 border-gray-200 dark:border-dark-700">
-                  <SelectItem value="all">Semua Metode</SelectItem>
-                  <SelectItem value="BCA">BCA</SelectItem>
-                  <SelectItem value="BRI">BRI</SelectItem>
-                  <SelectItem value="Mandiri">Mandiri</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="self-center text-sm text-gray-500 dark:text-gray-400 sm:ml-auto whitespace-nowrap">
+              <p className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap lg:ml-2 lg:text-right">
                 {filtered.length} transaksi
               </p>
             </div>
@@ -358,27 +436,52 @@ export function PaymentPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-gray-50 dark:bg-dark-850 hover:bg-gray-50 dark:hover:bg-dark-850 border-b border-gray-200 dark:border-dark-700">
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
-                    No. Pembayaran
-                  </TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
-                    Pangkalan
-                  </TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
-                    No. Surat Jalan
-                  </TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-right">
-                    Nominal
-                  </TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
-                    Metode
-                  </TableHead>
+                  <SortableTableHead
+                    label="No. Pembayaran"
+                    sortKey="noPembayaran"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Pangkalan"
+                    sortKey="pangkalan"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="No. Surat Jalan"
+                    sortKey="noSJ"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Nominal"
+                    sortKey="nominal"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                  />
+                  <SortableTableHead
+                    label="Metode"
+                    sortKey="metodePembayaran"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
                   <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
                     Bukti Bayar
                   </TableHead>
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
-                    Status
-                  </TableHead>
+                  <SortableTableHead
+                    label="Status"
+                    sortKey="status"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
                   <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
                     Aksi
                   </TableHead>
@@ -395,7 +498,7 @@ export function PaymentPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filtered.map((payment) => {
+                  sortedFiltered.map((payment) => {
                     const conf = statusConfig[payment.status];
                     const StatusIcon = conf.icon;
                     return (

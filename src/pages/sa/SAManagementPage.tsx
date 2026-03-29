@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatsCard } from "@/components/common/StatsCard";
+import {
+  SortableTableHead,
+  type SortDirection,
+} from "@/components/common/SortableTableHead";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -151,7 +155,8 @@ function ProgressBar({ used, total }: { used: number; total: number }) {
         />
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400">
-        {used.toLocaleString("id-ID")} / {total.toLocaleString("id-ID")} ({pct}%)
+        {used.toLocaleString("id-ID")} / {total.toLocaleString("id-ID")} ({pct}
+        %)
       </p>
     </div>
   );
@@ -161,6 +166,10 @@ export function SAManagementPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [expandedRows, setExpandedRows] = useState<string[]>([]);
+  const [sortKey, setSortKey] = useState<
+    "noSA" | "periode" | "volumeTotal" | "targetHarian" | "status"
+  >("noSA");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   const toggleExpand = (id: string) => {
     setExpandedRows((prev) =>
@@ -174,6 +183,44 @@ export function SAManagementPage() {
       sa.periode.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "all" || sa.status === statusFilter;
     return matchesSearch && matchesStatus;
+  });
+
+  const handleSort = (
+    nextSortKey: "noSA" | "periode" | "volumeTotal" | "targetHarian" | "status",
+  ) => {
+    if (sortKey === nextSortKey) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortKey(nextSortKey);
+    setSortDirection("asc");
+  };
+
+  const sortedFiltered = [...filtered].sort((left, right) => {
+    let compareValue = 0;
+
+    if (sortKey === "noSA") {
+      compareValue = left.noSA.localeCompare(right.noSA, "id-ID");
+    }
+
+    if (sortKey === "periode") {
+      compareValue = left.periode.localeCompare(right.periode, "id-ID");
+    }
+
+    if (sortKey === "volumeTotal") {
+      compareValue = left.volumeTotal - right.volumeTotal;
+    }
+
+    if (sortKey === "targetHarian") {
+      compareValue = left.targetHarian - right.targetHarian;
+    }
+
+    if (sortKey === "status") {
+      compareValue = left.status.localeCompare(right.status, "id-ID");
+    }
+
+    return sortDirection === "asc" ? compareValue : -compareValue;
   });
 
   const totalVolume = mockSAData.reduce((s, r) => s + r.volumeTotal, 0);
@@ -218,7 +265,8 @@ export function SAManagementPage() {
             SA Bulan April 2026 Belum Diunduh
           </p>
           <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-            Jadwal distribusi April belum tersedia. Unduh SA terbaru dari portal SPBE sebelum 31 Maret 2026.
+            Jadwal distribusi April belum tersedia. Unduh SA terbaru dari portal
+            SPBE sebelum 31 Maret 2026.
           </p>
         </div>
         <Button
@@ -272,8 +320,8 @@ export function SAManagementPage() {
 
       {/* SA Table */}
       <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-xl">
-        <CardHeader className="border-b border-gray-100 dark:border-dark-700 bg-gray-50 dark:bg-dark-850">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <CardHeader className="p-0 border-b border-gray-100 dark:border-dark-700 bg-gray-50 dark:bg-dark-850">
+          <div className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <CardTitle className="text-lg font-bold text-gray-900 dark:text-white">
                 Daftar Schedule Agreement
@@ -313,40 +361,52 @@ export function SAManagementPage() {
               <TableHeader>
                 <TableRow className="bg-gray-50 dark:bg-dark-850 border-b border-gray-200 dark:border-dark-700 hover:bg-gray-50 dark:hover:bg-dark-850">
                   <TableHead className="w-8 px-4" />
-                  <TableHead className="px-4 py-3">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
-                      No. SA
-                    </span>
-                  </TableHead>
-                  <TableHead className="px-4 py-3">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
-                      Periode
-                    </span>
-                  </TableHead>
-                  <TableHead className="px-4 py-3 text-right">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
-                      Volume (Tabung)
-                    </span>
-                  </TableHead>
+                  <SortableTableHead
+                    label="No. SA"
+                    sortKey="noSA"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Periode"
+                    sortKey="periode"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
+                  <SortableTableHead
+                    label="Volume (Tabung)"
+                    sortKey="volumeTotal"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                  />
                   <TableHead className="px-4 py-3 min-w-[180px]">
                     <span className="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
                       Progress Distribusi
                     </span>
                   </TableHead>
-                  <TableHead className="px-4 py-3 text-right">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
-                      Target Harian
-                    </span>
-                  </TableHead>
-                  <TableHead className="px-4 py-3">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
-                      Status
-                    </span>
-                  </TableHead>
+                  <SortableTableHead
+                    label="Target Harian"
+                    sortKey="targetHarian"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                    align="right"
+                  />
+                  <SortableTableHead
+                    label="Status"
+                    sortKey="status"
+                    activeSortKey={sortKey}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                  />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((sa) => {
+                {sortedFiltered.map((sa) => {
                   const isExpanded = expandedRows.includes(sa.id);
                   const conf = statusConfig[sa.status];
                   const StatusIcon = conf.icon;
@@ -440,13 +500,41 @@ export function SAManagementPage() {
                               </p>
                               <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
                                 {[
-                                  { hari: "Senin", target: sa.targetHarian, actual: Math.round(sa.targetHarian * 0.95) },
-                                  { hari: "Selasa", target: sa.targetHarian, actual: Math.round(sa.targetHarian * 1.05) },
-                                  { hari: "Rabu", target: sa.targetHarian, actual: Math.round(sa.targetHarian * 0.88) },
-                                  { hari: "Kamis", target: sa.targetHarian, actual: Math.round(sa.targetHarian * 1.06) },
-                                  { hari: "Jumat", target: sa.targetHarian, actual: Math.round(sa.targetHarian * 1.14) },
-                                  { hari: "Sabtu", target: sa.targetHarian, actual: Math.round(sa.targetHarian * 0.9) },
-                                  { hari: "Minggu", target: sa.targetHarian, actual: Math.round(sa.targetHarian * 1.1) },
+                                  {
+                                    hari: "Senin",
+                                    target: sa.targetHarian,
+                                    actual: Math.round(sa.targetHarian * 0.95),
+                                  },
+                                  {
+                                    hari: "Selasa",
+                                    target: sa.targetHarian,
+                                    actual: Math.round(sa.targetHarian * 1.05),
+                                  },
+                                  {
+                                    hari: "Rabu",
+                                    target: sa.targetHarian,
+                                    actual: Math.round(sa.targetHarian * 0.88),
+                                  },
+                                  {
+                                    hari: "Kamis",
+                                    target: sa.targetHarian,
+                                    actual: Math.round(sa.targetHarian * 1.06),
+                                  },
+                                  {
+                                    hari: "Jumat",
+                                    target: sa.targetHarian,
+                                    actual: Math.round(sa.targetHarian * 1.14),
+                                  },
+                                  {
+                                    hari: "Sabtu",
+                                    target: sa.targetHarian,
+                                    actual: Math.round(sa.targetHarian * 0.9),
+                                  },
+                                  {
+                                    hari: "Minggu",
+                                    target: sa.targetHarian,
+                                    actual: Math.round(sa.targetHarian * 1.1),
+                                  },
                                 ].map((d) => (
                                   <div
                                     key={d.hari}

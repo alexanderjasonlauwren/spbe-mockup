@@ -330,8 +330,8 @@ export function ReportsPage() {
 
       {/* Sales Data Table - COMPLETELY FIXED */}
       <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-xl">
-        <CardHeader className="border-b border-gray-100 dark:border-dark-700 bg-gray-50 dark:bg-dark-850 pb-6">
-          <div className="flex flex-col gap-4">
+        <CardHeader className="p-0 border-b border-gray-100 dark:border-dark-700 bg-gray-50 dark:bg-dark-850">
+          <div className="px-6 py-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <CardTitle className="text-xl font-bold text-gray-900 dark:text-white">
@@ -343,7 +343,9 @@ export function ReportsPage() {
                 </p>
               </div>
             </div>
+          </div>
 
+          <div className="px-6 py-4 border-t border-gray-100 dark:border-dark-700">
             {/* Filters */}
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">

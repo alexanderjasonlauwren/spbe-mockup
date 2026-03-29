@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { PageHeader } from "@/components/common/PageHeader";
 import { StatsCard } from "@/components/common/StatsCard";
+import {
+  SortableTableHead,
+  type SortDirection,
+} from "@/components/common/SortableTableHead";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -258,6 +262,28 @@ function StarRating({ rating }: { rating: number }) {
 export function DriverPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeView, setActiveView] = useState<"driver" | "triplog">("driver");
+  const [driverSortKey, setDriverSortKey] = useState<
+    | "nama"
+    | "noKendaraan"
+    | "kapasitas"
+    | "tripHariIni"
+    | "totalTabungBulanIni"
+    | "ratingKinerja"
+    | "status"
+  >("nama");
+  const [driverSortDirection, setDriverSortDirection] =
+    useState<SortDirection>("asc");
+  const [tripSortKey, setTripSortKey] = useState<
+    | "noSJ"
+    | "driver"
+    | "pangkalan"
+    | "jumlah"
+    | "berangkat"
+    | "durasi"
+    | "status"
+  >("noSJ");
+  const [tripSortDirection, setTripSortDirection] =
+    useState<SortDirection>("desc");
 
   const activeDrivers = mockDrivers.filter((d) => d.status === "aktif");
   const onTrip = mockDrivers.filter((d) => d.tripHariIni > 0);
@@ -272,6 +298,117 @@ export function DriverPage() {
       d.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
       d.noKendaraan.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+
+  const handleDriverSort = (
+    nextSortKey:
+      | "nama"
+      | "noKendaraan"
+      | "kapasitas"
+      | "tripHariIni"
+      | "totalTabungBulanIni"
+      | "ratingKinerja"
+      | "status",
+  ) => {
+    if (driverSortKey === nextSortKey) {
+      setDriverSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setDriverSortKey(nextSortKey);
+    setDriverSortDirection("asc");
+  };
+
+  const handleTripSort = (
+    nextSortKey:
+      | "noSJ"
+      | "driver"
+      | "pangkalan"
+      | "jumlah"
+      | "berangkat"
+      | "durasi"
+      | "status",
+  ) => {
+    if (tripSortKey === nextSortKey) {
+      setTripSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setTripSortKey(nextSortKey);
+    setTripSortDirection("asc");
+  };
+
+  const sortedDrivers = [...filteredDrivers].sort((left, right) => {
+    let compareValue = 0;
+
+    if (driverSortKey === "nama") {
+      compareValue = left.nama.localeCompare(right.nama, "id-ID");
+    }
+
+    if (driverSortKey === "noKendaraan") {
+      compareValue = left.noKendaraan.localeCompare(right.noKendaraan, "id-ID");
+    }
+
+    if (driverSortKey === "kapasitas") {
+      compareValue = left.kapasitas - right.kapasitas;
+    }
+
+    if (driverSortKey === "tripHariIni") {
+      compareValue = left.tripHariIni - right.tripHariIni;
+    }
+
+    if (driverSortKey === "totalTabungBulanIni") {
+      compareValue = left.totalTabungBulanIni - right.totalTabungBulanIni;
+    }
+
+    if (driverSortKey === "ratingKinerja") {
+      compareValue = left.ratingKinerja - right.ratingKinerja;
+    }
+
+    if (driverSortKey === "status") {
+      compareValue = left.status.localeCompare(right.status, "id-ID");
+    }
+
+    return driverSortDirection === "asc" ? compareValue : -compareValue;
+  });
+
+  const sortedTripLogs = [...mockTripLogs]
+    .filter((t) => t.driver.toLowerCase().includes(searchQuery.toLowerCase()))
+    .sort((left, right) => {
+      let compareValue = 0;
+
+      if (tripSortKey === "noSJ") {
+        compareValue = left.noSJ.localeCompare(right.noSJ, "id-ID");
+      }
+
+      if (tripSortKey === "driver") {
+        compareValue = left.driver.localeCompare(right.driver, "id-ID");
+      }
+
+      if (tripSortKey === "pangkalan") {
+        compareValue = left.pangkalan.localeCompare(right.pangkalan, "id-ID");
+      }
+
+      if (tripSortKey === "jumlah") {
+        compareValue = left.jumlah - right.jumlah;
+      }
+
+      if (tripSortKey === "berangkat") {
+        compareValue = left.berangkat.localeCompare(right.berangkat, "id-ID");
+      }
+
+      if (tripSortKey === "durasi") {
+        compareValue = (left.durasi || "-").localeCompare(
+          right.durasi || "-",
+          "id-ID",
+        );
+      }
+
+      if (tripSortKey === "status") {
+        compareValue = left.status.localeCompare(right.status, "id-ID");
+      }
+
+      return tripSortDirection === "asc" ? compareValue : -compareValue;
+    });
 
   return (
     <div className="space-y-6">
@@ -330,8 +467,8 @@ export function DriverPage() {
 
       {/* Main Card */}
       <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-xl">
-        <CardHeader className="border-b border-gray-100 dark:border-dark-700 bg-gray-50 dark:bg-dark-850">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+        <CardHeader className="p-0 border-b border-gray-100 dark:border-dark-700 bg-gray-50 dark:bg-dark-850">
+          <div className="px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex border border-gray-200 dark:border-dark-700 rounded-xl p-1 bg-white dark:bg-dark-900 gap-1">
               <button
                 onClick={() => setActiveView("driver")}
@@ -381,34 +518,66 @@ export function DriverPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-gray-50 dark:bg-dark-850 hover:bg-gray-50 dark:hover:bg-dark-850 border-b border-gray-200 dark:border-dark-700">
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
-                      Driver
-                    </TableHead>
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
-                      Kendaraan
-                    </TableHead>
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
-                      Kapasitas
-                    </TableHead>
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
-                      Trip Hari Ini
-                    </TableHead>
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-right">
-                      Distribusi Bln Ini
-                    </TableHead>
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
-                      Rating
-                    </TableHead>
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
-                      Status
-                    </TableHead>
+                    <SortableTableHead
+                      label="Driver"
+                      sortKey="nama"
+                      activeSortKey={driverSortKey}
+                      sortDirection={driverSortDirection}
+                      onSort={handleDriverSort}
+                    />
+                    <SortableTableHead
+                      label="Kendaraan"
+                      sortKey="noKendaraan"
+                      activeSortKey={driverSortKey}
+                      sortDirection={driverSortDirection}
+                      onSort={handleDriverSort}
+                    />
+                    <SortableTableHead
+                      label="Kapasitas"
+                      sortKey="kapasitas"
+                      activeSortKey={driverSortKey}
+                      sortDirection={driverSortDirection}
+                      onSort={handleDriverSort}
+                      align="center"
+                    />
+                    <SortableTableHead
+                      label="Trip Hari Ini"
+                      sortKey="tripHariIni"
+                      activeSortKey={driverSortKey}
+                      sortDirection={driverSortDirection}
+                      onSort={handleDriverSort}
+                      align="center"
+                    />
+                    <SortableTableHead
+                      label="Distribusi Bln Ini"
+                      sortKey="totalTabungBulanIni"
+                      activeSortKey={driverSortKey}
+                      sortDirection={driverSortDirection}
+                      onSort={handleDriverSort}
+                      align="right"
+                    />
+                    <SortableTableHead
+                      label="Rating"
+                      sortKey="ratingKinerja"
+                      activeSortKey={driverSortKey}
+                      sortDirection={driverSortDirection}
+                      onSort={handleDriverSort}
+                      align="center"
+                    />
+                    <SortableTableHead
+                      label="Status"
+                      sortKey="status"
+                      activeSortKey={driverSortKey}
+                      sortDirection={driverSortDirection}
+                      onSort={handleDriverSort}
+                    />
                     <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
                       Aksi
                     </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredDrivers.map((driver) => {
+                  {sortedDrivers.map((driver) => {
                     const conf = driverStatusConfig[driver.status];
                     return (
                       <TableRow
@@ -515,115 +684,140 @@ export function DriverPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-gray-50 dark:bg-dark-850 hover:bg-gray-50 dark:hover:bg-dark-850 border-b border-gray-200 dark:border-dark-700">
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
-                      Surat Jalan
-                    </TableHead>
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
-                      Driver
-                    </TableHead>
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
-                      Tujuan Pangkalan
-                    </TableHead>
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-right">
-                      Jumlah
-                    </TableHead>
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
-                      Berangkat
-                    </TableHead>
+                    <SortableTableHead
+                      label="Surat Jalan"
+                      sortKey="noSJ"
+                      activeSortKey={tripSortKey}
+                      sortDirection={tripSortDirection}
+                      onSort={handleTripSort}
+                    />
+                    <SortableTableHead
+                      label="Driver"
+                      sortKey="driver"
+                      activeSortKey={tripSortKey}
+                      sortDirection={tripSortDirection}
+                      onSort={handleTripSort}
+                    />
+                    <SortableTableHead
+                      label="Tujuan Pangkalan"
+                      sortKey="pangkalan"
+                      activeSortKey={tripSortKey}
+                      sortDirection={tripSortDirection}
+                      onSort={handleTripSort}
+                    />
+                    <SortableTableHead
+                      label="Jumlah"
+                      sortKey="jumlah"
+                      activeSortKey={tripSortKey}
+                      sortDirection={tripSortDirection}
+                      onSort={handleTripSort}
+                      align="right"
+                    />
+                    <SortableTableHead
+                      label="Berangkat"
+                      sortKey="berangkat"
+                      activeSortKey={tripSortKey}
+                      sortDirection={tripSortDirection}
+                      onSort={handleTripSort}
+                      align="center"
+                    />
                     <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
                       Tiba
                     </TableHead>
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
-                      Durasi
-                    </TableHead>
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
-                      Status
-                    </TableHead>
+                    <SortableTableHead
+                      label="Durasi"
+                      sortKey="durasi"
+                      activeSortKey={tripSortKey}
+                      sortDirection={tripSortDirection}
+                      onSort={handleTripSort}
+                      align="center"
+                    />
+                    <SortableTableHead
+                      label="Status"
+                      sortKey="status"
+                      activeSortKey={tripSortKey}
+                      sortDirection={tripSortDirection}
+                      onSort={handleTripSort}
+                    />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockTripLogs
-                    .filter((t) =>
-                      t.driver
-                        .toLowerCase()
-                        .includes(searchQuery.toLowerCase()),
-                    )
-                    .map((trip) => {
-                      const conf = tripStatusConfig[trip.status];
-                      return (
-                        <TableRow
-                          key={trip.id}
-                          className="border-b border-gray-100 dark:border-dark-700 hover:bg-gray-50 dark:hover:bg-dark-700/30"
-                        >
-                          <TableCell className="px-4 py-3">
-                            <p className="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">
-                              {trip.noSJ}
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              {trip.tanggal}
-                            </p>
-                          </TableCell>
-                          <TableCell className="px-4 py-3">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">
-                              {trip.driver}
-                            </p>
-                          </TableCell>
-                          <TableCell className="px-4 py-3">
-                            <div className="flex items-center gap-1.5">
-                              <MapPin className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
-                              <span className="text-sm text-gray-900 dark:text-white">
-                                {trip.pangkalan}
-                              </span>
+                  {sortedTripLogs.map((trip) => {
+                    const conf = tripStatusConfig[trip.status];
+                    return (
+                      <TableRow
+                        key={trip.id}
+                        className="border-b border-gray-100 dark:border-dark-700 hover:bg-gray-50 dark:hover:bg-dark-700/30"
+                      >
+                        <TableCell className="px-4 py-3">
+                          <p className="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">
+                            {trip.noSJ}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {trip.tanggal}
+                          </p>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">
+                            {trip.driver}
+                          </p>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                            <span className="text-sm text-gray-900 dark:text-white">
+                              {trip.pangkalan}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-right">
+                          <p className="font-bold text-gray-900 dark:text-white">
+                            {trip.jumlah}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            tabung
+                          </p>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-center">
+                          <span className="text-sm font-medium text-gray-900 dark:text-white">
+                            {trip.berangkat}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-center">
+                          {trip.tiba ? (
+                            <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                              {trip.tiba}
+                            </span>
+                          ) : trip.status === "dalam_perjalanan" ? (
+                            <div className="flex items-center justify-center gap-1 text-blue-600 dark:text-blue-400">
+                              <Clock className="h-3.5 w-3.5 animate-pulse" />
+                              <span className="text-xs">En route</span>
                             </div>
-                          </TableCell>
-                          <TableCell className="px-4 py-3 text-right">
-                            <p className="font-bold text-gray-900 dark:text-white">
-                              {trip.jumlah}
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              tabung
-                            </p>
-                          </TableCell>
-                          <TableCell className="px-4 py-3 text-center">
-                            <span className="text-sm font-medium text-gray-900 dark:text-white">
-                              {trip.berangkat}
+                          ) : (
+                            <span className="text-sm text-gray-400 dark:text-gray-500">
+                              —
                             </span>
-                          </TableCell>
-                          <TableCell className="px-4 py-3 text-center">
-                            {trip.tiba ? (
-                              <span className="text-sm font-medium text-green-600 dark:text-green-400">
-                                {trip.tiba}
-                              </span>
-                            ) : trip.status === "dalam_perjalanan" ? (
-                              <div className="flex items-center justify-center gap-1 text-blue-600 dark:text-blue-400">
-                                <Clock className="h-3.5 w-3.5 animate-pulse" />
-                                <span className="text-xs">En route</span>
-                              </div>
-                            ) : (
-                              <span className="text-sm text-gray-400 dark:text-gray-500">
-                                —
-                              </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="px-4 py-3 text-center">
+                          <span className="text-sm text-gray-700 dark:text-gray-300">
+                            {trip.durasi ?? "—"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-xs font-medium",
+                              conf.className,
                             )}
-                          </TableCell>
-                          <TableCell className="px-4 py-3 text-center">
-                            <span className="text-sm text-gray-700 dark:text-gray-300">
-                              {trip.durasi ?? "—"}
-                            </span>
-                          </TableCell>
-                          <TableCell className="px-4 py-3">
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-xs font-medium",
-                                conf.className,
-                              )}
-                            >
-                              {conf.label}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                          >
+                            {conf.label}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

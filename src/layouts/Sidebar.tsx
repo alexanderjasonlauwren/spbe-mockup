@@ -22,6 +22,7 @@ import {
   CreditCard,
   MapPin,
   UserCheck,
+  Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -103,7 +104,7 @@ const navigation: NavItem[] = [
     children: [
       {
         name: "Daftar Pangkalan",
-        href: "/products",
+        href: "/pangkalan",
         icon: List,
         color: "text-gray-500 dark:text-gray-400",
         activeColor: "text-indigo-600 dark:text-indigo-400",
@@ -119,6 +120,15 @@ const navigation: NavItem[] = [
         activeBg: "bg-indigo-50 dark:bg-indigo-500/10",
       },
     ],
+  },
+  {
+    name: "Produk LPG",
+    href: "/products",
+    icon: Package,
+    permission: PERMISSIONS.PRODUCTS_VIEW,
+    color: "text-gray-500 dark:text-gray-400",
+    activeColor: "text-cyan-600 dark:text-cyan-400",
+    activeBg: "bg-cyan-50 dark:bg-cyan-500/10",
   },
   {
     name: "Laporan",

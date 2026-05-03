@@ -6,7 +6,7 @@ export const uploadSASchema = z.object({
   periodeMultai: z.string().min(1, "Periode mulai wajib diisi"),
   periodeBerakhir: z.string().min(1, "Periode berakhir wajib diisi"),
   totalKuota: z
-    .number({ invalid_type_error: "Kuota harus berupa angka" })
+    .number({ error: "Kuota harus berupa angka" })
     .min(1, "Kuota minimal 1 tabung"),
   notes: z.string().optional(),
 });

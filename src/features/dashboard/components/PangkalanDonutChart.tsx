@@ -29,8 +29,8 @@ export function PangkalanDonutChart({ data }: PangkalanDonutChartProps) {
               ))}
             </Pie>
             <Tooltip
-              formatter={(value: number) => [
-                `${value.toLocaleString("id-ID")} tabung`,
+              formatter={(value) => [
+                `${Number(value).toLocaleString("id-ID")} tabung`,
                 "",
               ]}
             />

@@ -1,597 +1,442 @@
 import { useState } from "react";
-import { PageHeader } from "@/components/common/PageHeader";
-import { StatsCard } from "@/components/common/StatsCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  DollarSign,
   TrendingUp,
-  ShoppingCart,
-  Users,
+  AlertTriangle,
+  Truck,
+  Wallet,
   Download,
+  FileSpreadsheet,
   Search,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Calendar,
+  Eye,
+  MessageSquare,
   Filter,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
-// Mock data
-const summaryStats = [
+// ── Mock data ────────────────────────────────────────────────────────────────
+const kpiData = [
   {
-    title: "Total Revenue",
-    value: formatCurrency(124582500),
-    change: "+18.2%",
-    changeType: "positive" as const,
-    icon: DollarSign,
-    color: "text-green-600 dark:text-green-400",
-    bgColor: "bg-green-50 dark:bg-green-500/10",
-  },
-  {
-    title: "Total Orders",
-    value: "3,482",
-    change: "+12.4%",
-    changeType: "positive" as const,
-    icon: ShoppingCart,
-    color: "text-blue-600 dark:text-blue-400",
-    bgColor: "bg-blue-50 dark:bg-blue-500/10",
-  },
-  {
-    title: "Avg Order Value",
-    value: formatCurrency(357800),
-    change: "+5.1%",
-    changeType: "positive" as const,
+    label: "Total Pendapatan",
+    value: 284500000,
+    sub: "+12.4% vs bulan lalu",
+    subType: "positive" as const,
     icon: TrendingUp,
-    color: "text-purple-600 dark:text-purple-400",
-    bgColor: "bg-purple-50 dark:bg-purple-500/10",
+    borderColor: "border-[#1565C0]",
+    iconBg: "bg-blue-50",
+    iconColor: "text-[#1565C0]",
   },
   {
-    title: "New Customers",
-    value: "487",
-    change: "-3.2%",
-    changeType: "negative" as const,
-    icon: Users,
-    color: "text-orange-600 dark:text-orange-400",
-    bgColor: "bg-orange-50 dark:bg-orange-500/10",
+    label: "Total Piutang Pangkalan",
+    value: 45800000,
+    sub: "12 pangkalan belum lunas",
+    subType: "negative" as const,
+    icon: AlertTriangle,
+    borderColor: "border-red-500",
+    iconBg: "bg-red-50",
+    iconColor: "text-red-600",
+  },
+  {
+    label: "Biaya Operasional",
+    value: 38200000,
+    sub: "Driver + BBM + lainnya",
+    subType: "neutral" as const,
+    icon: Truck,
+    borderColor: "border-amber-500",
+    iconBg: "bg-amber-50",
+    iconColor: "text-amber-600",
+  },
+  {
+    label: "Laba Bersih Estimasi",
+    value: 246300000,
+    sub: "Margin 86.6%",
+    subType: "positive" as const,
+    icon: Wallet,
+    borderColor: "border-emerald-500",
+    iconBg: "bg-emerald-50",
+    iconColor: "text-emerald-600",
   },
 ];
 
-type SaleData = {
+const monthlyData = [
+  { bulan: "Des", pendapatan: 198000000, pengeluaran: 49000000 },
+  { bulan: "Jan", pendapatan: 215000000, pengeluaran: 41000000 },
+  { bulan: "Feb", pendapatan: 187000000, pengeluaran: 57000000 },
+  { bulan: "Mar", pendapatan: 251000000, pengeluaran: 36000000 },
+  { bulan: "Apr", pendapatan: 228000000, pengeluaran: 48000000 },
+  { bulan: "Mei", pendapatan: 284500000, pengeluaran: 38200000 },
+];
+
+const komposisiData = [
+  { name: "Pembayaran Pangkalan", value: 60, color: "#1565C0" },
+  { name: "Margin Distribusi", value: 25, color: "#F59E0B" },
+  { name: "Lain-lain", value: 15, color: "#CBD5E1" },
+];
+
+type PaymentStatus = "Lunas" | "Sebagian" | "Belum";
+
+interface PangkalanRow {
   id: string;
-  date: string;
-  product: string;
-  customer: string;
-  quantity: number;
-  amount: number;
-  status: "completed" | "pending" | "refunded";
-  paymentMethod: string;
-  category: string;
-};
-
-const salesData: SaleData[] = [
-  {
-    id: "TXN-001",
-    date: "2026-02-22",
-    product: "Wireless Headphones",
-    customer: "John Doe",
-    quantity: 2,
-    amount: 2999800,
-    status: "completed",
-    paymentMethod: "Credit Card",
-    category: "Electronics",
-  },
-  {
-    id: "TXN-002",
-    date: "2026-02-22",
-    product: "Smart Watch",
-    customer: "Jane Smith",
-    quantity: 1,
-    amount: 3999900,
-    status: "completed",
-    paymentMethod: "PayPal",
-    category: "Electronics",
-  },
-  {
-    id: "TXN-003",
-    date: "2026-02-21",
-    product: "Laptop Stand",
-    customer: "Bob Johnson",
-    quantity: 3,
-    amount: 1499700,
-    status: "pending",
-    paymentMethod: "Credit Card",
-    category: "Accessories",
-  },
-  {
-    id: "TXN-004",
-    date: "2026-02-21",
-    product: "USB-C Cable",
-    customer: "Alice Brown",
-    quantity: 5,
-    amount: 999500,
-    status: "completed",
-    paymentMethod: "Debit Card",
-    category: "Accessories",
-  },
-  {
-    id: "TXN-005",
-    date: "2026-02-21",
-    product: "Phone Case",
-    customer: "Charlie Wilson",
-    quantity: 1,
-    amount: 249900,
-    status: "completed",
-    paymentMethod: "Credit Card",
-    category: "Accessories",
-  },
-  {
-    id: "TXN-006",
-    date: "2026-02-20",
-    product: "Bluetooth Speaker",
-    customer: "Diana Prince",
-    quantity: 2,
-    amount: 1799800,
-    status: "refunded",
-    paymentMethod: "PayPal",
-    category: "Electronics",
-  },
-  {
-    id: "TXN-007",
-    date: "2026-02-20",
-    product: "Wireless Mouse",
-    customer: "Ethan Hunt",
-    quantity: 4,
-    amount: 1599600,
-    status: "completed",
-    paymentMethod: "Credit Card",
-    category: "Accessories",
-  },
-  {
-    id: "TXN-008",
-    date: "2026-02-20",
-    product: "Keyboard",
-    customer: "Fiona Green",
-    quantity: 1,
-    amount: 1299900,
-    status: "completed",
-    paymentMethod: "Debit Card",
-    category: "Accessories",
-  },
-  {
-    id: "TXN-009",
-    date: "2026-02-19",
-    product: "Monitor",
-    customer: "George Martin",
-    quantity: 1,
-    amount: 3499900,
-    status: "completed",
-    paymentMethod: "Credit Card",
-    category: "Electronics",
-  },
-  {
-    id: "TXN-010",
-    date: "2026-02-19",
-    product: "Webcam",
-    customer: "Hannah Lee",
-    quantity: 2,
-    amount: 1999800,
-    status: "pending",
-    paymentMethod: "PayPal",
-    category: "Electronics",
-  },
-];
-
-type SortField = keyof SaleData;
-type SortOrder = "asc" | "desc";
-
-interface SortIconProps {
-  field: SortField;
-  sortField: SortField;
-  sortOrder: SortOrder;
+  nama: string;
+  totalTagihan: number;
+  paidPct: number;
+  transaksi: number;
+  status: PaymentStatus;
 }
 
-const SortIcon = ({ field, sortField, sortOrder }: SortIconProps) => {
-  if (sortField !== field)
-    return <ArrowUpDown className="h-4 w-4 text-gray-400 dark:text-gray-500" />;
-  return sortOrder === "asc" ? (
-    <ArrowUp className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-  ) : (
-    <ArrowDown className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+const reconciliationData: PangkalanRow[] = [
+  { id: "P1", nama: "Pangkalan Jaya Abadi", totalTagihan: 12450000, paidPct: 100, transaksi: 24, status: "Lunas" },
+  { id: "P2", nama: "Agen Gas Sumber Makmur", totalTagihan: 25800000, paidPct: 60, transaksi: 42, status: "Sebagian" },
+  { id: "P3", nama: "Toko Kelontong Bersama", totalTagihan: 8120000, paidPct: 0, transaksi: 15, status: "Belum" },
+  { id: "P4", nama: "Pangkalan Berkah LPG", totalTagihan: 15600000, paidPct: 100, transaksi: 28, status: "Lunas" },
+  { id: "P5", nama: "UD Maju Gasindo", totalTagihan: 42000000, paidPct: 100, transaksi: 56, status: "Lunas" },
+  { id: "P6", nama: "Warung Gas Lestari", totalTagihan: 5400000, paidPct: 80, transaksi: 10, status: "Sebagian" },
+];
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+function CustomBarTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: { value: number; name: string; color: string }[];
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white border border-slate-100 rounded-xl p-3 shadow-xl text-xs space-y-1">
+      <p className="font-bold text-on-surface mb-1">{label}</p>
+      {payload.map((p) => (
+        <p key={p.name} style={{ color: p.color }} className="font-medium">
+          {p.name}: {formatCurrency(p.value)}
+        </p>
+      ))}
+    </div>
   );
-};
+}
 
+function PayStatusBadge({ status }: { status: PaymentStatus }) {
+  const styles: Record<PaymentStatus, string> = {
+    Lunas: "bg-emerald-100 text-emerald-700",
+    Sebagian: "bg-amber-100 text-amber-700",
+    Belum: "bg-red-100 text-red-700",
+  };
+  return (
+    <span className={cn("px-2.5 py-1 rounded-full text-[11px] font-black uppercase", styles[status])}>
+      {status}
+    </span>
+  );
+}
+
+function ProgressBar({ pct }: { pct: number }) {
+  const color = pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-500" : "bg-red-500";
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden min-w-[60px]">
+        <div className={cn("h-full rounded-full transition-all", color)} style={{ width: pct + "%" }} />
+      </div>
+      <span className="text-xs font-bold text-on-surface tabular-nums w-8">{pct}%</span>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export function ReportsPage() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [sortField, setSortField] = useState<SortField>("date");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("Semua");
 
-  // Filter and sort data
-  const filteredData = salesData
-    .filter((item) => {
-      const matchesSearch =
-        item.product.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.id.toLowerCase().includes(searchQuery.toLowerCase());
+  const filtered = reconciliationData.filter((row) => {
+    const matchSearch = row.nama.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = statusFilter === "Semua" || row.status === statusFilter;
+    return matchSearch && matchStatus;
+  });
 
-      const matchesStatus =
-        statusFilter === "all" || item.status === statusFilter;
-      const matchesCategory =
-        categoryFilter === "all" || item.category === categoryFilter;
-
-      return matchesSearch && matchesStatus && matchesCategory;
-    })
-    .sort((a, b) => {
-      const aValue = a[sortField];
-      const bValue = b[sortField];
-
-      if (typeof aValue === "string" && typeof bValue === "string") {
-        return sortOrder === "asc"
-          ? aValue.localeCompare(bValue)
-          : bValue.localeCompare(aValue);
-      }
-
-      if (typeof aValue === "number" && typeof bValue === "number") {
-        return sortOrder === "asc" ? aValue - bValue : bValue - aValue;
-      }
-
-      return 0;
-    });
-
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortOrder("asc");
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    const variants = {
-      completed:
-        "bg-green-50 text-green-700 border-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/30",
-      pending:
-        "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-500/10 dark:text-yellow-400 dark:border-yellow-500/30",
-      refunded:
-        "bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30",
-    };
-
-    return (
-      <Badge
-        variant="outline"
-        className={`font-medium capitalize ${
-          variants[status as keyof typeof variants]
-        }`}
-      >
-        {status}
-      </Badge>
-    );
-  };
+  const totalTagihan = reconciliationData.reduce((s, r) => s + r.totalTagihan, 0);
+  const totalPiutang = reconciliationData.reduce((s, r) => s + (r.totalTagihan * (100 - r.paidPct)) / 100, 0);
+  const totalTransaksi = reconciliationData.reduce((s, r) => s + r.transaksi, 0);
+  const avgPaid = Math.round(
+    reconciliationData.reduce((s, r) => s + r.paidPct, 0) / reconciliationData.length
+  );
 
   return (
     <div className="space-y-6">
-      {/* Page Header - FIXED */}
-      <PageHeader
-        title="Reports & Analytics"
-        description="Comprehensive sales reports and business insights."
-        actions={
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              className="gap-2 border-gray-300 dark:border-dark-600 text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-dark-800"
-            >
-              <Calendar className="h-4 w-4" />
-              <span>Date Range</span>
-            </Button>
-            <Button className="gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white">
-              <Download className="h-4 w-4" />
-              <span>Export Report</span>
-            </Button>
-          </div>
-        }
-      />
+      {/* Top bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-black text-on-surface">Laporan Keuangan</h1>
+          <span className="text-xs font-bold text-on-surface-variant bg-surface-container px-2.5 py-1 rounded-full">
+            Mei 2026
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-2 px-4 py-2 border border-outline-variant text-on-surface-variant text-sm font-semibold rounded-lg hover:bg-surface-container-low transition-all active:scale-[0.98]">
+            <Download className="h-4 w-4" />
+            Export PDF
+          </button>
+          <button className="flex items-center gap-2 px-4 py-2 bg-[#1565C0] text-white text-sm font-semibold rounded-lg hover:bg-[#1255A0] transition-all active:scale-[0.98] shadow-sm">
+            <FileSpreadsheet className="h-4 w-4" />
+            Export Excel
+          </button>
+        </div>
+      </div>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {summaryStats.map((stat) => (
-          <StatsCard
-            key={stat.title}
-            title={stat.title}
-            value={stat.value}
-            change={stat.change}
-            changeType={stat.changeType}
-            icon={stat.icon}
-            iconColor={stat.color}
-            iconBgColor={stat.bgColor}
-          />
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+        {kpiData.map((kpi) => (
+          <div
+            key={kpi.label}
+            className={"bg-surface-container-lowest rounded-xl p-6 border-t-4 shadow-sm " + kpi.borderColor}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider leading-tight pr-2">
+                {kpi.label}
+              </p>
+              <div className={"w-9 h-9 rounded-lg flex items-center justify-center shrink-0 " + kpi.iconBg}>
+                <kpi.icon className={"h-5 w-5 " + kpi.iconColor} />
+              </div>
+            </div>
+            <p className="text-2xl font-black text-on-surface mb-2">
+              {formatCurrency(kpi.value)}
+            </p>
+            <p
+              className={
+                "text-xs font-bold " +
+                (kpi.subType === "positive" ? "text-emerald-600" :
+                 kpi.subType === "negative" ? "text-red-600" :
+                 "text-on-surface-variant")
+              }
+            >
+              {kpi.sub}
+            </p>
+          </div>
         ))}
       </div>
 
-      {/* Sales Data Table - COMPLETELY FIXED */}
-      <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-xl">
-        <CardHeader className="p-0 border-b border-gray-100 dark:border-dark-700 bg-gray-50 dark:bg-dark-850">
-          <div className="px-6 py-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <CardTitle className="text-xl font-bold text-gray-900 dark:text-white">
-                  Sales Transactions
-                </CardTitle>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Showing {filteredData.length} of {salesData.length}{" "}
-                  transactions
-                </p>
-              </div>
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* Bar chart */}
+        <div className="lg:col-span-7 bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
+            <h3 className="text-base font-bold text-on-surface">
+              Pendapatan vs Pengeluaran Bulanan
+            </h3>
+            <div className="flex items-center gap-4 text-[11px] font-bold uppercase tracking-wider">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-full bg-[#1565C0]" />
+                <span className="text-on-surface-variant">Pendapatan</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-full bg-amber-500" />
+                <span className="text-on-surface-variant">Pengeluaran</span>
+              </span>
             </div>
           </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={monthlyData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f2f4f7" vertical={false} />
+              <XAxis
+                dataKey="bulan"
+                tick={{ fontSize: 11, fontWeight: 700, fill: "#424752" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: "#424752" }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => (v / 1000000).toFixed(0) + "jt"}
+              />
+              <Tooltip content={<CustomBarTooltip />} />
+              <Bar dataKey="pendapatan" name="Pendapatan" fill="#1565C0" radius={[4, 4, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="pengeluaran" name="Pengeluaran" fill="#F59E0B" radius={[4, 4, 0, 0]} maxBarSize={28} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
 
-          <div className="px-6 py-4 border-t border-gray-100 dark:border-dark-700">
-            {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
-                <Input
-                  type="search"
-                  placeholder="Search by product, customer, or ID..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 bg-white dark:bg-dark-900 border-gray-300 dark:border-dark-600 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
-                />
+        {/* Donut chart */}
+        <div className="lg:col-span-5 bg-surface-container-lowest rounded-xl p-6 shadow-sm flex flex-col">
+          <h3 className="text-base font-bold text-on-surface mb-6">Komposisi Pendapatan</h3>
+          <div className="flex-1 flex flex-col items-center justify-center gap-6">
+            <div className="relative w-44 h-44">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={komposisiData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={54}
+                    outerRadius={74}
+                    dataKey="value"
+                    paddingAngle={2}
+                    startAngle={90}
+                    endAngle={-270}
+                  >
+                    {komposisiData.map((d) => (
+                      <Cell key={d.name} fill={d.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v) => [v + "%", ""]} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-2xl font-black text-on-surface">100%</span>
+                <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">
+                  Total
+                </span>
               </div>
-
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-40 bg-white dark:bg-dark-900 border-gray-300 dark:border-dark-600 text-gray-900 dark:text-white">
+            </div>
+            <div className="w-full space-y-3">
+              {komposisiData.map((d) => (
+                <div key={d.name} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                    <SelectValue placeholder="Status" />
+                    <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                    <span className="text-sm text-on-surface-variant">{d.name}</span>
                   </div>
-                </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-dark-800 border-gray-200 dark:border-dark-700">
-                  <SelectItem
-                    value="all"
-                    className="text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-dark-700"
-                  >
-                    All Status
-                  </SelectItem>
-                  <SelectItem
-                    value="completed"
-                    className="text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-dark-700"
-                  >
-                    Completed
-                  </SelectItem>
-                  <SelectItem
-                    value="pending"
-                    className="text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-dark-700"
-                  >
-                    Pending
-                  </SelectItem>
-                  <SelectItem
-                    value="refunded"
-                    className="text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-dark-700"
-                  >
-                    Refunded
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-full sm:w-40 bg-white dark:bg-dark-900 border-gray-300 dark:border-dark-600 text-gray-900 dark:text-white">
-                  <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                    <SelectValue placeholder="Category" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-dark-800 border-gray-200 dark:border-dark-700">
-                  <SelectItem
-                    value="all"
-                    className="text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-dark-700"
-                  >
-                    All Categories
-                  </SelectItem>
-                  <SelectItem
-                    value="Electronics"
-                    className="text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-dark-700"
-                  >
-                    Electronics
-                  </SelectItem>
-                  <SelectItem
-                    value="Accessories"
-                    className="text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-dark-700"
-                  >
-                    Accessories
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+                  <span className="text-sm font-bold text-on-surface">{d.value}%</span>
+                </div>
+              ))}
             </div>
           </div>
-        </CardHeader>
+        </div>
+      </div>
 
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-50 dark:bg-dark-850 hover:bg-gray-50 dark:hover:bg-dark-850 border-b border-gray-200 dark:border-dark-700">
-                  <TableHead className="h-12 px-4">
-                    <div
-                      className="flex items-center gap-2 cursor-pointer select-none"
-                      onClick={() => handleSort("id")}
-                    >
-                      <span className="text-gray-900 dark:text-white font-semibold text-sm">
-                        Transaction ID
-                      </span>
-                      <SortIcon
-                        field="id"
-                        sortField={sortField}
-                        sortOrder={sortOrder}
-                      />
-                    </div>
-                  </TableHead>
-                  <TableHead className="h-12 px-4">
-                    <div
-                      className="flex items-center gap-2 cursor-pointer select-none"
-                      onClick={() => handleSort("date")}
-                    >
-                      <span className="text-gray-900 dark:text-white font-semibold text-sm">
-                        Date
-                      </span>
-                      <SortIcon
-                        field="date"
-                        sortField={sortField}
-                        sortOrder={sortOrder}
-                      />
-                    </div>
-                  </TableHead>
-                  <TableHead className="h-12 px-4">
-                    <div
-                      className="flex items-center gap-2 cursor-pointer select-none"
-                      onClick={() => handleSort("product")}
-                    >
-                      <span className="text-gray-900 dark:text-white font-semibold text-sm">
-                        Product
-                      </span>
-                      <SortIcon
-                        field="product"
-                        sortField={sortField}
-                        sortOrder={sortOrder}
-                      />
-                    </div>
-                  </TableHead>
-                  <TableHead className="h-12 px-4">
-                    <div
-                      className="flex items-center gap-2 cursor-pointer select-none"
-                      onClick={() => handleSort("customer")}
-                    >
-                      <span className="text-gray-900 dark:text-white font-semibold text-sm">
-                        Customer
-                      </span>
-                      <SortIcon
-                        field="customer"
-                        sortField={sortField}
-                        sortOrder={sortOrder}
-                      />
-                    </div>
-                  </TableHead>
-                  <TableHead className="h-12 px-4 text-right">
-                    <div
-                      className="flex items-center gap-2 cursor-pointer select-none justify-end"
-                      onClick={() => handleSort("quantity")}
-                    >
-                      <span className="text-gray-900 dark:text-white font-semibold text-sm">
-                        Qty
-                      </span>
-                      <SortIcon
-                        field="quantity"
-                        sortField={sortField}
-                        sortOrder={sortOrder}
-                      />
-                    </div>
-                  </TableHead>
-                  <TableHead className="h-12 px-4 text-right">
-                    <div
-                      className="flex items-center gap-2 cursor-pointer select-none justify-end"
-                      onClick={() => handleSort("amount")}
-                    >
-                      <span className="text-gray-900 dark:text-white font-semibold text-sm">
-                        Amount
-                      </span>
-                      <SortIcon
-                        field="amount"
-                        sortField={sortField}
-                        sortOrder={sortOrder}
-                      />
-                    </div>
-                  </TableHead>
-                  <TableHead className="h-12 px-4">
-                    <span className="text-gray-900 dark:text-white font-semibold text-sm">
-                      Status
-                    </span>
-                  </TableHead>
-                  <TableHead className="h-12 px-4">
-                    <span className="text-gray-900 dark:text-white font-semibold text-sm">
-                      Payment
-                    </span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredData.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={8}
-                      className="h-32 text-center text-gray-500 dark:text-gray-400"
-                    >
-                      No transactions found matching your filters.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredData.map((sale) => (
-                    <TableRow
-                      key={sale.id}
-                      className="border-b border-gray-100 dark:border-dark-700 hover:bg-blue-50/50 dark:hover:bg-blue-500/5 transition-colors"
-                    >
-                      <TableCell className="font-mono text-sm font-medium text-blue-600 dark:text-blue-400 px-4 py-4">
-                        {sale.id}
-                      </TableCell>
-                      <TableCell className="text-sm text-gray-700 dark:text-gray-300 px-4 py-4">
-                        {new Date(sale.date).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </TableCell>
-                      <TableCell className="px-4 py-4">
-                        <div>
-                          <p className="font-medium text-gray-900 dark:text-white text-sm">
-                            {sale.product}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {sale.category}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-gray-700 dark:text-gray-300 px-4 py-4">
-                        {sale.customer}
-                      </TableCell>
-                      <TableCell className="text-right font-medium text-gray-900 dark:text-white px-4 py-4">
-                        {sale.quantity}
-                      </TableCell>
-                      <TableCell className="text-right font-bold text-gray-900 dark:text-white px-4 py-4">
-                        {formatCurrency(sale.amount)}
-                      </TableCell>
-                      <TableCell className="px-4 py-4">
-                        {getStatusBadge(sale.status)}
-                      </TableCell>
-                      <TableCell className="text-sm text-gray-700 dark:text-gray-300 px-4 py-4">
-                        {sale.paymentMethod}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+      {/* Reconciliation Table */}
+      <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3 bg-surface-container-low/40 border-b border-slate-100">
+          <h3 className="text-base font-bold text-on-surface">
+            Rekonsiliasi Pembayaran Pangkalan
+          </h3>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1">
+              {["Semua", "Lunas", "Sebagian", "Belum"].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={
+                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all " +
+                    (statusFilter === s
+                      ? "bg-[#1565C0] text-white"
+                      : "text-on-surface-variant hover:bg-surface-container")
+                  }
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-on-surface-variant" />
+              <input
+                type="text"
+                placeholder="Cari Pangkalan..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-8 pr-3 py-1.5 bg-surface border border-outline-variant rounded-lg text-sm w-48 focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30"
+              />
+            </div>
+            <button className="p-2 border border-outline-variant rounded-lg hover:bg-surface-container transition-colors">
+              <Filter className="h-4 w-4 text-on-surface-variant" />
+            </button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-surface-container-low/30">
+                {["Pangkalan", "Total Tagihan", "Sudah Dibayar", "Sisa Piutang", "Transaksi", "Status", "Aksi"].map((h) => (
+                  <th key={h} className="px-5 py-3.5 text-[10px] font-bold text-on-surface-variant uppercase tracking-widest whitespace-nowrap">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filtered.map((row) => {
+                const sisaPiutang = row.totalTagihan * (1 - row.paidPct / 100);
+                return (
+                  <tr key={row.id} className="hover:bg-surface-container-low/20 transition-colors">
+                    <td className="px-5 py-4 font-bold text-on-surface text-sm">{row.nama}</td>
+                    <td className="px-5 py-4 text-right font-medium text-sm text-on-surface whitespace-nowrap">
+                      {formatCurrency(row.totalTagihan)}
+                    </td>
+                    <td className="px-5 py-4 min-w-[140px]">
+                      <ProgressBar pct={row.paidPct} />
+                    </td>
+                    <td className="px-5 py-4 text-right font-bold text-sm whitespace-nowrap">
+                      {sisaPiutang === 0 ? (
+                        <span className="text-slate-400 font-medium">Rp 0</span>
+                      ) : (
+                        <span className="text-red-600">{formatCurrency(sisaPiutang)}</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-4 text-center font-medium text-sm">{row.transaksi}</td>
+                    <td className="px-5 py-4">
+                      <PayStatusBadge status={row.status} />
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          title="Lihat detail"
+                          className="p-1.5 text-on-surface-variant hover:text-[#1565C0] hover:bg-blue-50 rounded-md transition-all"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          title="Kirim pesan"
+                          className="p-1.5 text-on-surface-variant hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-all"
+                        >
+                          <MessageSquare className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-5 py-12 text-center text-sm text-on-surface-variant">
+                    Tidak ada data yang cocok
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            <tfoot>
+              <tr className="bg-surface-container-low/50 border-t-2 border-slate-200">
+                <td className="px-5 py-4 text-xs font-black text-on-surface uppercase tracking-wider">
+                  Total Rekonsiliasi
+                </td>
+                <td className="px-5 py-4 text-right font-black text-sm text-on-surface whitespace-nowrap">
+                  {formatCurrency(totalTagihan)}
+                </td>
+                <td className="px-5 py-4">
+                  <ProgressBar pct={avgPaid} />
+                </td>
+                <td className="px-5 py-4 text-right font-black text-sm text-red-600 whitespace-nowrap">
+                  {formatCurrency(totalPiutang)}
+                </td>
+                <td className="px-5 py-4 text-center font-black text-sm">{totalTransaksi}</td>
+                <td className="px-5 py-4" />
+                <td className="px-5 py-4 text-[11px] text-on-surface-variant italic">
+                  Data diperbarui otomatis per transaksi divalidasi
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

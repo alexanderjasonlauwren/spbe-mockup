@@ -2,15 +2,13 @@ import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
-import { MobileNav } from "./MobileNav";
 import { cn } from "@/lib/utils";
 
 export function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-dark-950 layout-bg">
+    <div className="min-h-screen bg-surface">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
@@ -20,16 +18,8 @@ export function DashboardLayout() {
       )}
 
       {/* Desktop Sidebar */}
-      <aside
-        className={cn(
-          "hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col z-50 transition-all duration-300",
-          sidebarCollapsed ? "lg:w-[72px]" : "lg:w-60",
-        )}
-      >
-        <Sidebar
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        />
+      <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:flex-col z-50 w-60">
+        <Sidebar />
       </aside>
 
       {/* Mobile Sidebar */}
@@ -43,23 +33,12 @@ export function DashboardLayout() {
       </aside>
 
       {/* Main Content */}
-      <div
-        className={cn(
-          "transition-all duration-300",
-          sidebarCollapsed ? "lg:pl-[72px]" : "lg:pl-60",
-        )}
-      >
-        {/* Header */}
+      <div className="lg:pl-60">
         <Header onMenuClick={() => setSidebarOpen(true)} />
-
-        {/* Page Content */}
-        <main className="py-6 px-4 sm:px-6 lg:px-8 pb-20 lg:pb-6">
+        <main className="pt-16 p-8 min-h-screen">
           <Outlet />
         </main>
       </div>
-
-      {/* Mobile Bottom Navigation */}
-      <MobileNav className="lg:hidden" />
     </div>
   );
 }

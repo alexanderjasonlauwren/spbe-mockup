@@ -1,79 +1,59 @@
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Menu, Bell, Search, Sun, Moon } from "lucide-react";
-import { useTheme } from "@/hooks/useTheme";
+import { Bell, Menu } from "lucide-react";
+import { useAuthStore } from "@/features/auth/store/authStore";
+import { getInitials } from "@/lib/utils";
+import { useLocation } from "react-router-dom";
 
 interface HeaderProps {
   onMenuClick: () => void;
 }
 
+const PAGE_TITLES: Record<string, string> = {
+  "/dashboard": "Dashboard",
+  "/sa": "Schedule Agreement",
+  "/distribution": "Perencanaan Distribusi",
+  "/monitoring": "Monitoring Distribusi",
+  "/payments": "Pembayaran",
+  "/notifications": "Notifikasi",
+  "/settings": "Pengaturan",
+};
+
 export function Header({ onMenuClick }: HeaderProps) {
-  const { theme, toggleTheme } = useTheme();
+  const user = useAuthStore((state) => state.user);
+  const location = useLocation();
+  const pageTitle = PAGE_TITLES[location.pathname] ?? "Dashboard";
 
   return (
-    <header className="sticky top-0 z-30 bg-white/80 dark:bg-dark-900/80 border-b border-gray-200 dark:border-dark-800 backdrop-blur-sm">
-      <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
-        {/* Left side */}
-        <div className="flex items-center gap-4 flex-1">
-          {/* Mobile menu button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onMenuClick}
-            className="lg:hidden dark:hover:bg-dark-800"
-          >
-            <Menu className="h-6 w-6" />
-          </Button>
+    <header className="fixed top-0 right-0 left-0 lg:left-60 h-16 z-[1001] bg-white/70 backdrop-blur-xl border-b border-slate-100 flex justify-between items-center px-6 shadow-sm">
+      <div className="flex items-center gap-4">
+        <button
+          onClick={onMenuClick}
+          className="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <h2 className="font-semibold text-lg text-slate-900">{pageTitle}</h2>
+      </div>
 
-          {/* Search bar (desktop) */}
-          <div className="hidden md:flex flex-1 max-w-md">
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
-              <Input
-                type="search"
-                placeholder="Search..."
-                className="pl-10 w-full bg-gray-50 dark:bg-dark-850 border-gray-200 dark:border-dark-700 focus:bg-white dark:focus:bg-dark-800"
-              />
-            </div>
+      <div className="flex items-center gap-5">
+        <button className="relative text-slate-500 hover:bg-slate-50 rounded-full p-2 transition-all">
+          <Bell className="h-5 w-5" />
+          <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />
+        </button>
+
+        <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
+          <div className="text-right hidden sm:block">
+            <p className="text-xs font-bold text-slate-900">
+              {user?.name ?? "Admin"}
+            </p>
+            <p className="text-[10px] text-slate-500 capitalize">
+              {user?.role ?? "Logistics Manager"}
+            </p>
           </div>
-        </div>
-
-        {/* Right side */}
-        <div className="flex items-center gap-2">
-          {/* Search button (mobile) */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden dark:hover:bg-dark-800"
-          >
-            <Search className="h-5 w-5" />
-          </Button>
-
-          {/* Theme toggle */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            className="dark:hover:bg-dark-800"
-          >
-            {theme === "dark" ? (
-              <Sun className="h-5 w-5 text-yellow-500" />
-            ) : (
-              <Moon className="h-5 w-5" />
-            )}
-          </Button>
-
-          {/* Notifications */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="relative dark:hover:bg-dark-800"
-          >
-            <Bell className="h-5 w-5 text-gray-700 dark:text-gray-300" />
-            <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center bg-red-500 text-white text-xs font-bold rounded-full ring-2 ring-white dark:ring-dark-900">
-              3
+          <div className="w-9 h-9 rounded-full bg-[#1565C0] flex items-center justify-center">
+            <span className="text-white text-xs font-bold">
+              {getInitials(user?.name ?? "A")}
             </span>
-          </Button>
+          </div>
         </div>
       </div>
     </header>

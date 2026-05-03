@@ -17,6 +17,8 @@ import { SAManagementPage } from "./pages/sa/SAManagementPage";
 import { DistributionPage } from "./pages/distribution/DistributionPage";
 import { PaymentPage } from "./pages/payments/PaymentPage";
 import { DriverPage } from "./pages/drivers/DriverPage";
+import { MonitoringPage } from "./pages/monitoring/MonitoringPage";
+import { NotificationPage } from "./pages/notifications/NotificationPage";
 import { NotFoundPage } from "./pages/errors/NotFoundPage";
 import { ErrorBoundary } from "./pages/errors/ErrorBoundary";
 import { ProtectedRoute } from "./features/auth/components/ProtectedRoutes";
@@ -55,6 +57,14 @@ const router = createBrowserRouter([
       {
         path: "payments",
         element: <PaymentPage />,
+      },
+      {
+        path: "monitoring",
+        element: <MonitoringPage />,
+      },
+      {
+        path: "notifications",
+        element: <NotificationPage />,
       },
       {
         path: "drivers",

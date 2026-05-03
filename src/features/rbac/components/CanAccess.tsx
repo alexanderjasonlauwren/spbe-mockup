@@ -1,5 +1,5 @@
 import { useAuthStore } from "@/features/auth/store/authStore";
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 
 interface CanAccessProps {
   permission?: string;

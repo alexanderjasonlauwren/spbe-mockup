@@ -80,14 +80,12 @@ export async function uploadSA(
   };
 }
 
-export async function convertSAToPlan(
-  _saId: string,
-): Promise<{ planId: string }> {
+export async function convertSAToPlan(): Promise<{ planId: string }> {
   await delay();
   return { planId: "plan-001" };
 }
 
-export async function downloadSAPDF(_saId: string): Promise<Blob> {
+export async function downloadSAPDF(): Promise<Blob> {
   await delay();
   return new Blob(["mock pdf"], { type: "application/pdf" });
 }

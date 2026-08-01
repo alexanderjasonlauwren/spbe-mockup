@@ -12,6 +12,7 @@ import {
   CreditCard,
   Bell,
   Wallet,
+  Receipt,
 } from "lucide-react";
 import { APP_NAME, APP_SUBTITLE } from "@/utils/constants";
 interface SidebarProps {
@@ -32,6 +33,7 @@ const mainNav: NavItem[] = [
   { name: "Schedule Agreement", href: "/sa", icon: FileText },
   { name: "Perencanaan Distribusi", href: "/distribution", icon: Truck },
   { name: "Monitoring Distribusi", href: "/monitoring", icon: BarChart3 },
+  { name: "OCR Kwitansi", href: "/ocr", icon: Receipt },
   { name: "Pembayaran", href: "/payments", icon: CreditCard },
   { name: "Laporan Keuangan", href: "/reports", icon: Wallet },
 ];

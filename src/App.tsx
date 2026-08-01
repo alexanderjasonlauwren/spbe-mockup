@@ -18,6 +18,7 @@ import { DistributionPage } from "./pages/distribution/DistributionPage";
 import { PaymentPage } from "./pages/payments/PaymentPage";
 import { DriverPage } from "./pages/drivers/DriverPage";
 import { MonitoringPage } from "./pages/monitoring/MonitoringPage";
+import { OcrPage } from "./pages/ocr/OcrPage";
 import { NotificationPage } from "./pages/notifications/NotificationPage";
 import { NotFoundPage } from "./pages/errors/NotFoundPage";
 import { ErrorBoundary } from "./pages/errors/ErrorBoundary";
@@ -61,6 +62,10 @@ const router = createBrowserRouter([
       {
         path: "monitoring",
         element: <MonitoringPage />,
+      },
+      {
+        path: "ocr",
+        element: <OcrPage />,
       },
       {
         path: "notifications",

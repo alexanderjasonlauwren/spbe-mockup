@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -6,52 +8,63 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 interface ConfirmDialogProps {
   isOpen: boolean;
   title: string;
   message: string;
+  /** Consequences worth spelling out — quota drawn down, invoices raised. */
+  details?: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
   variant?: "destructive" | "default";
+  isPending?: boolean;
 }
 
 export function ConfirmDialog({
   isOpen,
   title,
   message,
+  details,
   confirmLabel = "Konfirmasi",
   cancelLabel = "Batal",
   onConfirm,
   onCancel,
   variant = "destructive",
+  isPending = false,
 }: ConfirmDialogProps) {
   return (
-    <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onCancel()}>
-      <DialogContent>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open: boolean) => !open && !isPending && onCancel()}
+    >
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{message}</DialogDescription>
         </DialogHeader>
+
+        {details && (
+          <div className="rounded-md border border-line bg-panel-sunk px-4 py-3 text-xs text-ink-muted">
+            {details}
+          </div>
+        )}
+
         <DialogFooter>
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-sm font-bold border border-outline-variant rounded-lg hover:bg-slate-50 transition-colors"
-          >
+          <Button variant="outline" onClick={onCancel} disabled={isPending}>
             {cancelLabel}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant={variant === "destructive" ? "destructive" : "default"}
             onClick={onConfirm}
-            className={`px-4 py-2 text-sm font-bold text-white rounded-lg transition-colors ${
-              variant === "destructive"
-                ? "bg-red-600 hover:bg-red-700"
-                : "bg-[#1565C0] hover:bg-[#004d99]"
-            }`}
+            disabled={isPending}
           >
+            {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             {confirmLabel}
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

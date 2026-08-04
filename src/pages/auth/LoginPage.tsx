@@ -1,32 +1,65 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Eye, EyeOff, Loader2, TriangleAlert } from "lucide-react";
 import { useAuthStore } from "@/features/auth/store/authStore";
-import {
-  Eye,
-  EyeOff,
-  HelpCircle,
-  HeadphonesIcon,
-  LogIn,
-  Lock,
-  User,
-  Package,
-  MapPin,
-  TrendingUp,
-  ShieldCheck,
-} from "lucide-react";
+import { Field, TextInput } from "@/components/common/Field";
+import { Button } from "@/components/ui/button";
+import { APP_NAME } from "@/utils/constants";
+import { cn } from "@/lib/utils";
 
-const FEATURES = [
-  { icon: Package, label: "Manajemen distribusi LPG end-to-end" },
-  { icon: MapPin, label: "Monitoring armada & rute real-time" },
-  { icon: TrendingUp, label: "Laporan & analitik bisnis terpadu" },
-  { icon: ShieldCheck, label: "Keamanan data berlapis, standar enterprise" },
+/**
+ * The hero is the dispatch rail, drawn flat: the same device the console opens
+ * on, so the product's one memorable idea is present before you sign in.
+ */
+const RAIL: { name: string; plat: string; blocks: [number, number, string][] }[] = [
+  {
+    name: "Budi Santoso",
+    plat: "B 3277 CK",
+    blocks: [
+      [4, 18, "done"],
+      [26, 18, "done"],
+      [50, 16, "run"],
+    ],
+  },
+  {
+    name: "Agus Setiawan",
+    plat: "B 2677 AB",
+    blocks: [
+      [12, 17, "done"],
+      [36, 18, "run"],
+      [62, 17, "queue"],
+    ],
+  },
+  {
+    name: "Ahmad Subarjo",
+    plat: "B 7280 CK",
+    blocks: [
+      [8, 16, "done"],
+      [44, 18, "queue"],
+      [70, 16, "queue"],
+    ],
+  },
+  {
+    name: "Rahmat Hidayat",
+    plat: "B 7038 RFS",
+    blocks: [
+      [20, 18, "done"],
+      [48, 15, "late"],
+    ],
+  },
 ];
+
+const BLOCK_TONE: Record<string, string> = {
+  done: "bg-[#2E6A55]",
+  run: "bg-[#E0A32E]",
+  queue: "bg-white/12",
+  late: "bg-[#B03F27]",
+};
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -39,257 +72,181 @@ export function LoginPage() {
     setIsLoading(true);
     try {
       await login(email, password);
-      navigate("/dashboard");
+      navigate("/dashboard", { replace: true });
     } catch (err) {
-      setError(`Email atau kata sandi tidak valid. Silakan coba lagi.`);
+      setError((err as Error).message);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex bg-surface-container-lowest">
-      {/* ── LEFT HERO PANEL ── */}
-      <div
-        className="hidden lg:flex lg:w-[45%] relative overflow-hidden flex-col justify-between p-12"
-        style={{
-          background:
-            "linear-gradient(150deg, #002f5e 0%, #004d99 45%, #1565c0 100%)",
-        }}
-      >
-        {/* Dot grid texture */}
-        <div
-          className="absolute inset-0 opacity-[0.07] pointer-events-none"
-          style={{
-            backgroundImage: "radial-gradient(white 1px, transparent 1px)",
-            backgroundSize: "28px 28px",
-          }}
-        />
-        {/* Decorative concentric rings — bottom-right */}
-        <div className="absolute -bottom-40 -right-40 w-[560px] h-[560px] rounded-full border border-white/[0.07] pointer-events-none" />
-        <div className="absolute -bottom-20 -right-20 w-[380px] h-[380px] rounded-full border border-white/[0.10] pointer-events-none" />
-        <div className="absolute -bottom-4  -right-4  w-[220px] h-[220px] rounded-full border border-white/[0.13] pointer-events-none" />
-        {/* Glow blob */}
-        <div
-          className="absolute top-0 right-0 w-80 h-80 rounded-full opacity-20 pointer-events-none"
-          style={{
-            background: "radial-gradient(circle, #60a5fa 0%, transparent 70%)",
-            transform: "translate(30%, -30%)",
-          }}
-        />
-
-        {/* Logo */}
-        <div className="relative z-10">
-          <div className="text-white text-2xl font-extrabold tracking-tighter">
-            SiDistrib
-          </div>
-          <div className="text-white/40 text-[10px] font-bold tracking-[0.2em] uppercase mt-0.5">
-            Logistik Indonesia
-          </div>
-        </div>
-
-        {/* Main copy + features */}
-        <div className="relative z-10 space-y-10">
+    <div className="flex min-h-screen bg-panel">
+      {/* ── Hero ── */}
+      <div className="relative hidden flex-col justify-between overflow-hidden bg-[rgb(23_26_22)] p-12 lg:flex lg:w-[52%]">
+        <div className="relative z-10 flex items-center gap-3">
+          <svg viewBox="0 0 32 32" className="h-9 w-9" aria-hidden>
+            <rect width="32" height="32" rx="6" fill="#E0A32E" />
+            <rect x="7" y="7" width="3" height="18" fill="#171A16" />
+            <rect x="13" y="9" width="12" height="3" rx="1.5" fill="#171A16" />
+            <rect x="13" y="15" width="8" height="3" rx="1.5" fill="#171A16" opacity=".55" />
+            <rect x="13" y="21" width="10" height="3" rx="1.5" fill="#171A16" opacity=".55" />
+          </svg>
           <div>
-            <h2 className="text-white text-[2.4rem] font-extrabold leading-[1.15] tracking-tight mb-4">
-              Kelola Distribusi
-              <br />
-              Lebih Cerdas
-            </h2>
-            <p className="text-white/60 text-[0.95rem] leading-relaxed max-w-xs">
-              Platform manajemen distribusi LPG terpadu untuk jaringan logistik
-              Indonesia yang lebih efisien dan terukur.
+            <p className="text-lg font-bold leading-tight tracking-[-0.02em] text-[#F4F5F0]">
+              {APP_NAME}
             </p>
-          </div>
-
-          <div className="space-y-3">
-            {FEATURES.map(({ icon: Icon, label }) => (
-              <div key={label} className="flex items-center gap-3.5">
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center">
-                  <Icon size={15} className="text-white" />
-                </div>
-                <span className="text-white/75 text-sm font-medium">
-                  {label}
-                </span>
-              </div>
-            ))}
+            <p className="label text-[0.625rem] text-[#9AA093]">Konsol Agen LPG</p>
           </div>
         </div>
 
-        {/* Bottom attribution */}
-        <div className="relative z-10 flex items-center gap-1.5 text-white/30 text-xs">
-          <ShieldCheck size={12} />
-          <span>
-            © 2024 SiDistrib · Kebijakan Privasi · Syarat &amp; Ketentuan
-          </span>
-        </div>
-      </div>
+        <div className="relative z-10">
+          <h2 className="max-w-md text-[2.5rem] font-bold leading-[1.08] tracking-[-0.035em] text-[#F4F5F0]">
+            Setiap tabung punya
+            <br />
+            jam berangkatnya.
+          </h2>
+          <p className="mt-4 max-w-sm text-sm leading-relaxed text-[#9AA093]">
+            Konsol operasional untuk agen distribusi LPG: kuota SPBE, rencana rute,
+            posisi armada, dan verifikasi pembayaran dalam satu papan.
+          </p>
 
-      {/* ── RIGHT FORM PANEL ── */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 bg-surface-container-lowest">
-        {/* Mobile-only logo */}
-        <div className="lg:hidden text-center mb-10">
-          <div className="text-2xl font-extrabold tracking-tighter text-sid-primary">
-            SiDistrib
-          </div>
-          <div className="text-on-surface-variant text-[10px] font-bold tracking-[0.2em] uppercase mt-1">
-            Logistik Indonesia
-          </div>
-        </div>
-
-        <div className="w-full max-w-sm">
-          {/* Heading */}
-          <div className="mb-8">
-            <h1 className="text-[1.65rem] font-bold text-on-surface tracking-tight leading-tight mb-2">
-              Selamat Datang Kembali
-            </h1>
-            <p className="text-on-surface-variant text-sm">
-              Masuk ke akun SiDistrib Anda untuk melanjutkan.
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Email */}
-            <div className="space-y-1.5">
-              <label
-                htmlFor="email"
-                className="block text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant"
-              >
-                Email / Username
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-outline">
-                  <User size={16} />
-                </div>
-                <input
-                  id="email"
-                  type="email"
-                  placeholder="Masukkan email atau username"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="block w-full pl-10 pr-4 py-3 bg-surface-container-highest border border-outline-variant/50 focus:border-sid-primary focus:ring-2 focus:ring-sid-primary/10 focus:outline-none transition-all text-sm text-on-surface placeholder:text-outline rounded-lg"
-                />
-              </div>
+          {/* Dispatch rail motif */}
+          <div className="mt-10 max-w-lg rounded-md border border-white/10 bg-white/[0.03] p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="label text-[0.625rem] text-[#9AA093]">
+                Papan berangkat
+              </span>
+              <span className="data text-[0.625rem] text-[#9AA093]">
+                06:00 — 18:00
+              </span>
             </div>
 
-            {/* Password */}
-            <div className="space-y-1.5">
-              <label
-                htmlFor="password"
-                className="block text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant"
-              >
-                Kata Sandi
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-outline">
-                  <Lock size={16} />
+            <div className="space-y-2.5">
+              {RAIL.map((lane) => (
+                <div key={lane.name} className="flex items-center gap-3">
+                  <div className="w-28 shrink-0">
+                    <p className="truncate text-[0.6875rem] font-medium text-[#F4F5F0]">
+                      {lane.name}
+                    </p>
+                    <p className="data truncate text-[0.5625rem] text-[#9AA093]">
+                      {lane.plat}
+                    </p>
+                  </div>
+                  <div className="relative h-4 flex-1 rounded-sm bg-white/[0.04]">
+                    {lane.blocks.map(([left, width, tone], i) => (
+                      <span
+                        key={i}
+                        className={cn("absolute inset-y-0 rounded-sm", BLOCK_TONE[tone])}
+                        style={{ left: `${left}%`, width: `${width}%` }}
+                      />
+                    ))}
+                    {/* "now" marker */}
+                    <span className="absolute inset-y-[-4px] left-[58%] w-px bg-[#E0A32E]" />
+                  </div>
                 </div>
-                <input
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <p className="relative z-10 text-xs text-[#676B62]">
+          © {new Date().getFullYear()} {APP_NAME} · Kebijakan Privasi · Syarat &amp;
+          Ketentuan
+        </p>
+      </div>
+
+      {/* ── Form ── */}
+      <div className="flex flex-1 flex-col items-center justify-center px-6 py-12">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 lg:hidden">
+            <p className="text-xl font-bold tracking-[-0.02em] text-ink">{APP_NAME}</p>
+            <p className="label text-2xs text-ink-muted">Konsol Agen LPG</p>
+          </div>
+
+          <h1 className="text-2xl font-bold tracking-[-0.02em] text-ink">Masuk</h1>
+          <p className="mt-1.5 text-sm text-ink-muted">
+            Gunakan akun yang terdaftar di konsol agen Anda.
+          </p>
+
+          <form onSubmit={handleSubmit} className="mt-7 space-y-4">
+            <Field label="Email" htmlFor="email" required>
+              <TextInput
+                id="email"
+                type="email"
+                mono
+                autoComplete="username"
+                placeholder="nama@sidistrib.id"
+                value={email}
+                invalid={!!error}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </Field>
+
+            <Field label="Kata sandi" htmlFor="password" required>
+              <div className="relative">
+                <TextInput
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Masukkan kata sandi"
+                  autoComplete="current-password"
+                  placeholder="Minimal 6 karakter"
                   value={password}
+                  invalid={!!error}
                   onChange={(e) => setPassword(e.target.value)}
+                  className="pr-10"
                   required
-                  className="block w-full pl-10 pr-10 py-3 bg-surface-container-highest border border-outline-variant/50 focus:border-sid-primary focus:ring-2 focus:ring-sid-primary/10 focus:outline-none transition-all text-sm text-on-surface placeholder:text-outline rounded-lg"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-outline hover:text-sid-primary transition-colors"
                   aria-label={
-                    showPassword
-                      ? "Sembunyikan kata sandi"
-                      : "Tampilkan kata sandi"
+                    showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"
                   }
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-ink-muted transition-colors hover:text-ink"
                 >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
                 </button>
               </div>
-            </div>
+            </Field>
 
-            {/* Remember me + forgot password */}
-            <div className="flex items-center justify-between">
-              <label className="flex items-center cursor-pointer gap-2 group">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded border-outline-variant text-sid-primary focus:ring-sid-primary/20"
-                />
-                <span className="text-sm text-on-surface-variant group-hover:text-on-surface transition-colors">
-                  Ingat Saya
-                </span>
-              </label>
-              <a
-                href="#"
-                className="text-sm font-semibold text-sid-primary hover:underline transition-colors"
-              >
-                Lupa Password?
-              </a>
-            </div>
-
-            {/* Error */}
             {error && (
-              <div className="flex items-start gap-2.5 text-sm text-sid-error bg-red-50 border border-red-100 px-4 py-3 rounded-lg">
-                <span className="flex-shrink-0 font-bold mt-px">!</span>
-                <span>{error}</span>
-              </div>
+              <p
+                role="alert"
+                className="spine flex items-start gap-2.5 rounded-md bg-rust-soft px-3.5 py-2.5 text-rust"
+              >
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rust-ink" />
+                <span className="text-xs leading-relaxed text-ink">{error}</span>
+              </p>
             )}
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-3.5 rounded-lg font-bold tracking-wide text-white text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-[0_8px_28px_rgba(0,77,153,0.30)] hover:scale-[1.015] active:scale-[0.985] transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
-              style={{
-                background: "linear-gradient(135deg, #004d99 0%, #1565c0 100%)",
-              }}
-            >
-              {isLoading ? (
-                <>
-                  <span className="inline-block w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  Memproses...
-                </>
-              ) : (
-                <>
-                  MASUK KE DASHBOARD
-                  <LogIn size={16} />
-                </>
-              )}
-            </button>
+            <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+              {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isLoading ? "Memeriksa…" : "Masuk ke konsol"}
+            </Button>
           </form>
 
-          {/* Help links */}
-          <div className="mt-7 flex items-center justify-center gap-3 flex-wrap">
-            <a
-              href="#"
-              className="flex items-center gap-1 text-xs font-semibold text-on-surface-variant hover:text-sid-primary transition-colors"
-            >
-              <HelpCircle size={13} /> Bantuan
-            </a>
-            <span className="text-outline-variant text-xs">·</span>
-            <a
-              href="#"
-              className="flex items-center gap-1 text-xs font-semibold text-on-surface-variant hover:text-sid-primary transition-colors"
-            >
-              <HeadphonesIcon size={13} /> Kontak Admin
-            </a>
-            <span className="text-outline-variant text-xs">·</span>
-            <a
-              href="#"
-              className="text-xs text-on-surface-variant hover:text-sid-primary transition-colors"
-            >
-              Privasi
-            </a>
-            <span className="text-outline-variant text-xs">·</span>
-            <a
-              href="#"
-              className="text-xs text-on-surface-variant hover:text-sid-primary transition-colors"
-            >
-              Syarat &amp; Ketentuan
-            </a>
+          <div className="mt-6 rounded-md border border-line bg-panel-sunk px-4 py-3">
+            <p className="label mb-1.5 text-2xs text-ink-muted">Akun contoh</p>
+            <p className="text-xs leading-relaxed text-ink-muted">
+              Masuk dengan{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail("alex@sidistrib.id");
+                  setPassword("sidistrib");
+                }}
+                className="data font-semibold text-ink underline decoration-signal decoration-2 underline-offset-4"
+              >
+                alex@sidistrib.id
+              </button>{" "}
+              dan kata sandi <span className="data text-ink">sidistrib</span>. Akun lain
+              yang terdaftar di halaman Pengguna juga bisa dipakai.
+            </p>
           </div>
         </div>
       </div>

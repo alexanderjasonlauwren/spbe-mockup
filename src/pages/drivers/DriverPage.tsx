@@ -1,849 +1,457 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { Download, Pencil, Plus, Trash2, Truck } from "lucide-react";
+import {
+  createOrUpdateDriver,
+  exportDrivers,
+  getDrivers,
+  removeDriver,
+  type DriverView,
+} from "@/features/drivers/api/driverApi";
+import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { PageHeader } from "@/components/common/PageHeader";
-import { StatsCard } from "@/components/common/StatsCard";
+import { Panel, PanelHeader, Meter } from "@/components/common/Panel";
+import { DataTable, type Column } from "@/components/common/DataTable";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { getStatusVariant, spineFor } from "@/lib/status";
+import { Field, SearchInput, SegmentedControl, SelectInput, TextInput } from "@/components/common/Field";
 import {
-  SortableTableHead,
-  type SortDirection,
-} from "@/components/common/SortableTableHead";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { CanAccess } from "@/features/rbac/components/CanAccess";
-import { PERMISSIONS } from "@/features/rbac/permissions";
 import { cn } from "@/lib/utils";
-import {
-  UserCheck,
-  Plus,
-  Search,
-  Phone,
-  Truck,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  Star,
-  MapPin,
-  TrendingUp,
-} from "lucide-react";
+import { formatNumber, formatPercentId } from "@/lib/format";
+import type { DriverStatusEntity } from "@/mocks/types";
 
-interface Driver {
-  id: string;
+const STATUSES: (DriverStatusEntity | "Semua")[] = [
+  "Semua",
+  "Standby",
+  "Dalam Perjalanan",
+  "Bongkar Muat",
+  "Selesai",
+  "Cuti",
+];
+
+interface FormState {
+  id?: string;
   nama: string;
-  noHP: string;
-  noKendaraan: string;
-  jenisKendaraan: string;
+  telepon: string;
+  nomorSim: string;
+  plat: string;
+  armada: string;
   kapasitas: number;
-  status: "aktif" | "istirahat" | "tidak_aktif";
-  tripHariIni: number;
-  totalTabungBulanIni: number;
-  ratingKinerja: number;
-  bergabungSejak: string;
-  pangkalanTerakhir: string;
+  status: DriverStatusEntity;
 }
 
-interface TripLog {
-  id: string;
-  driver: string;
-  noSJ: string;
-  pangkalan: string;
-  jumlah: number;
-  berangkat: string;
-  tiba: string | null;
-  durasi: string | null;
-  status: "selesai" | "dalam_perjalanan" | "terjadwal";
-  tanggal: string;
-}
-
-const mockDrivers: Driver[] = [
-  {
-    id: "1",
-    nama: "Budi Santoso",
-    noHP: "0812-3456-7890",
-    noKendaraan: "B 1234 AB",
-    jenisKendaraan: "Truk Engkel",
-    kapasitas: 150,
-    status: "aktif",
-    tripHariIni: 2,
-    totalTabungBulanIni: 3420,
-    ratingKinerja: 4.8,
-    bergabungSejak: "Jan 2024",
-    pangkalanTerakhir: "UD Maju Jaya",
-  },
-  {
-    id: "2",
-    nama: "Hendra Wijaya",
-    noHP: "0813-5678-9012",
-    noKendaraan: "B 5678 CD",
-    jenisKendaraan: "Pick Up",
-    kapasitas: 120,
-    status: "aktif",
-    tripHariIni: 1,
-    totalTabungBulanIni: 2890,
-    ratingKinerja: 4.6,
-    bergabungSejak: "Mar 2024",
-    pangkalanTerakhir: "Toko Berkah",
-  },
-  {
-    id: "3",
-    nama: "Ahmad Yani",
-    noHP: "0811-9012-3456",
-    noKendaraan: "B 9012 EF",
-    jenisKendaraan: "Pick Up",
-    kapasitas: 120,
-    status: "aktif",
-    tripHariIni: 0,
-    totalTabungBulanIni: 3100,
-    ratingKinerja: 4.9,
-    bergabungSejak: "Nov 2023",
-    pangkalanTerakhir: "CV Sejahtera",
-  },
-  {
-    id: "4",
-    nama: "Slamet Riyadi",
-    noHP: "0814-3456-7890",
-    noKendaraan: "B 3456 GH",
-    jenisKendaraan: "Truk Engkel",
-    kapasitas: 150,
-    status: "aktif",
-    tripHariIni: 3,
-    totalTabungBulanIni: 4200,
-    ratingKinerja: 4.7,
-    bergabungSejak: "Aug 2023",
-    pangkalanTerakhir: "UD Harapan",
-  },
-  {
-    id: "5",
-    nama: "Eko Prasetyo",
-    noHP: "0815-7890-1234",
-    noKendaraan: "B 7890 IJ",
-    jenisKendaraan: "Pick Up",
-    kapasitas: 100,
-    status: "aktif",
-    tripHariIni: 0,
-    totalTabungBulanIni: 1850,
-    ratingKinerja: 4.3,
-    bergabungSejak: "Jun 2025",
-    pangkalanTerakhir: "Toko Sumber Rejeki",
-  },
-  {
-    id: "6",
-    nama: "Dedi Kusuma",
-    noHP: "0816-1234-5678",
-    noKendaraan: "B 2345 KL",
-    jenisKendaraan: "Truk Engkel",
-    kapasitas: 150,
-    status: "istirahat",
-    tripHariIni: 0,
-    totalTabungBulanIni: 980,
-    ratingKinerja: 4.1,
-    bergabungSejak: "Sep 2025",
-    pangkalanTerakhir: "Kios Makmur",
-  },
-];
-
-const mockTripLogs: TripLog[] = [
-  {
-    id: "1",
-    driver: "Budi Santoso",
-    noSJ: "SJ-2026-0342",
-    pangkalan: "UD Maju Jaya",
-    jumlah: 120,
-    berangkat: "07:30",
-    tiba: "09:15",
-    durasi: "1j 45m",
-    status: "selesai",
-    tanggal: "26 Mar 2026",
-  },
-  {
-    id: "2",
-    driver: "Hendra Wijaya",
-    noSJ: "SJ-2026-0341",
-    pangkalan: "Toko Berkah",
-    jumlah: 80,
-    berangkat: "08:00",
-    tiba: null,
-    durasi: null,
-    status: "dalam_perjalanan",
-    tanggal: "26 Mar 2026",
-  },
-  {
-    id: "3",
-    driver: "Budi Santoso",
-    noSJ: "SJ-2026-0339",
-    pangkalan: "Kios Makmur",
-    jumlah: 60,
-    berangkat: "13:00",
-    tiba: "14:30",
-    durasi: "1j 30m",
-    status: "selesai",
-    tanggal: "25 Mar 2026",
-  },
-  {
-    id: "4",
-    driver: "Slamet Riyadi",
-    noSJ: "SJ-2026-0338",
-    pangkalan: "UD Harapan",
-    jumlah: 90,
-    berangkat: "07:00",
-    tiba: "08:45",
-    durasi: "1j 45m",
-    status: "selesai",
-    tanggal: "25 Mar 2026",
-  },
-  {
-    id: "5",
-    driver: "Ahmad Yani",
-    noSJ: "SJ-2026-0337",
-    pangkalan: "CV Sejahtera",
-    jumlah: 100,
-    berangkat: "08:30",
-    tiba: "10:20",
-    durasi: "1j 50m",
-    status: "selesai",
-    tanggal: "25 Mar 2026",
-  },
-];
-
-const driverStatusConfig = {
-  aktif: {
-    label: "Aktif",
-    className:
-      "bg-green-100 text-green-700 border-green-300 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/30",
-  },
-  istirahat: {
-    label: "Istirahat",
-    className:
-      "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-500/10 dark:text-yellow-400 dark:border-yellow-500/30",
-  },
-  tidak_aktif: {
-    label: "Tidak Aktif",
-    className:
-      "bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-500/10 dark:text-gray-400 dark:border-gray-500/30",
-  },
+const EMPTY: FormState = {
+  nama: "",
+  telepon: "",
+  nomorSim: "",
+  plat: "",
+  armada: "",
+  kapasitas: 240,
+  status: "Standby",
 };
-
-const tripStatusConfig = {
-  selesai: {
-    label: "Selesai",
-    className:
-      "bg-green-100 text-green-700 border-green-300 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/30",
-  },
-  dalam_perjalanan: {
-    label: "Dalam Perjalanan",
-    className:
-      "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/30",
-  },
-  terjadwal: {
-    label: "Terjadwal",
-    className:
-      "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-500/10 dark:text-yellow-400 dark:border-yellow-500/30",
-  },
-};
-
-function StarRating({ rating }: { rating: number }) {
-  return (
-    <div className="flex items-center gap-1">
-      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-      <span className="text-sm font-medium text-gray-900 dark:text-white">
-        {rating}
-      </span>
-    </div>
-  );
-}
 
 export function DriverPage() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeView, setActiveView] = useState<"driver" | "triplog">("driver");
-  const [driverSortKey, setDriverSortKey] = useState<
-    | "nama"
-    | "noKendaraan"
-    | "kapasitas"
-    | "tripHariIni"
-    | "totalTabungBulanIni"
-    | "ratingKinerja"
-    | "status"
-  >("nama");
-  const [driverSortDirection, setDriverSortDirection] =
-    useState<SortDirection>("asc");
-  const [tripSortKey, setTripSortKey] = useState<
-    | "noSJ"
-    | "driver"
-    | "pangkalan"
-    | "jumlah"
-    | "berangkat"
-    | "durasi"
-    | "status"
-  >("noSJ");
-  const [tripSortDirection, setTripSortDirection] =
-    useState<SortDirection>("desc");
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<DriverStatusEntity | "Semua">("Semua");
+  const [editing, setEditing] = useState<FormState | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<DriverView | null>(null);
+  const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
-  const activeDrivers = mockDrivers.filter((d) => d.status === "aktif");
-  const onTrip = mockDrivers.filter((d) => d.tripHariIni > 0);
-  const totalTripToday = mockDrivers.reduce((s, d) => s + d.tripHariIni, 0);
-  const totalTabungBulan = mockDrivers.reduce(
-    (s, d) => s + d.totalTabungBulanIni,
-    0,
-  );
-
-  const filteredDrivers = mockDrivers.filter(
-    (d) =>
-      d.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      d.noKendaraan.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
-
-  const handleDriverSort = (
-    nextSortKey:
-      | "nama"
-      | "noKendaraan"
-      | "kapasitas"
-      | "tripHariIni"
-      | "totalTabungBulanIni"
-      | "ratingKinerja"
-      | "status",
-  ) => {
-    if (driverSortKey === nextSortKey) {
-      setDriverSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-      return;
-    }
-
-    setDriverSortKey(nextSortKey);
-    setDriverSortDirection("asc");
-  };
-
-  const handleTripSort = (
-    nextSortKey:
-      | "noSJ"
-      | "driver"
-      | "pangkalan"
-      | "jumlah"
-      | "berangkat"
-      | "durasi"
-      | "status",
-  ) => {
-    if (tripSortKey === nextSortKey) {
-      setTripSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-      return;
-    }
-
-    setTripSortKey(nextSortKey);
-    setTripSortDirection("asc");
-  };
-
-  const sortedDrivers = [...filteredDrivers].sort((left, right) => {
-    let compareValue = 0;
-
-    if (driverSortKey === "nama") {
-      compareValue = left.nama.localeCompare(right.nama, "id-ID");
-    }
-
-    if (driverSortKey === "noKendaraan") {
-      compareValue = left.noKendaraan.localeCompare(right.noKendaraan, "id-ID");
-    }
-
-    if (driverSortKey === "kapasitas") {
-      compareValue = left.kapasitas - right.kapasitas;
-    }
-
-    if (driverSortKey === "tripHariIni") {
-      compareValue = left.tripHariIni - right.tripHariIni;
-    }
-
-    if (driverSortKey === "totalTabungBulanIni") {
-      compareValue = left.totalTabungBulanIni - right.totalTabungBulanIni;
-    }
-
-    if (driverSortKey === "ratingKinerja") {
-      compareValue = left.ratingKinerja - right.ratingKinerja;
-    }
-
-    if (driverSortKey === "status") {
-      compareValue = left.status.localeCompare(right.status, "id-ID");
-    }
-
-    return driverSortDirection === "asc" ? compareValue : -compareValue;
+  const list = useQuery({
+    queryKey: ["drivers", search, status],
+    queryFn: () => getDrivers({ search, status }),
   });
 
-  const sortedTripLogs = [...mockTripLogs]
-    .filter((t) => t.driver.toLowerCase().includes(searchQuery.toLowerCase()))
-    .sort((left, right) => {
-      let compareValue = 0;
+  const saveMutation = useDeskMutation({
+    mutationFn: (values: FormState) => createOrUpdateDriver(values),
+    errorTitle: "Data armada tidak tersimpan",
+    success: (d) => ({ title: `${d.nama} tersimpan` }),
+    onDone: () => setEditing(null),
+  });
 
-      if (tripSortKey === "noSJ") {
-        compareValue = left.noSJ.localeCompare(right.noSJ, "id-ID");
-      }
+  const deleteMutation = useDeskMutation({
+    mutationFn: (id: string) => removeDriver(id),
+    errorTitle: "Hapus armada gagal",
+    success: "Armada dihapus",
+    onDone: () => setPendingDelete(null),
+  });
 
-      if (tripSortKey === "driver") {
-        compareValue = left.driver.localeCompare(right.driver, "id-ID");
-      }
+  const exportMutation = useDeskMutation({
+    mutationFn: () => exportDrivers(),
+    errorTitle: "Unduh gagal",
+    success: (count) => ({
+      title: "Berkas CSV diunduh",
+      description: `${count} armada diekspor.`,
+    }),
+  });
 
-      if (tripSortKey === "pangkalan") {
-        compareValue = left.pangkalan.localeCompare(right.pangkalan, "id-ID");
-      }
+  const rows = list.data ?? [];
 
-      if (tripSortKey === "jumlah") {
-        compareValue = left.jumlah - right.jumlah;
-      }
+  /** Opening the editor is what clears stale validation, not an effect. */
+  const openEditor = (values: FormState) => {
+    setErrors({});
+    setEditing(values);
+  };
+  const bertugas = rows.filter((d) => d.tugasHariIni > 0).length;
 
-      if (tripSortKey === "berangkat") {
-        compareValue = left.berangkat.localeCompare(right.berangkat, "id-ID");
-      }
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    const next: typeof errors = {};
+    if (!editing.nama.trim()) next.nama = "Nama driver wajib diisi.";
+    if (!editing.plat.trim()) next.plat = "Nomor plat wajib diisi.";
+    if (editing.kapasitas <= 0) next.kapasitas = "Kapasitas harus lebih dari nol.";
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
+    saveMutation.mutate(editing);
+  };
 
-      if (tripSortKey === "durasi") {
-        compareValue = (left.durasi || "-").localeCompare(
-          right.durasi || "-",
-          "id-ID",
-        );
-      }
-
-      if (tripSortKey === "status") {
-        compareValue = left.status.localeCompare(right.status, "id-ID");
-      }
-
-      return tripSortDirection === "asc" ? compareValue : -compareValue;
-    });
+  const columns: Column<DriverView>[] = [
+    {
+      key: "nama",
+      header: "Driver",
+      render: (row) => (
+        <>
+          <Link
+            to={`/drivers/${row.id}`}
+            className="block font-medium text-ink hover:underline hover:decoration-signal hover:decoration-2 hover:underline-offset-4"
+          >
+            {row.nama}
+          </Link>
+          <span className="data block text-2xs text-ink-muted">{row.telepon}</span>
+        </>
+      ),
+      sortValue: (row) => row.nama,
+    },
+    {
+      key: "armada",
+      header: "Armada",
+      render: (row) => (
+        <>
+          <span className="data block text-xs text-ink">{row.plat}</span>
+          <span className="block text-2xs text-ink-muted">{row.armada}</span>
+        </>
+      ),
+      sortValue: (row) => row.plat,
+    },
+    {
+      key: "muatan",
+      header: "Muatan hari ini",
+      width: "14rem",
+      render: (row) => (
+        <div className="min-w-[9rem]">
+          <div className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">
+            <span className="data text-ink">
+              {formatNumber(row.muatanHariIni)}
+              <span className="text-ink-muted"> / {formatNumber(row.kapasitas)}</span>
+            </span>
+            <span className="data text-ink-muted">
+              {formatPercentId(row.utilisasi * 100)}
+            </span>
+          </div>
+          <Meter
+            value={row.muatanHariIni}
+            max={row.kapasitas}
+            tone={row.utilisasi > 1 ? "rust" : "signal"}
+            label={`Muatan ${row.nama}`}
+          />
+        </div>
+      ),
+      sortValue: (row) => row.utilisasi,
+    },
+    {
+      key: "tugas",
+      header: "Singgah hari ini",
+      align: "right",
+      render: (row) => (
+        <span className="data text-ink">
+          {formatNumber(row.selesaiHariIni)}
+          <span className="text-ink-muted"> / {formatNumber(row.tugasHariIni)}</span>
+        </span>
+      ),
+      sortValue: (row) => row.tugasHariIni,
+    },
+    {
+      key: "kinerja",
+      header: "30 hari",
+      align: "right",
+      render: (row) => (
+        <>
+          <span className="data block text-ink">{formatNumber(row.tabung30Hari)}</span>
+          <span className="data block text-2xs text-ink-muted">
+            {formatPercentId(row.ketepatan * 100)} tepat
+          </span>
+        </>
+      ),
+      sortValue: (row) => row.tabung30Hari,
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "9rem",
+      render: (row) => (
+        <StatusBadge variant={getStatusVariant(row.status)} label={row.status} />
+      ),
+      sortValue: (row) => row.status,
+    },
+    {
+      key: "aksi",
+      header: "",
+      align: "right",
+      width: "1%",
+      render: (row) => (
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Ubah ${row.nama}`}
+            onClick={() =>
+              openEditor({
+                id: row.id,
+                nama: row.nama,
+                telepon: row.telepon,
+                nomorSim: row.nomorSim,
+                plat: row.plat,
+                armada: row.armada,
+                kapasitas: row.kapasitas,
+                status: row.status,
+              })
+            }
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Hapus ${row.nama}`}
+            onClick={() => setPendingDelete(row)}
+            className="hover:bg-rust-soft hover:text-rust-ink"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
-        title="Manajemen Driver"
-        description="Kelola data driver, pantau penugasan dan log perjalanan harian."
+        eyebrow="Data induk"
+        title="Armada & Driver"
+        description="Kendaraan yang tersedia untuk penugasan, kapasitas angkutnya, dan kinerja pengemudi selama 30 hari terakhir."
         actions={
-          <CanAccess permission={PERMISSIONS.DRIVERS_MANAGE}>
-            <Button className="gap-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white shadow-lg shadow-purple-500/30">
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Tambah Driver</span>
+          <>
+            <Button
+              variant="outline"
+              onClick={() => exportMutation.mutate(undefined as never)}
+              disabled={exportMutation.isPending}
+            >
+              <Download className="h-3.5 w-3.5" />
+              Unduh CSV
             </Button>
-          </CanAccess>
+            <Button onClick={() => openEditor(EMPTY)}>
+              <Plus className="h-3.5 w-3.5" />
+              Tambah armada
+            </Button>
+          </>
+        }
+        meta={
+          <span className="text-xs text-ink-muted">
+            <span className="data">{bertugas}</span> dari{" "}
+            <span className="data">{rows.length}</span> armada bertugas hari ini
+          </span>
         }
       />
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard
-          title="Total Driver"
-          value={`${mockDrivers.length} Driver`}
-          change={`${activeDrivers.length} aktif hari ini`}
-          changeType="positive"
-          icon={UserCheck}
-          iconColor="text-purple-600 dark:text-purple-400"
-          iconBgColor="bg-purple-50 dark:bg-purple-500/10"
-        />
-        <StatsCard
-          title="Sedang Bertugas"
-          value={`${onTrip.length} Driver`}
-          change={`${totalTripToday} trip hari ini`}
-          changeType="neutral"
-          icon={Truck}
-          iconColor="text-blue-600 dark:text-blue-400"
-          iconBgColor="bg-blue-50 dark:bg-blue-500/10"
-        />
-        <StatsCard
-          title="Trip Selesai Hari Ini"
-          value={`${mockTripLogs.filter((t) => t.status === "selesai" && t.tanggal === "26 Mar 2026").length} Trip`}
-          change="Pengiriman berhasil"
-          changeType="positive"
-          icon={CheckCircle2}
-          iconColor="text-green-600 dark:text-green-400"
-          iconBgColor="bg-green-50 dark:bg-green-500/10"
-        />
-        <StatsCard
-          title="Total Distribusi Bulan Ini"
-          value={`${totalTabungBulan.toLocaleString("id-ID")} Tabung`}
-          change="Semua driver"
-          changeType="positive"
-          icon={TrendingUp}
-          iconColor="text-cyan-600 dark:text-cyan-400"
-          iconBgColor="bg-cyan-50 dark:bg-cyan-500/10"
-        />
-      </div>
-
-      {/* Main Card */}
-      <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-xl">
-        <CardHeader className="p-0 border-b border-gray-100 dark:border-dark-700 bg-gray-50 dark:bg-dark-850">
-          <div className="px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
-            <div className="flex border border-gray-200 dark:border-dark-700 rounded-xl p-1 bg-white dark:bg-dark-900 gap-1">
-              <button
-                onClick={() => setActiveView("driver")}
-                className={cn(
-                  "flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg transition-all",
-                  activeView === "driver"
-                    ? "bg-purple-600 text-white shadow-sm"
-                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-800",
-                )}
-              >
-                <UserCheck className="h-4 w-4" />
-                Data Driver
-              </button>
-              <button
-                onClick={() => setActiveView("triplog")}
-                className={cn(
-                  "flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg transition-all",
-                  activeView === "triplog"
-                    ? "bg-purple-600 text-white shadow-sm"
-                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-800",
-                )}
-              >
-                <Truck className="h-4 w-4" />
-                Log Perjalanan
-              </button>
-            </div>
-
-            <div className="relative sm:ml-auto">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder={
-                  activeView === "driver"
-                    ? "Cari nama atau plat..."
-                    : "Cari driver..."
-                }
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 w-full sm:w-56 bg-white dark:bg-dark-900 border-gray-300 dark:border-dark-600 text-sm"
+      <Panel>
+        <PanelHeader
+          title="Daftar armada"
+          hint={`${rows.length} baris`}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder="Nama, plat, atau jenis armada"
+                className="w-56"
+              />
+              <SegmentedControl
+                value={status}
+                onChange={setStatus}
+                options={STATUSES.map((s) => ({ value: s, label: s }))}
               />
             </div>
-          </div>
-        </CardHeader>
+          }
+        />
+        <DataTable
+          columns={columns}
+          data={rows}
+          isLoading={list.isLoading}
+          rowKey={(row) => row.id}
+          spineFor={(row) => spineFor(row.status)}
+          pageSize={12}
+          defaultSortKey="nama"
+          emptyIcon={Truck}
+          emptyMessage="Tidak ada armada yang cocok"
+          emptyDescription="Ubah filter, atau tambahkan kendaraan baru ke daftar."
+          emptyAction={
+            <Button size="sm" onClick={() => openEditor(EMPTY)}>
+              Tambah armada
+            </Button>
+          }
+          dense
+        />
+      </Panel>
 
-        <CardContent className="p-0">
-          {activeView === "driver" ? (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-gray-50 dark:bg-dark-850 hover:bg-gray-50 dark:hover:bg-dark-850 border-b border-gray-200 dark:border-dark-700">
-                    <SortableTableHead
-                      label="Driver"
-                      sortKey="nama"
-                      activeSortKey={driverSortKey}
-                      sortDirection={driverSortDirection}
-                      onSort={handleDriverSort}
-                    />
-                    <SortableTableHead
-                      label="Kendaraan"
-                      sortKey="noKendaraan"
-                      activeSortKey={driverSortKey}
-                      sortDirection={driverSortDirection}
-                      onSort={handleDriverSort}
-                    />
-                    <SortableTableHead
-                      label="Kapasitas"
-                      sortKey="kapasitas"
-                      activeSortKey={driverSortKey}
-                      sortDirection={driverSortDirection}
-                      onSort={handleDriverSort}
-                      align="center"
-                    />
-                    <SortableTableHead
-                      label="Trip Hari Ini"
-                      sortKey="tripHariIni"
-                      activeSortKey={driverSortKey}
-                      sortDirection={driverSortDirection}
-                      onSort={handleDriverSort}
-                      align="center"
-                    />
-                    <SortableTableHead
-                      label="Distribusi Bln Ini"
-                      sortKey="totalTabungBulanIni"
-                      activeSortKey={driverSortKey}
-                      sortDirection={driverSortDirection}
-                      onSort={handleDriverSort}
-                      align="right"
-                    />
-                    <SortableTableHead
-                      label="Rating"
-                      sortKey="ratingKinerja"
-                      activeSortKey={driverSortKey}
-                      sortDirection={driverSortDirection}
-                      onSort={handleDriverSort}
-                      align="center"
-                    />
-                    <SortableTableHead
-                      label="Status"
-                      sortKey="status"
-                      activeSortKey={driverSortKey}
-                      sortDirection={driverSortDirection}
-                      onSort={handleDriverSort}
-                    />
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
-                      Aksi
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedDrivers.map((driver) => {
-                    const conf = driverStatusConfig[driver.status];
-                    return (
-                      <TableRow
-                        key={driver.id}
-                        className="border-b border-gray-100 dark:border-dark-700 hover:bg-purple-50/30 dark:hover:bg-purple-500/5 transition-colors"
-                      >
-                        <TableCell className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-sm font-bold text-white shrink-0">
-                              {driver.nama.charAt(0)}
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                                {driver.nama}
-                              </p>
-                              <div className="flex items-center gap-1 mt-0.5">
-                                <Phone className="h-3 w-3 text-gray-400" />
-                                <p className="text-xs text-gray-500 dark:text-gray-400">
-                                  {driver.noHP}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <p className="font-mono text-sm font-medium text-gray-900 dark:text-white">
-                            {driver.noKendaraan}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {driver.jenisKendaraan}
-                          </p>
-                        </TableCell>
-                        <TableCell className="px-4 py-3 text-center">
-                          <span className="text-sm font-medium text-gray-900 dark:text-white">
-                            {driver.kapasitas}
-                          </span>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            tabung
-                          </p>
-                        </TableCell>
-                        <TableCell className="px-4 py-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            {driver.tripHariIni > 0 ? (
-                              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-600 text-white text-sm font-bold">
-                                {driver.tripHariIni}
-                              </span>
-                            ) : (
-                              <span className="text-sm text-gray-400 dark:text-gray-500">
-                                0
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="px-4 py-3 text-right">
-                          <p className="font-bold text-gray-900 dark:text-white">
-                            {driver.totalTabungBulanIni.toLocaleString("id-ID")}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            tabung
-                          </p>
-                        </TableCell>
-                        <TableCell className="px-4 py-3 text-center">
-                          <StarRating rating={driver.ratingKinerja} />
-                        </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-xs font-medium",
-                              conf.className,
-                            )}
-                          >
-                            {conf.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="px-4 py-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-xs h-7 border-gray-300 dark:border-dark-600"
-                            >
-                              Detail
-                            </Button>
-                            <CanAccess permission={PERMISSIONS.DRIVERS_MANAGE}>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-xs h-7 border-purple-300 dark:border-purple-500/30 text-purple-700 dark:text-purple-400 hover:bg-purple-50"
-                              >
-                                Edit
-                              </Button>
-                            </CanAccess>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-gray-50 dark:bg-dark-850 hover:bg-gray-50 dark:hover:bg-dark-850 border-b border-gray-200 dark:border-dark-700">
-                    <SortableTableHead
-                      label="Surat Jalan"
-                      sortKey="noSJ"
-                      activeSortKey={tripSortKey}
-                      sortDirection={tripSortDirection}
-                      onSort={handleTripSort}
-                    />
-                    <SortableTableHead
-                      label="Driver"
-                      sortKey="driver"
-                      activeSortKey={tripSortKey}
-                      sortDirection={tripSortDirection}
-                      onSort={handleTripSort}
-                    />
-                    <SortableTableHead
-                      label="Tujuan Pangkalan"
-                      sortKey="pangkalan"
-                      activeSortKey={tripSortKey}
-                      sortDirection={tripSortDirection}
-                      onSort={handleTripSort}
-                    />
-                    <SortableTableHead
-                      label="Jumlah"
-                      sortKey="jumlah"
-                      activeSortKey={tripSortKey}
-                      sortDirection={tripSortDirection}
-                      onSort={handleTripSort}
-                      align="right"
-                    />
-                    <SortableTableHead
-                      label="Berangkat"
-                      sortKey="berangkat"
-                      activeSortKey={tripSortKey}
-                      sortDirection={tripSortDirection}
-                      onSort={handleTripSort}
-                      align="center"
-                    />
-                    <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
-                      Tiba
-                    </TableHead>
-                    <SortableTableHead
-                      label="Durasi"
-                      sortKey="durasi"
-                      activeSortKey={tripSortKey}
-                      sortDirection={tripSortDirection}
-                      onSort={handleTripSort}
-                      align="center"
-                    />
-                    <SortableTableHead
-                      label="Status"
-                      sortKey="status"
-                      activeSortKey={tripSortKey}
-                      sortDirection={tripSortDirection}
-                      onSort={handleTripSort}
-                    />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedTripLogs.map((trip) => {
-                    const conf = tripStatusConfig[trip.status];
-                    return (
-                      <TableRow
-                        key={trip.id}
-                        className="border-b border-gray-100 dark:border-dark-700 hover:bg-gray-50 dark:hover:bg-dark-700/30"
-                      >
-                        <TableCell className="px-4 py-3">
-                          <p className="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">
-                            {trip.noSJ}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {trip.tanggal}
-                          </p>
-                        </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white">
-                            {trip.driver}
-                          </p>
-                        </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <div className="flex items-center gap-1.5">
-                            <MapPin className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
-                            <span className="text-sm text-gray-900 dark:text-white">
-                              {trip.pangkalan}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="px-4 py-3 text-right">
-                          <p className="font-bold text-gray-900 dark:text-white">
-                            {trip.jumlah}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            tabung
-                          </p>
-                        </TableCell>
-                        <TableCell className="px-4 py-3 text-center">
-                          <span className="text-sm font-medium text-gray-900 dark:text-white">
-                            {trip.berangkat}
-                          </span>
-                        </TableCell>
-                        <TableCell className="px-4 py-3 text-center">
-                          {trip.tiba ? (
-                            <span className="text-sm font-medium text-green-600 dark:text-green-400">
-                              {trip.tiba}
-                            </span>
-                          ) : trip.status === "dalam_perjalanan" ? (
-                            <div className="flex items-center justify-center gap-1 text-blue-600 dark:text-blue-400">
-                              <Clock className="h-3.5 w-3.5 animate-pulse" />
-                              <span className="text-xs">En route</span>
-                            </div>
-                          ) : (
-                            <span className="text-sm text-gray-400 dark:text-gray-500">
-                              —
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="px-4 py-3 text-center">
-                          <span className="text-sm text-gray-700 dark:text-gray-300">
-                            {trip.durasi ?? "—"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-xs font-medium",
-                              conf.className,
-                            )}
-                          >
-                            {conf.label}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <form onSubmit={submit}>
+            <DialogHeader>
+              <DialogTitle>
+                {editing?.id ? `Ubah ${editing.nama}` : "Tambah armada"}
+              </DialogTitle>
+              <DialogDescription>
+                Kapasitas menentukan batas muatan yang boleh ditugaskan ke kendaraan
+                ini pada satu rencana distribusi.
+              </DialogDescription>
+            </DialogHeader>
 
-      {/* Mobile-friendly note */}
-      <Card className="border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10">
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
-                Aplikasi Mobile Driver
-              </p>
-              <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
-                Driver dapat memperbarui status perjalanan secara real-time
-                melalui aplikasi mobile GasDistrib. Muat halaman ini pada
-                perangkat mobile untuk melihat tampilan yang dioptimalkan untuk
-                driver.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            {editing && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field
+                  label="Nama driver"
+                  htmlFor="d-nama"
+                  error={errors.nama}
+                  required
+                  className="sm:col-span-2"
+                >
+                  <TextInput
+                    id="d-nama"
+                    value={editing.nama}
+                    invalid={!!errors.nama}
+                    onChange={(e) => setEditing({ ...editing, nama: e.target.value })}
+                  />
+                </Field>
+
+                <Field label="Telepon" htmlFor="d-telp">
+                  <TextInput
+                    id="d-telp"
+                    mono
+                    inputMode="tel"
+                    value={editing.telepon}
+                    onChange={(e) => setEditing({ ...editing, telepon: e.target.value })}
+                  />
+                </Field>
+
+                <Field label="Nomor SIM" htmlFor="d-sim">
+                  <TextInput
+                    id="d-sim"
+                    mono
+                    value={editing.nomorSim}
+                    onChange={(e) => setEditing({ ...editing, nomorSim: e.target.value })}
+                  />
+                </Field>
+
+                <Field label="Nomor plat" htmlFor="d-plat" error={errors.plat} required>
+                  <TextInput
+                    id="d-plat"
+                    mono
+                    placeholder="B 1234 TGH"
+                    value={editing.plat}
+                    invalid={!!errors.plat}
+                    onChange={(e) => setEditing({ ...editing, plat: e.target.value })}
+                  />
+                </Field>
+
+                <Field label="Jenis armada" htmlFor="d-armada">
+                  <TextInput
+                    id="d-armada"
+                    placeholder="Isuzu Elf NMR"
+                    value={editing.armada}
+                    onChange={(e) => setEditing({ ...editing, armada: e.target.value })}
+                  />
+                </Field>
+
+                <Field
+                  label="Kapasitas"
+                  htmlFor="d-kap"
+                  error={errors.kapasitas}
+                  hint="Jumlah tabung per rit."
+                  required
+                >
+                  <TextInput
+                    id="d-kap"
+                    type="number"
+                    min={1}
+                    step={20}
+                    mono
+                    value={editing.kapasitas}
+                    invalid={!!errors.kapasitas}
+                    onChange={(e) =>
+                      setEditing({ ...editing, kapasitas: Number(e.target.value) })
+                    }
+                  />
+                </Field>
+
+                <Field label="Status" htmlFor="d-status">
+                  <SelectInput
+                    id="d-status"
+                    value={editing.status}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        status: e.target.value as DriverStatusEntity,
+                      })
+                    }
+                  >
+                    <option value="Standby">Standby — siap ditugaskan</option>
+                    <option value="Cuti">Cuti — tidak dapat dipilih</option>
+                  </SelectInput>
+                </Field>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" type="button" onClick={() => setEditing(null)}>
+                Batal
+              </Button>
+              <Button type="submit" disabled={saveMutation.isPending}>
+                Simpan armada
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        isOpen={!!pendingDelete}
+        title={`Hapus ${pendingDelete?.nama}?`}
+        message="Armada hilang dari daftar penugasan pada rencana distribusi berikutnya."
+        details={
+          pendingDelete && (
+            <p className={cn(pendingDelete.tugasHariIni > 0 && "text-rust-ink")}>
+              {pendingDelete.tugasHariIni > 0
+                ? `Masih memegang ${pendingDelete.tugasHariIni} surat jalan hari ini. Tugaskan ulang sebelum menghapus.`
+                : "Riwayat pengiriman tetap tersimpan untuk laporan kinerja."}
+            </p>
+          )
+        }
+        confirmLabel="Hapus armada"
+        isPending={deleteMutation.isPending}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => pendingDelete && deleteMutation.mutate(pendingDelete.id)}
+      />
     </div>
   );
 }

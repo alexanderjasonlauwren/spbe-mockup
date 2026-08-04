@@ -1,140 +1,311 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { AlertCircle, RefreshCw } from "lucide-react";
 import { useMonitoring } from "@/features/monitoring/hooks/useMonitoring";
 import { DateRangeFilter } from "@/features/monitoring/components/DateRangeFilter";
 import { DriverCardRow } from "@/features/monitoring/components/DriverCardRow";
 import { DistribusiMap } from "@/features/monitoring/components/DistribusiMap";
 import { MonitoringTable } from "@/features/monitoring/components/MonitoringTable";
+import { PageHeader } from "@/components/common/PageHeader";
+import { Panel, PanelHeader } from "@/components/common/Panel";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { Field, SegmentedControl, TextInput } from "@/components/common/Field";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { formatNumber, formatPercentId, formatTime } from "@/lib/format";
+import type { MonitoringRow } from "@/features/monitoring/types";
+
+const STATUS_TABS = ["Semua", "Antrian", "Proses", "Selesai", "Tertunda"] as const;
 
 export function MonitoringPage() {
-  const [selectedDriverId, setSelectedDriverId] = useState<
-    string | undefined
-  >();
   const {
     driverCards,
     monitoringTable,
+    allRows,
     assignments,
+    totals,
     lastSyncAt,
     isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch,
     dateRange,
     setDateRange,
+    driverFilter,
+    setDriverFilter,
+    statusFilter,
+    setStatusFilter,
+    statusMutation,
+    printMutation,
   } = useMonitoring();
 
-  const selesai = monitoringTable.filter((r) => r.status === "Selesai").length;
-  const proses = monitoringTable.filter((r) => r.status === "Proses").length;
-  const activeDrivers = driverCards.filter(
-    (c) => c.status !== "Selesai",
-  ).length;
+  // Completing a stop records what was actually unloaded, so it asks.
+  const [completing, setCompleting] = useState<MonitoringRow | null>(null);
+  const [realisasi, setRealisasi] = useState(0);
+  const [holding, setHolding] = useState<MonitoringRow | null>(null);
 
-  const focusedDriverId = useMemo(
-    () => selectedDriverId ?? driverCards[0]?.id,
-    [selectedDriverId, driverCards],
-  );
+  const capaian =
+    totals && totals.target > 0 ? (totals.realisasi / totals.target) * 100 : 0;
 
   return (
-    <div className="space-y-6">
-      {/* Top Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-black text-on-surface">
-            Monitoring Distribusi
-          </h1>
-          <p className="text-xs text-on-surface-variant mt-0.5">
-            Data snapshot berdasarkan filter tanggal. Tampilan map dan status
-            armada selalu sinkron.
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Operasi harian"
+        title="Monitoring Distribusi"
+        description="Setiap surat jalan yang sudah terbit, posisinya, dan apa yang benar-benar diterima pangkalan."
+        actions={<DateRangeFilter dateRange={dateRange} onChange={setDateRange} />}
+      />
+
+      {isError && (
+        <Panel spine="text-rust" className="flex items-center gap-3 px-5 py-3.5">
+          <AlertCircle className="h-4 w-4 shrink-0 text-rust-ink" />
+          <p className="flex-1 text-sm text-ink">
+            Papan monitoring gagal dimuat.{" "}
+            <span className="text-ink-muted">{error?.message}</span>
           </p>
-        </div>
-        <DateRangeFilter dateRange={dateRange} onChange={setDateRange} />
+          <Button size="sm" variant="outline" onClick={() => refetch()}>
+            Coba lagi
+          </Button>
+        </Panel>
+      )}
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Stat
+          label="Realisasi periode"
+          value={formatNumber(totals?.realisasi ?? 0)}
+          unit="tabung"
+          hint={`${formatPercentId(capaian)} dari ${formatNumber(totals?.target ?? 0)} target`}
+        />
+        <Stat
+          label="Sedang berjalan"
+          value={formatNumber(totals?.proses ?? 0)}
+          unit="surat jalan"
+          tone={totals && totals.proses > 0 ? "signal" : undefined}
+        />
+        <Stat
+          label="Selesai"
+          value={formatNumber(totals?.selesai ?? 0)}
+          unit="surat jalan"
+          tone={totals && totals.selesai > 0 ? "pine" : undefined}
+        />
+        <Stat
+          label="Tertunda"
+          value={formatNumber(totals?.tertunda ?? 0)}
+          unit="surat jalan"
+          tone={totals && totals.tertunda > 0 ? "rust" : undefined}
+        />
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[
-          {
-            label: "Armada Aktif",
-            value: activeDrivers,
-          },
-          {
-            label: "Dalam Perjalanan",
-            value: driverCards.filter((c) => c.status === "Dalam Perjalanan")
-              .length,
-          },
-          { label: "Pangkalan Selesai", value: selesai },
-          { label: "Dalam Proses", value: proses },
-        ].map((stat) => (
-          <div
-            key={stat.label}
-            className="bg-surface-container-lowest rounded-xl shadow-sm p-5"
-          >
-            <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
-              {stat.label}
-            </p>
-            <p className="text-3xl font-black text-on-surface">{stat.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Driver Cards */}
-      <div>
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-          <h2 className="text-sm font-bold text-on-surface-variant uppercase tracking-wider">
-            Status Armada
-          </h2>
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold">
-              {activeDrivers} Driver Aktif
-            </span>
-            <span className="px-2.5 py-1 rounded-full bg-surface-container text-xs font-bold text-on-surface-variant">
-              {driverCards.length} Driver Terdaftar
-            </span>
-          </div>
+      <section>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="label text-2xs text-ink-muted">Status armada</h2>
+          {driverFilter && (
+            <Button variant="ghost" size="xs" onClick={() => setDriverFilter(null)}>
+              Tampilkan semua armada
+            </Button>
+          )}
         </div>
         <DriverCardRow
           cards={driverCards}
           isLoading={isLoading}
-          selectedId={focusedDriverId}
-          onSelect={setSelectedDriverId}
+          selectedId={driverFilter}
+          onSelect={setDriverFilter}
         />
-      </div>
+      </section>
 
-      {/* Live Map */}
-      <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden border border-slate-100">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-2">
-          <h3 className="text-base font-bold text-on-surface">
-            Live Distribution Map
-          </h3>
-          <div className="text-xs text-on-surface-variant">
-            Terakhir sinkron:{" "}
-            <span className="font-bold text-on-surface">
-              {lastSyncAt
-                ? new Date(lastSyncAt).toLocaleTimeString("id-ID", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "-"}
-            </span>
-          </div>
-        </div>
+      <Panel>
+        <PanelHeader
+          title="Peta distribusi"
+          hint={
+            driverFilter
+              ? "Menampilkan satu armada. Pilih ulang kartu untuk melihat semuanya."
+              : "Titik pangkalan dan posisi armada yang sedang berjalan"
+          }
+          actions={
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 text-2xs text-ink-muted">
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    isFetching ? "bg-signal now-pulse" : "bg-pine",
+                  )}
+                  aria-hidden
+                />
+                Sinkron {lastSyncAt ? formatTime(lastSyncAt) : "—"}
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => refetch()}>
+                <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
+                Muat ulang
+              </Button>
+            </div>
+          }
+        />
         <div className="p-4">
           <DistribusiMap
             height="420px"
             drivers={driverCards}
-            rows={monitoringTable}
+            rows={allRows}
             assignments={assignments}
-            selectedDriverId={focusedDriverId}
-            onSelectDriver={setSelectedDriverId}
+            selectedDriverId={driverFilter ?? undefined}
+            onSelectDriver={setDriverFilter}
           />
         </div>
-      </div>
+      </Panel>
 
-      {/* Table */}
-      <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden border border-slate-100">
-        <div className="p-5 border-b border-slate-100">
-          <h3 className="text-base font-bold text-on-surface">
-            Rekapitulasi Pengiriman Pangkalan
-          </h3>
-        </div>
-        <MonitoringTable data={monitoringTable} isLoading={isLoading} />
-      </div>
+      <Panel>
+        <PanelHeader
+          title="Surat jalan"
+          hint={`${monitoringTable.length} dari ${allRows.length} baris ditampilkan`}
+          actions={
+            <SegmentedControl
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={STATUS_TABS.map((s) => ({
+                value: s,
+                label: s,
+                count:
+                  s === "Semua"
+                    ? allRows.length
+                    : allRows.filter((r) => r.status === s).length,
+              }))}
+            />
+          }
+        />
+        <MonitoringTable
+          data={monitoringTable}
+          isLoading={isLoading}
+          pendingId={statusMutation.variables?.deliveryId}
+          onStart={(row) =>
+            statusMutation.mutate({ deliveryId: row.id, status: "Proses" })
+          }
+          onComplete={(row) => {
+            setRealisasi(row.realisasi || row.target);
+            setCompleting(row);
+          }}
+          onHold={setHolding}
+          onPrint={(row) => printMutation.mutate(row.id)}
+        />
+      </Panel>
+
+      {/* Completing a drop */}
+      <Dialog open={!!completing} onOpenChange={(open) => !open && setCompleting(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Tutup {completing?.kode}</DialogTitle>
+            <DialogDescription>
+              Catat jumlah tabung yang benar-benar diterima {completing?.pangkalan}.
+              Angka ini menjadi dasar tagihan.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Field
+            label="Realisasi diterima"
+            htmlFor="realisasi"
+            hint={
+              completing
+                ? `Target pada surat jalan: ${formatNumber(completing.target)} tabung.`
+                : undefined
+            }
+          >
+            <TextInput
+              id="realisasi"
+              type="number"
+              min={0}
+              max={completing?.target}
+              mono
+              value={realisasi}
+              onChange={(e) => setRealisasi(Number(e.target.value))}
+            />
+          </Field>
+
+          {completing && realisasi < completing.target && (
+            <p className="rounded-md border border-line bg-signal-soft px-3 py-2 text-xs text-ink">
+              Kurang <span className="data">{formatNumber(completing.target - realisasi)}</span>{" "}
+              tabung dari target. Selisih tercatat pada surat jalan dan laporan periode.
+            </p>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCompleting(null)}>
+              Batal
+            </Button>
+            <Button
+              disabled={statusMutation.isPending}
+              onClick={() =>
+                completing &&
+                statusMutation.mutate(
+                  { deliveryId: completing.id, status: "Selesai", realisasi },
+                  { onSettled: () => setCompleting(null) },
+                )
+              }
+            >
+              Tutup surat jalan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        isOpen={!!holding}
+        title={`Tandai ${holding?.kode} tertunda?`}
+        message={`Pengiriman ke ${holding?.pangkalan} dicatat gagal diselesaikan hari ini.`}
+        details="Surat jalan tetap terbuka dan tidak menerbitkan tagihan. Jadwalkan ulang lewat rencana distribusi berikutnya."
+        confirmLabel="Tandai tertunda"
+        isPending={statusMutation.isPending}
+        onCancel={() => setHolding(null)}
+        onConfirm={() =>
+          holding &&
+          statusMutation.mutate(
+            { deliveryId: holding.id, status: "Tertunda" },
+            { onSettled: () => setHolding(null) },
+          )
+        }
+      />
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  unit,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  hint?: string;
+  tone?: "signal" | "pine" | "rust";
+}) {
+  // Written out rather than interpolated — Tailwind only emits classes it can
+  // see as complete strings.
+  const spine = {
+    signal: "spine text-signal",
+    pine: "spine text-pine",
+    rust: "spine text-rust",
+  };
+
+  return (
+    <div
+      className={cn("rounded-md border border-line bg-panel p-4", tone && spine[tone])}
+    >
+      <p className="label text-2xs text-ink-muted">{label}</p>
+      <p className="data mt-1.5 text-figure font-semibold text-ink">
+        {value}
+        <span className="ml-1.5 font-sans text-sm font-medium tracking-normal text-ink-muted">
+          {unit}
+        </span>
+      </p>
+      {hint && <p className="mt-2 text-xs text-ink-muted">{hint}</p>}
     </div>
   );
 }

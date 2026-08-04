@@ -1,39 +1,41 @@
 import type { LucideIcon } from "lucide-react";
-import { PackageOpen } from "lucide-react";
+import { Inbox } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface EmptyStateProps {
+/**
+ * An empty screen is an invitation to act, so this always states what would
+ * fill it and — where the caller supplies one — offers the action that does.
+ */
+export function EmptyState({
+  icon: Icon = Inbox,
+  title,
+  description,
+  action,
+  className,
+}: {
   icon?: LucideIcon;
   title: string;
   description?: string;
   action?: React.ReactNode;
   className?: string;
-}
-
-export function EmptyState({
-  icon: Icon = PackageOpen,
-  title,
-  description,
-  action,
-  className,
-}: EmptyStateProps) {
+}) {
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center py-16 px-6 text-center",
+        "flex flex-col items-center justify-center px-6 py-14 text-center",
         className,
       )}
     >
-      <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
-        <Icon className="h-8 w-8 text-slate-400" />
+      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-md border border-line bg-panel-sunk">
+        <Icon className="h-5 w-5 text-ink-muted" strokeWidth={1.75} />
       </div>
-      <h3 className="text-sm font-bold text-on-surface mb-1">{title}</h3>
+      <h3 className="text-sm font-semibold text-ink">{title}</h3>
       {description && (
-        <p className="text-xs text-on-surface-variant max-w-xs mb-4">
+        <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-ink-muted">
           {description}
         </p>
       )}
-      {action}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }

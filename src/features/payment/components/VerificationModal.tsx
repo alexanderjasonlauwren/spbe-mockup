@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { FileImage, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -6,10 +8,15 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { useState } from "react";
+import { Field, TextareaInput } from "@/components/common/Field";
+import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { getStatusVariant } from "@/lib/status";
+import { formatDateTimeId, formatNumber, formatRupiah } from "@/lib/format";
+import type { Payment } from "../types";
 
 interface VerificationModalProps {
-  isOpen: boolean;
+  payment: Payment | null;
   action: "verify" | "reject";
   onConfirm: (keterangan: string) => void;
   onCancel: () => void;
@@ -17,69 +24,122 @@ interface VerificationModalProps {
 }
 
 export function VerificationModal({
-  isOpen,
+  payment,
   action,
   onConfirm,
   onCancel,
   isPending,
 }: VerificationModalProps) {
+  // The parent remounts this by key per payment+action, so the note starts
+  // empty for each decision without an effect resetting it.
   const [keterangan, setKeterangan] = useState("");
   const isReject = action === "reject";
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent>
+    <Dialog open={!!payment} onOpenChange={(open) => !open && !isPending && onCancel()}>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {isReject ? "Tolak Pembayaran" : "Verifikasi Pembayaran"}
+            {isReject ? "Tolak pembayaran" : "Verifikasi pembayaran"}
           </DialogTitle>
           <DialogDescription>
             {isReject
-              ? "Masukkan alasan penolakan pembayaran ini."
-              : "Konfirmasi bahwa bukti pembayaran ini sudah valid."}
+              ? "Pangkalan akan diberi tahu alasannya, dan tagihan tetap terbuka."
+              : "Tagihan ditandai lunas dan masuk ke pendapatan periode ini."}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
-          <label className="text-xs font-bold text-on-surface-variant">
-            Keterangan {isReject ? "(Wajib)" : "(Opsional)"}
-          </label>
-          <textarea
+
+        {payment && (
+          <div className="rounded-md border border-line bg-panel-sunk p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="data text-2xs text-ink-muted">{payment.kode}</p>
+                <p className="truncate text-sm font-semibold text-ink">
+                  {payment.pangkalan}
+                </p>
+                <p className="text-xs text-ink-muted">Kec. {payment.kecamatan}</p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="data text-lg font-semibold text-ink">
+                  {formatRupiah(payment.nominal)}
+                </p>
+                <p className="data text-2xs text-ink-muted">
+                  {formatNumber(payment.jumlahTabung)} tabung
+                </p>
+              </div>
+            </div>
+
+            <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line pt-3 text-xs">
+              <div>
+                <dt className="text-ink-muted">Bank</dt>
+                <dd className="font-medium text-ink">{payment.bank}</dd>
+              </div>
+              <div>
+                <dt className="text-ink-muted">No. rekening</dt>
+                <dd className="data text-ink">{payment.noRekening}</dd>
+              </div>
+              <div>
+                <dt className="text-ink-muted">Tanggal transfer</dt>
+                <dd className="data text-ink">
+                  {formatDateTimeId(payment.tanggalBayar)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-ink-muted">Surat jalan</dt>
+                <dd className="data text-ink">{payment.suratJalan ?? "—"}</dd>
+              </div>
+            </dl>
+
+            {payment.buktiTransfer && (
+              <p className="mt-3 flex items-center gap-2 border-t border-line pt-3 text-xs text-ink-muted">
+                <FileImage className="h-3.5 w-3.5 shrink-0" />
+                <span className="data truncate">{payment.buktiTransfer}</span>
+              </p>
+            )}
+            <div className="mt-3">
+              <StatusBadge
+                variant={getStatusVariant(payment.status)}
+                label={payment.status}
+              />
+            </div>
+          </div>
+        )}
+
+        <Field
+          label={isReject ? "Alasan penolakan" : "Catatan"}
+          htmlFor="keterangan"
+          required={isReject}
+          hint={
+            isReject
+              ? undefined
+              : "Opsional. Tercatat pada jejak aktivitas bersama nama Anda."
+          }
+        >
+          <TextareaInput
+            id="keterangan"
+            rows={3}
             value={keterangan}
             onChange={(e) => setKeterangan(e.target.value)}
-            rows={3}
             placeholder={
               isReject
-                ? "Contoh: Nominal tidak sesuai..."
-                : "Catatan tambahan..."
+                ? "Contoh: nominal transfer kurang Rp 240.000 dari surat jalan."
+                : "Contoh: bukti transfer cocok dengan mutasi rekening."
             }
-            className="w-full border border-outline-variant rounded-lg p-3 text-sm outline-none focus:border-[#1565C0] resize-none"
           />
-        </div>
+        </Field>
+
         <DialogFooter>
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-sm font-bold border border-outline-variant rounded-lg hover:bg-slate-50 transition-colors"
-          >
+          <Button variant="outline" onClick={onCancel} disabled={isPending}>
             Batal
-          </button>
-          <button
-            onClick={() => {
-              onConfirm(keterangan);
-              setKeterangan("");
-            }}
+          </Button>
+          <Button
+            variant={isReject ? "destructive" : "default"}
             disabled={isPending || (isReject && !keterangan.trim())}
-            className={`px-4 py-2 text-sm font-bold text-white rounded-lg transition-colors disabled:opacity-60 ${
-              isReject
-                ? "bg-red-600 hover:bg-red-700"
-                : "bg-[#1565C0] hover:bg-[#004d99]"
-            }`}
+            onClick={() => onConfirm(keterangan)}
           >
-            {isPending
-              ? "Memproses..."
-              : isReject
-                ? "Tolak Pembayaran"
-                : "Verifikasi"}
-          </button>
+            {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isReject ? "Tolak pembayaran" : "Verifikasi pembayaran"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -4,74 +4,297 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * SiDistrib — dispatch desk
+ *
+ * Tokens are RGB triplets so Tailwind can apply opacity modifiers
+ * (`bg-panel/60`). Every colour has a dark-mode counterpart; nothing in the app
+ * should reach for a raw hex.
+ */
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Declare the scheme explicitly: without it browsers may auto-darken the
+       page, and native controls (date pickers, scrollbars, form widgets) pick
+       the wrong side. */
+    color-scheme: light;
+
+    /* surfaces — office paper under fluorescent light, a hair green-grey */
+    --paper: 242 243 239;
+    --panel: 255 255 255;
+    --panel-sunk: 247 248 244;
+    --panel-raised: 236 238 231;
+    --line: 225 227 220;
+    --line-strong: 198 201 191;
+
+    /* ink — chrome, primary actions, body text */
+    --ink: 23 26 22;
+    --ink-soft: 35 39 31;
+    --ink-muted: 103 107 98;
+    --on-ink: 244 245 240;
+    --on-ink-muted: 154 160 147;
+
+    /* Navigation chrome is a dark surface in BOTH themes, so it needs its own
+       tokens: --ink/--on-ink invert between modes and would render the sidebar
+       as near-black text on near-black. */
+    --nav: 23 26 22;
+    --nav-fg: 244 245 240;
+    --nav-fg-muted: 154 160 147;
+
+    /* state — the docket spine reads from these */
+    --signal: 224 163 46; /* dispatch amber: in progress, marked, active */
+    --signal-ink: 138 97 17;
+    --signal-soft: 251 240 216;
+    --pine: 46 106 85; /* settled, verified, on target */
+    --pine-ink: 34 82 65;
+    --pine-soft: 228 238 232;
+    --rust: 176 63 39; /* rejected, late, over quota */
+    --rust-ink: 150 50 30;
+    --rust-soft: 246 229 224;
+    --draft: 138 143 132; /* not yet committed */
+    --draft-soft: 234 235 229;
+
+    --radius: 0.25rem;
+
+    /* shadcn/ui compatibility layer, restated in the new palette */
+    --background: 80 10% 95%;
+    --foreground: 105 9% 9%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 105 9% 9%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    --popover-foreground: 105 9% 9%;
+    --primary: 105 9% 9%;
+    --primary-foreground: 80 14% 96%;
+    --secondary: 77 13% 92%;
+    --secondary-foreground: 105 9% 9%;
+    --muted: 77 13% 92%;
+    --muted-foreground: 93 4% 40%;
+    --accent: 41 74% 53%;
+    --accent-foreground: 105 9% 9%;
+    --destructive: 11 64% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 77 13% 88%;
+    --input: 77 13% 88%;
+    --ring: 41 74% 53%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    color-scheme: dark;
+
+    --paper: 19 22 17;
+    --panel: 26 30 24;
+    --panel-sunk: 22 25 20;
+    --panel-raised: 34 39 31;
+    --line: 42 47 39;
+    --line-strong: 62 68 57;
+
+    --ink: 232 234 227;
+    --ink-soft: 210 214 202;
+    --ink-muted: 154 160 147;
+    --on-ink: 23 26 22;
+    --on-ink-muted: 103 107 98;
+
+    /* Slightly lifted off the dark paper so the sidebar still reads as chrome. */
+    --nav: 26 30 24;
+    --nav-fg: 232 234 227;
+    --nav-fg-muted: 154 160 147;
+
+    --signal: 226 172 66;
+    --signal-ink: 233 189 105;
+    --signal-soft: 48 39 18;
+    --pine: 78 156 128;
+    --pine-ink: 122 187 162;
+    --pine-soft: 24 44 36;
+    --rust: 212 106 78;
+    --rust-ink: 224 138 112;
+    --rust-soft: 54 27 20;
+    --draft: 138 143 132;
+    --draft-soft: 40 44 37;
+
+    --background: 105 12% 7%;
+    --foreground: 80 14% 90%;
+    --card: 105 11% 11%;
+    --card-foreground: 80 14% 90%;
+    --popover: 105 11% 11%;
+    --popover-foreground: 80 14% 90%;
+    --primary: 80 14% 90%;
+    --primary-foreground: 105 12% 7%;
+    --secondary: 100 10% 14%;
+    --secondary-foreground: 80 14% 90%;
+    --muted: 100 10% 14%;
+    --muted-foreground: 93 6% 60%;
+    --accent: 41 74% 57%;
+    --accent-foreground: 105 12% 7%;
+    --destructive: 14 60% 57%;
+    --destructive-foreground: 105 12% 7%;
+    --border: 100 9% 17%;
+    --input: 100 9% 17%;
+    --ring: 41 74% 57%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-line;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-paper text-ink;
+    font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: "cv05" 1;
+  }
+
+  /**
+   * The one typographic rule that carries the system: anything a machine
+   * generated, or that you read digit by digit — surat jalan numbers, quota,
+   * plates, money, timestamps — is set in mono and aligned on the digit.
+   */
+  .data,
+  .tnum {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    letter-spacing: -0.01em;
+  }
+
+  /* Utility face: column heads, eyebrows, field labels. */
+  .label {
+    font-family: "Archivo Narrow", ui-sans-serif, system-ui, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    font-weight: 600;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--signal));
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background: rgb(var(--signal) / 0.32);
+  }
+
+  /* Scrollbars, quietly matched to the chrome. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--line-strong)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: rgb(var(--line-strong));
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 99px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--ink-muted));
+    background-clip: content-box;
+  }
+}
+
+@layer components {
+  /**
+   * Docket spine — the structural device. A 3px left edge on panels and rows,
+   * coloured by state, so a table reads like files in a dispatch cabinet and
+   * needs no separate status column.
+   */
+  .spine {
+    position: relative;
+  }
+  .spine::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: currentColor;
+  }
+}
+
+@layer utilities {
+  .animate-in-up {
+    animation: inUp 0.36s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .animate-in-fade {
+    animation: inFade 0.3s ease-out both;
+  }
+}
+
+@keyframes inUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes inFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
 @keyframes routeDash {
-  to { stroke-dashoffset: -18; }
+  to {
+    stroke-dashoffset: -18;
+  }
 }
 .route-animated {
   animation: routeDash 0.5s linear infinite;
 }
 
-@layer base {
-  * {
-    @apply border-border;
+/* The "now" marker on the dispatch rail. */
+@keyframes nowPulse {
+  0%,
+  100% {
+    opacity: 1;
   }
-  body {
-    @apply bg-surface text-on-surface;
-    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  50% {
+    opacity: 0.35;
   }
+}
+.now-pulse {
+  animation: nowPulse 2.4s ease-in-out infinite;
+}
 
-  .layout-bg {
-    background-color: #f7f9fc;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
+}
 
-  .dark .layout-bg {
-    background-color: #0f172a;
-  }
+/* Leaflet, brought into the palette. */
+.leaflet-container {
+  background: rgb(var(--panel-raised));
+  font-family: "Archivo", sans-serif;
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: rgb(var(--panel));
+  color: rgb(var(--ink));
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+}
+.dark .leaflet-tile {
+  filter: invert(1) hue-rotate(180deg) brightness(0.86) contrast(0.92);
 }

@@ -1,43 +1,49 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  getDispatchRail,
   getKpiSummary,
   getMonthlyChart,
   getPangkalanShares,
   getRecentActivities,
+  getRecentAudit,
 } from "../api/dashboardApi";
 
 export function useDashboard() {
-  const kpi = useQuery({
-    queryKey: ["kpi"],
-    queryFn: getKpiSummary,
-  });
-
+  const kpi = useQuery({ queryKey: ["kpi"], queryFn: getKpiSummary });
+  const rail = useQuery({ queryKey: ["dispatch-rail"], queryFn: getDispatchRail });
   const monthlyChart = useQuery({
     queryKey: ["monthly-chart"],
     queryFn: getMonthlyChart,
   });
-
   const pangkalanShares = useQuery({
     queryKey: ["pangkalan-shares"],
     queryFn: getPangkalanShares,
   });
-
   const recentActivities = useQuery({
     queryKey: ["recent-activities"],
     queryFn: getRecentActivities,
   });
-
-  const isLoading =
-    kpi.isLoading ||
-    monthlyChart.isLoading ||
-    pangkalanShares.isLoading ||
-    recentActivities.isLoading;
+  const audit = useQuery({ queryKey: ["recent-audit"], queryFn: () => getRecentAudit(6) });
 
   return {
     kpi: kpi.data,
+    rail: rail.data,
     monthlyChart: monthlyChart.data ?? [],
     pangkalanShares: pangkalanShares.data ?? [],
     recentActivities: recentActivities.data ?? [],
-    isLoading,
+    audit: audit.data ?? [],
+    isLoading: kpi.isLoading || rail.isLoading,
+    isLoadingCharts: monthlyChart.isLoading || pangkalanShares.isLoading,
+    isLoadingActivities: recentActivities.isLoading,
+    isError: kpi.isError || rail.isError,
+    error: (kpi.error ?? rail.error) as Error | null,
+    refetch: () => {
+      void kpi.refetch();
+      void rail.refetch();
+      void monthlyChart.refetch();
+      void pangkalanShares.refetch();
+      void recentActivities.refetch();
+      void audit.refetch();
+    },
   };
 }

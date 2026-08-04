@@ -3,7 +3,7 @@ import { z } from "zod";
 export const uploadSASchema = z.object({
   nomorSA: z.string().min(1, "Nomor SA wajib diisi"),
   spbe: z.string().min(1, "SPBE wajib dipilih"),
-  periodeMultai: z.string().min(1, "Periode mulai wajib diisi"),
+  periodeMulai: z.string().min(1, "Periode mulai wajib diisi"),
   periodeBerakhir: z.string().min(1, "Periode berakhir wajib diisi"),
   totalKuota: z
     .number({ error: "Kuota harus berupa angka" })

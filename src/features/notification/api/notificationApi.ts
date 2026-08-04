@@ -1,98 +1,85 @@
-import { MOCK_DELAY_MS } from "@/utils/constants";
+import { getDb, latency, mutate, recordAudit } from "@/mocks/db";
 import type { Notification, ReminderSettings } from "../types";
 
-function delay() {
-  return new Promise((resolve) => setTimeout(resolve, MOCK_DELAY_MS));
+export async function getNotifications(): Promise<Notification[]> {
+  await latency("read");
+  return getDb()
+    .notifications.slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map((n) => ({
+      id: n.id,
+      type: n.type,
+      title: n.title,
+      message: n.message,
+      timestamp: n.createdAt,
+      isRead: n.isRead,
+      href: n.href,
+    }));
 }
 
-const mockNotifications: Notification[] = [
-  {
-    id: "notif-001",
-    type: "Alert",
-    title: "Stok Kritis!",
-    message:
-      "Sisa kuota SA bulan Mei tinggal 15%. Segera lakukan perencanaan distribusi ulang.",
-    timestamp: "1 Mei 2026, 10:00",
-    isRead: false,
-  },
-  {
-    id: "notif-002",
-    type: "Pengingat",
-    title: "SA akan kedaluwarsa",
-    message: "Schedule Agreement SA-2026-001 akan berakhir dalam 7 hari.",
-    timestamp: "1 Mei 2026, 08:00",
-    isRead: false,
-  },
-  {
-    id: "notif-003",
-    type: "Pengingat",
-    title: "Pembayaran menunggu verifikasi",
-    message:
-      "Terdapat 2 pembayaran dari Pangkalan LPG Jaya Abadi yang belum diverifikasi.",
-    timestamp: "30 Apr 2026, 15:30",
-    isRead: true,
-  },
-  {
-    id: "notif-004",
-    type: "Sistem",
-    title: "Sinkronisasi data selesai",
-    message:
-      "Data distribusi dari Pertamina berhasil disinkronisasi. 8 record baru ditambahkan.",
-    timestamp: "30 Apr 2026, 12:00",
-    isRead: true,
-  },
-  {
-    id: "notif-005",
-    type: "Alert",
-    title: "Keterlambatan pengiriman",
-    message:
-      "Driver Budi Santoso melaporkan keterlambatan 2 jam untuk rute Bekasi Selatan.",
-    timestamp: "30 Apr 2026, 09:45",
-    isRead: false,
-  },
-  {
-    id: "notif-006",
-    type: "Sistem",
-    title: "Laporan bulanan tersedia",
-    message:
-      "Laporan distribusi April 2026 telah selesai diproses dan siap diunduh.",
-    timestamp: "29 Apr 2026, 07:00",
-    isRead: true,
-  },
-];
-
-const defaultSettings: ReminderSettings = {
-  saExpiry: true,
-  stockLow: true,
-  paymentPending: true,
-  deliveryDelay: false,
-  stockThresholdPct: 20,
-};
-
-export async function getNotifications(): Promise<Notification[]> {
-  await delay();
-  return [...mockNotifications];
+export async function getUnreadCount(): Promise<number> {
+  await latency("read");
+  return getDb().notifications.filter((n) => !n.isRead).length;
 }
 
 export async function markAsRead(id: string): Promise<void> {
-  await delay();
-  const n = mockNotifications.find((n) => n.id === id);
-  if (n) n.isRead = true;
+  await latency("write");
+  mutate((db) => {
+    const n = db.notifications.find((x) => x.id === id);
+    if (n) n.isRead = true;
+  });
 }
 
-export async function markAllAsRead(): Promise<void> {
-  await delay();
-  mockNotifications.forEach((n) => (n.isRead = true));
+export async function markAsUnread(id: string): Promise<void> {
+  await latency("write");
+  mutate((db) => {
+    const n = db.notifications.find((x) => x.id === id);
+    if (n) n.isRead = false;
+  });
+}
+
+export async function markAllAsRead(): Promise<number> {
+  await latency("write");
+  return mutate((db) => {
+    const unread = db.notifications.filter((n) => !n.isRead);
+    unread.forEach((n) => (n.isRead = true));
+    return unread.length;
+  });
+}
+
+export async function deleteNotification(id: string): Promise<void> {
+  await latency("write");
+  mutate((db) => {
+    db.notifications = db.notifications.filter((n) => n.id !== id);
+  });
+}
+
+export async function clearReadNotifications(): Promise<number> {
+  await latency("write");
+  return mutate((db) => {
+    const before = db.notifications.length;
+    db.notifications = db.notifications.filter((n) => !n.isRead);
+    return before - db.notifications.length;
+  });
 }
 
 export async function getReminderSettings(): Promise<ReminderSettings> {
-  await delay();
-  return { ...defaultSettings };
+  await latency("read");
+  return { ...getDb().settings.reminder };
 }
 
 export async function saveReminderSettings(
   settings: ReminderSettings,
-): Promise<void> {
-  await delay();
-  Object.assign(defaultSettings, settings);
+): Promise<ReminderSettings> {
+  await latency("write");
+  return mutate((db) => {
+    db.settings.reminder = { ...settings };
+    recordAudit(db, {
+      action: "settings.reminder",
+      entity: "Settings",
+      entityId: "reminder",
+      summary: "Memperbarui aturan pengingat otomatis.",
+    });
+    return { ...db.settings.reminder };
+  });
 }

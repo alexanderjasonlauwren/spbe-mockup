@@ -1,442 +1,398 @@
 import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { Download, Fuel, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  changeStock,
+  exportProducts,
+  getProducts,
+  getStockSummary,
+  removeProduct,
+  type ProductView,
+} from "@/features/products/api/productApi";
+import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { PageHeader } from "@/components/common/PageHeader";
-import { StatsCard } from "@/components/common/StatsCard";
+import { Panel, PanelHeader, Meter } from "@/components/common/Panel";
+import { DataTable, type Column } from "@/components/common/DataTable";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { Field, SearchInput, SegmentedControl, TextInput } from "@/components/common/Field";
 import {
-  SortableTableHead,
-  type SortDirection,
-} from "@/components/common/SortableTableHead";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { CanAccess } from "@/features/rbac/components/CanAccess";
-import { PERMISSIONS } from "@/features/rbac/permissions";
-import { useNavigate } from "react-router-dom";
-import {
-  Package,
-  BarChart3,
-  TrendingDown,
-  AlertTriangle,
-  Search,
-  Plus,
-  Edit,
-} from "lucide-react";
+import { formatNumber, formatPercentId, formatRupiah, formatRupiahShort } from "@/lib/format";
 
-interface LPGProduct {
-  id: string;
-  nama: string;
-  ukuran: string;
-  harga: number;
-  stok: number;
-  stokMinimal: number;
-  kategori: "Rumah Tangga" | "Komersial" | "Industri";
-  merek: string;
-  status: "tersedia" | "terbatas" | "habis";
-}
-
-const mockProducts: LPGProduct[] = [
-  {
-    id: "1",
-    nama: "LPG Biru",
-    ukuran: "3 kg",
-    harga: 25000,
-    stok: 450,
-    stokMinimal: 100,
-    kategori: "Rumah Tangga",
-    merek: "Pertamina",
-    status: "tersedia",
-  },
-  {
-    id: "2",
-    nama: "LPG Biru",
-    ukuran: "5 kg",
-    harga: 40000,
-    stok: 320,
-    stokMinimal: 100,
-    kategori: "Rumah Tangga",
-    merek: "Pertamina",
-    status: "tersedia",
-  },
-  {
-    id: "3",
-    nama: "LPG Biru",
-    ukuran: "12 kg",
-    harga: 96000,
-    stok: 180,
-    stokMinimal: 50,
-    kategori: "Rumah Tangga",
-    merek: "Pertamina",
-    status: "tersedia",
-  },
-  {
-    id: "4",
-    nama: "LPG Merah",
-    ukuran: "50 kg",
-    harga: 400000,
-    stok: 45,
-    stokMinimal: 20,
-    kategori: "Komersial",
-    merek: "Pertamina",
-    status: "terbatas",
-  },
-  {
-    id: "5",
-    nama: "LPG Merah",
-    ukuran: "100 kg",
-    harga: 800000,
-    stok: 15,
-    stokMinimal: 10,
-    kategori: "Industri",
-    merek: "Pertamina",
-    status: "terbatas",
-  },
-  {
-    id: "6",
-    nama: "LPG Kuning",
-    ukuran: "12 kg",
-    harga: 92000,
-    stok: 0,
-    stokMinimal: 50,
-    kategori: "Rumah Tangga",
-    merek: "Shell",
-    status: "habis",
-  },
-];
-
-const statusConfig = {
-  tersedia: {
-    label: "Tersedia",
-    className:
-      "bg-green-100 text-green-700 border-green-300 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/30",
-  },
-  terbatas: {
-    label: "Terbatas",
-    className:
-      "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-500/10 dark:text-yellow-400 dark:border-yellow-500/30",
-  },
-  habis: {
-    label: "Habis",
-    className:
-      "bg-red-100 text-red-700 border-red-300 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30",
-  },
-};
+type Filter = "Semua" | "Aktif" | "Stok rendah";
 
 export function ProductListPage() {
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [sortKey, setSortKey] = useState<"nama" | "harga" | "stok" | "status">(
-    "nama",
-  );
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<Filter>("Semua");
+  const [pendingDelete, setPendingDelete] = useState<ProductView | null>(null);
+  const [adjusting, setAdjusting] = useState<ProductView | null>(null);
+  const [delta, setDelta] = useState(0);
+  const [alasan, setAlasan] = useState("");
 
-  const filtered = mockProducts.filter((p) => {
-    const matchesSearch =
-      p.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.merek.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.ukuran.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-    const matchesCategory =
-      categoryFilter === "all" || p.kategori === categoryFilter;
-    return matchesSearch && matchesStatus && matchesCategory;
+  const list = useQuery({
+    queryKey: ["products", search, filter],
+    queryFn: () =>
+      getProducts({
+        search,
+        onlyLowStock: filter === "Stok rendah",
+        onlyActive: filter === "Aktif",
+      }),
+  });
+  const summary = useQuery({ queryKey: ["stock-summary"], queryFn: getStockSummary });
+
+  const deleteMutation = useDeskMutation({
+    mutationFn: (id: string) => removeProduct(id),
+    errorTitle: "Hapus produk gagal",
+    success: "Produk dihapus",
+    onDone: () => setPendingDelete(null),
   });
 
-  const handleSort = (nextSortKey: "nama" | "harga" | "stok" | "status") => {
-    if (sortKey === nextSortKey) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-      return;
-    }
-
-    setSortKey(nextSortKey);
-    setSortDirection("asc");
-  };
-
-  const sortedFiltered = [...filtered].sort((left, right) => {
-    let compareValue = 0;
-
-    if (sortKey === "nama") {
-      compareValue = `${left.nama} ${left.ukuran}`.localeCompare(
-        `${right.nama} ${right.ukuran}`,
-        "id-ID",
-      );
-    }
-
-    if (sortKey === "harga") {
-      compareValue = left.harga - right.harga;
-    }
-
-    if (sortKey === "stok") {
-      compareValue = left.stok - right.stok;
-    }
-
-    if (sortKey === "status") {
-      compareValue = left.status.localeCompare(right.status, "id-ID");
-    }
-
-    return sortDirection === "asc" ? compareValue : -compareValue;
+  const stockMutation = useDeskMutation({
+    mutationFn: ({ id, amount, reason }: { id: string; amount: number; reason: string }) =>
+      changeStock(id, amount, reason),
+    errorTitle: "Penyesuaian stok gagal",
+    success: (p) => ({
+      title: `Stok ${p.nama} kini ${formatNumber(p.stok)}`,
+      description: p.stokRendah ? "Masih di bawah stok minimum." : undefined,
+      tone: p.stokRendah ? "warning" : "success",
+    }),
+    onDone: () => {
+      setAdjusting(null);
+      setDelta(0);
+      setAlasan("");
+    },
   });
 
-  const totalProducts = mockProducts.length;
-  const totalStok = mockProducts.reduce((s, p) => s + p.stok, 0);
-  const stokHabis = mockProducts.filter((p) => p.status === "habis").length;
-  const stokTerbatas = mockProducts.filter(
-    (p) => p.status === "terbatas",
-  ).length;
+  const exportMutation = useDeskMutation({
+    mutationFn: () => exportProducts(),
+    errorTitle: "Unduh gagal",
+    success: (count) => ({
+      title: "Berkas CSV diunduh",
+      description: `${count} produk diekspor.`,
+    }),
+  });
+
+  const rows = list.data ?? [];
+
+  const columns: Column<ProductView>[] = [
+    {
+      key: "nama",
+      header: "Produk",
+      render: (row) => (
+        <>
+          <span className="block font-medium text-ink">{row.nama}</span>
+          <span className="data block text-2xs text-ink-muted">
+            {row.kode} · {row.ukuran}
+          </span>
+        </>
+      ),
+      sortValue: (row) => row.nama,
+    },
+    {
+      key: "harga",
+      header: "Harga jual",
+      align: "right",
+      render: (row) => (
+        <>
+          <span className="data block text-ink">{formatRupiah(row.hargaJual)}</span>
+          <span className="data block text-2xs text-ink-muted">
+            beli {formatRupiah(row.hargaBeli)}
+          </span>
+        </>
+      ),
+      sortValue: (row) => row.hargaJual,
+    },
+    {
+      key: "margin",
+      header: "Margin",
+      align: "right",
+      render: (row) => (
+        <>
+          <span className="data block text-ink">{formatRupiah(row.margin)}</span>
+          <span className="data block text-2xs text-ink-muted">
+            {formatPercentId(row.marginPersen, 1)}
+          </span>
+        </>
+      ),
+      sortValue: (row) => row.marginPersen,
+    },
+    {
+      key: "stok",
+      header: "Stok gudang",
+      width: "14rem",
+      render: (row) => (
+        <div className="min-w-[9rem]">
+          <div className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">
+            <span className="data text-ink">{formatNumber(row.stok)}</span>
+            <span className="data text-ink-muted">
+              min {formatNumber(row.stokMinimum)}
+            </span>
+          </div>
+          <Meter
+            value={row.stok}
+            max={Math.max(row.stokMinimum * 2, row.stok, 1)}
+            tone={row.stokRendah ? "rust" : "pine"}
+            label={`Stok ${row.nama}`}
+          />
+        </div>
+      ),
+      sortValue: (row) => row.stok,
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "9rem",
+      render: (row) =>
+        !row.aktif ? (
+          <StatusBadge variant="draft" label="Nonaktif" />
+        ) : row.stokRendah ? (
+          <StatusBadge variant="danger" label="Stok rendah" />
+        ) : (
+          <StatusBadge variant="success" label="Tersedia" />
+        ),
+      sortValue: (row) => (row.aktif ? (row.stokRendah ? 1 : 0) : 2),
+    },
+    {
+      key: "aksi",
+      header: "",
+      align: "right",
+      width: "1%",
+      render: (row) => (
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={() => {
+              setDelta(0);
+              setAlasan("");
+              setAdjusting(row);
+            }}
+          >
+            Sesuaikan stok
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Ubah ${row.nama}`}
+            onClick={() => navigate(`/products/${row.id}/edit`)}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Hapus ${row.nama}`}
+            onClick={() => setPendingDelete(row)}
+            className="hover:bg-rust-soft hover:text-rust-ink"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
+  const s = summary.data;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
-        title="Manajemen Produk LPG"
-        description="Kelola katalog produk LPG, harga, dan inventaris."
+        eyebrow="Data induk"
+        title="Produk"
+        description="Katalog tabung dan perlengkapan, harga jual, serta stok yang tersimpan di gudang agen."
         actions={
-          <CanAccess permission={PERMISSIONS.PRODUCTS_CREATE}>
+          <>
             <Button
-              className="gap-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white shadow-lg shadow-cyan-500/30"
-              onClick={() => navigate("/products/new-product")}
+              variant="outline"
+              onClick={() => exportMutation.mutate(undefined as never)}
+              disabled={exportMutation.isPending}
             >
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Tambah Produk</span>
+              <Download className="h-3.5 w-3.5" />
+              Unduh CSV
             </Button>
-          </CanAccess>
+            <Button asChild>
+              <Link to="/products/new">
+                <Plus className="h-3.5 w-3.5" />
+                Tambah produk
+              </Link>
+            </Button>
+          </>
         }
       />
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard
-          title="Total Produk"
-          value={`${totalProducts} Produk`}
-          change="SKU LPG"
-          changeType="neutral"
-          icon={Package}
-          iconColor="text-cyan-600 dark:text-cyan-400"
-          iconBgColor="bg-cyan-50 dark:bg-cyan-500/10"
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Stat label="Produk terdaftar" value={formatNumber(s?.total ?? 0)} />
+        <Stat label="Aktif dijual" value={formatNumber(s?.aktif ?? 0)} tone="pine" />
+        <Stat
+          label="Di bawah stok minimum"
+          value={formatNumber(s?.stokRendah ?? 0)}
+          tone={s && s.stokRendah > 0 ? "rust" : undefined}
         />
-        <StatsCard
-          title="Total Stok"
-          value={`${totalStok.toLocaleString("id-ID")} Unit`}
-          change="Semua varian"
-          changeType="positive"
-          icon={BarChart3}
-          iconColor="text-green-600 dark:text-green-400"
-          iconBgColor="bg-green-50 dark:bg-green-500/10"
-        />
-        <StatsCard
-          title="Stok Terbatas"
-          value={`${stokTerbatas} Produk`}
-          change="Perlu restok"
-          changeType={stokTerbatas > 0 ? "negative" : "positive"}
-          icon={TrendingDown}
-          iconColor="text-yellow-600 dark:text-yellow-400"
-          iconBgColor="bg-yellow-50 dark:bg-yellow-500/10"
-        />
-        <StatsCard
-          title="Stok Habis"
-          value={`${stokHabis} Produk`}
-          change="Segera restok"
-          changeType={stokHabis > 0 ? "negative" : "positive"}
-          icon={AlertTriangle}
-          iconColor="text-red-600 dark:text-red-400"
-          iconBgColor="bg-red-50 dark:bg-red-500/10"
+        <Stat
+          label="Nilai stok"
+          value={formatRupiahShort(s?.nilaiStok ?? 0)}
+          hint="Dihitung dari harga beli"
         />
       </div>
 
-      {/* Table */}
-      <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-xl">
-        <CardHeader className="p-0 border-b border-gray-100 dark:border-dark-700 bg-gray-50 dark:bg-dark-850">
-          <div className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <CardTitle className="text-lg font-bold text-gray-900 dark:text-white">
-                Daftar Produk LPG
-              </CardTitle>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                {filtered.length} dari {totalProducts} ditampilkan
-              </p>
+      <Panel>
+        <PanelHeader
+          title="Katalog"
+          hint={`${rows.length} baris`}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder="Nama atau kode SKU"
+                className="w-52"
+              />
+              <SegmentedControl
+                value={filter}
+                onChange={setFilter}
+                options={[
+                  { value: "Semua" as const, label: "Semua" },
+                  { value: "Aktif" as const, label: "Aktif" },
+                  { value: "Stok rendah" as const, label: "Stok rendah" },
+                ]}
+              />
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Cari produk..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 w-full sm:w-52 bg-white dark:bg-dark-900 border-gray-300 dark:border-dark-600 text-sm"
-                />
-              </div>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-full sm:w-40 bg-white dark:bg-dark-900 border-gray-300 dark:border-dark-600 text-sm">
-                  <SelectValue placeholder="Kategori" />
-                </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-dark-800">
-                  <SelectItem value="all">Semua Kategori</SelectItem>
-                  <SelectItem value="Rumah Tangga">Rumah Tangga</SelectItem>
-                  <SelectItem value="Komersial">Komersial</SelectItem>
-                  <SelectItem value="Industri">Industri</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-40 bg-white dark:bg-dark-900 border-gray-300 dark:border-dark-600 text-sm">
-                  <SelectValue placeholder="Stok" />
-                </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-dark-800">
-                  <SelectItem value="all">Semua Stok</SelectItem>
-                  <SelectItem value="tersedia">Tersedia</SelectItem>
-                  <SelectItem value="terbatas">Terbatas</SelectItem>
-                  <SelectItem value="habis">Habis</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-50 dark:bg-dark-850 hover:bg-gray-50 dark:hover:bg-dark-850 border-b border-gray-200 dark:border-dark-700">
-                  <SortableTableHead
-                    label="Produk"
-                    sortKey="nama"
-                    activeSortKey={sortKey}
-                    sortDirection={sortDirection}
-                    onSort={handleSort}
-                  />
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300">
-                    Kategori
-                  </TableHead>
-                  <SortableTableHead
-                    label="Harga"
-                    sortKey="harga"
-                    activeSortKey={sortKey}
-                    sortDirection={sortDirection}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortableTableHead
-                    label="Stok"
-                    sortKey="stok"
-                    activeSortKey={sortKey}
-                    sortDirection={sortDirection}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortableTableHead
-                    label="Status"
-                    sortKey="status"
-                    activeSortKey={sortKey}
-                    sortDirection={sortDirection}
-                    onSort={handleSort}
-                  />
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
-                    Aksi
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedFiltered.map((p) => {
-                  const stokConf = statusConfig[p.status];
+          }
+        />
+        <DataTable
+          columns={columns}
+          data={rows}
+          isLoading={list.isLoading}
+          rowKey={(row) => row.id}
+          spineFor={(row) =>
+            !row.aktif ? "text-draft" : row.stokRendah ? "text-rust" : "text-pine"
+          }
+          pageSize={12}
+          defaultSortKey="nama"
+          emptyIcon={Fuel}
+          emptyMessage="Tidak ada produk yang cocok"
+          emptyDescription="Ubah filter, atau tambahkan produk baru ke katalog."
+          emptyAction={
+            <Button asChild size="sm">
+              <Link to="/products/new">Tambah produk</Link>
+            </Button>
+          }
+          dense
+        />
+      </Panel>
 
-                  return (
-                    <TableRow
-                      key={p.id}
-                      className="border-b border-gray-100 dark:border-dark-700 hover:bg-cyan-50/30 dark:hover:bg-cyan-500/5 transition-colors"
-                    >
-                      <TableCell className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 flex items-center justify-center shrink-0">
-                            <Package className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                              {p.nama}
-                            </p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
-                                {p.ukuran}
-                              </p>
-                              <span className="text-xs text-gray-400">•</span>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
-                                {p.merek}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <p className="text-sm text-gray-900 dark:text-white">
-                          {p.kategori}
-                        </p>
-                      </TableCell>
-                      <TableCell className="px-4 py-3 text-right">
-                        <p className="font-bold text-gray-900 dark:text-white">
-                          Rp {p.harga.toLocaleString("id-ID")}
-                        </p>
-                      </TableCell>
-                      <TableCell className="px-4 py-3 text-right">
-                        <div className="flex flex-col items-end">
-                          <p
-                            className={cn(
-                              "font-semibold",
-                              p.stok > p.stokMinimal
-                                ? "text-green-600 dark:text-green-400"
-                                : p.stok > 0
-                                  ? "text-yellow-600 dark:text-yellow-400"
-                                  : "text-red-600 dark:text-red-400",
-                            )}
-                          >
-                            {p.stok}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            min: {p.stokMinimal}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-xs font-medium",
-                            stokConf.className,
-                          )}
-                        >
-                          {stokConf.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="px-4 py-3 text-center">
-                        <CanAccess permission={PERMISSIONS.PRODUCTS_EDIT}>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-xs h-7 border-cyan-300 dark:border-cyan-500/30 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-50"
-                          >
-                            <Edit className="h-3 w-3" />
-                          </Button>
-                        </CanAccess>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+      {/* Stock adjustment */}
+      <Dialog open={!!adjusting} onOpenChange={(open) => !open && setAdjusting(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Sesuaikan stok {adjusting?.nama}</DialogTitle>
+            <DialogDescription>
+              Gunakan angka positif untuk barang masuk dan negatif untuk barang
+              keluar. Setiap penyesuaian tercatat pada jejak aktivitas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-md border border-line bg-panel-sunk px-4 py-3 text-xs text-ink-muted">
+            Stok saat ini{" "}
+            <span className="data font-semibold text-ink">
+              {formatNumber(adjusting?.stok ?? 0)}
+            </span>
+            {delta !== 0 && (
+              <>
+                {" → "}
+                <span
+                  className={cn(
+                    "data font-semibold",
+                    (adjusting?.stok ?? 0) + delta < (adjusting?.stokMinimum ?? 0)
+                      ? "text-rust-ink"
+                      : "text-ink",
+                  )}
+                >
+                  {formatNumber((adjusting?.stok ?? 0) + delta)}
+                </span>
+              </>
+            )}
           </div>
-        </CardContent>
-      </Card>
+
+          <div className="space-y-4">
+            <Field label="Jumlah penyesuaian" htmlFor="delta" required>
+              <TextInput
+                id="delta"
+                type="number"
+                mono
+                value={delta}
+                onChange={(e) => setDelta(Number(e.target.value))}
+              />
+            </Field>
+            <Field label="Alasan" htmlFor="alasan" required>
+              <TextInput
+                id="alasan"
+                value={alasan}
+                placeholder="Contoh: penerimaan dari SPBE"
+                onChange={(e) => setAlasan(e.target.value)}
+              />
+            </Field>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdjusting(null)}>
+              Batal
+            </Button>
+            <Button
+              disabled={delta === 0 || !alasan.trim() || stockMutation.isPending}
+              onClick={() =>
+                adjusting &&
+                stockMutation.mutate({ id: adjusting.id, amount: delta, reason: alasan })
+              }
+            >
+              Simpan penyesuaian
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        isOpen={!!pendingDelete}
+        title={`Hapus ${pendingDelete?.nama}?`}
+        message="Produk hilang dari katalog dan tidak dapat dipilih lagi."
+        details="Riwayat penjualan pada laporan periode sebelumnya tidak terpengaruh."
+        confirmLabel="Hapus produk"
+        isPending={deleteMutation.isPending}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => pendingDelete && deleteMutation.mutate(pendingDelete.id)}
+      />
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: "pine" | "rust";
+}) {
+  const spine = { pine: "spine text-pine", rust: "spine text-rust" };
+  return (
+    <div className={cn("rounded-md border border-line bg-panel p-4", tone && spine[tone])}>
+      <p className="label text-2xs text-ink-muted">{label}</p>
+      <p className="data mt-1.5 text-figure font-semibold text-ink">{value}</p>
+      {hint && <p className="mt-2 text-xs text-ink-muted">{hint}</p>}
     </div>
   );
 }

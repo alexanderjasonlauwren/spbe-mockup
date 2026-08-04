@@ -1,4 +1,7 @@
-import { MOCK_DELAY_MS } from "@/utils/constants";
+import { getDb, latency } from "@/mocks/db";
+import { updateDeliveryStatus } from "@/mocks/rules";
+import { DEPOT } from "@/mocks/seed";
+import { printDocument } from "@/lib/export";
 import type {
   DriverCard,
   MonitoringAssignment,
@@ -6,159 +9,196 @@ import type {
   MonitoringSnapshot,
 } from "../types";
 
-function delay() {
-  return new Promise((resolve) => setTimeout(resolve, MOCK_DELAY_MS));
-}
-
-const MOCK_DRIVERS: DriverCard[] = [
-  {
-    id: "d-001",
-    name: "Budi Santoso",
-    plat: "B 9231 TGH",
-    armada: "Isuzu Giga",
-    kapasitas: 560,
-    status: "Dalam Perjalanan",
-    eta: "14:30 WIB",
-  },
-  {
-    id: "d-002",
-    name: "Ahmad Subarjo",
-    plat: "B 8842 AB",
-    armada: "Hino Ranger",
-    kapasitas: 420,
-    status: "Bongkar Muat",
-    durasi: "15 Menit",
-  },
-  {
-    id: "d-003",
-    name: "Rizky Ramadhan",
-    plat: "F 1120 CK",
-    armada: "Isuzu Elf",
-    kapasitas: 240,
-    status: "Standby",
-    lokasi: "Pool Bekasi",
-  },
-  {
-    id: "d-004",
-    name: "Eko Wijayanto",
-    plat: "B 9002 PV",
-    armada: "Hino 500",
-    kapasitas: 560,
-    status: "Selesai",
-  },
-];
-
-const MOCK_ROWS: MonitoringRow[] = [
-  {
-    id: "p-001",
-    pangkalan: "Pangkalan LPG Jaya Abadi",
-    alamat: "Kec. Bekasi Selatan",
-    target: 1200,
-    realisasi: 1150,
-    pencapaianPersen: 95.8,
-    status: "Selesai",
-    coord: { lat: -6.2361, lng: 107.0148 },
-  },
-  {
-    id: "p-002",
-    pangkalan: "Mitra Sejahtera Gas",
-    alamat: "Kec. Rawasari",
-    target: 850,
-    realisasi: 420,
-    pencapaianPersen: 49.4,
-    status: "Proses",
-    coord: { lat: -6.2283, lng: 106.9885 },
-  },
-  {
-    id: "p-003",
-    pangkalan: "Pangkalan Berkah Rejeki",
-    alamat: "Kec. Tambun Selatan",
-    target: 1500,
-    realisasi: 120,
-    pencapaianPersen: 8.0,
-    status: "Antrian",
-    coord: { lat: -6.2455, lng: 107.0033 },
-  },
-  {
-    id: "p-004",
-    pangkalan: "Toko Gas Utama Mandiri",
-    alamat: "Kec. Cilincing Pusat",
-    target: 600,
-    realisasi: 580,
-    pencapaianPersen: 96.6,
-    status: "Selesai",
-    coord: { lat: -6.2212, lng: 107.0104 },
-  },
-  {
-    id: "p-005",
-    pangkalan: "Pangkalan Sinar Baru",
-    alamat: "Kec. Cikarang Pusat",
-    target: 900,
-    realisasi: 0,
-    pencapaianPersen: 0,
-    status: "Tertunda",
-    coord: { lat: -6.2422, lng: 106.9798 },
-  },
-];
-
-const MOCK_ASSIGNMENTS: MonitoringAssignment[] = [
-  {
-    id: "a-001",
-    driverId: "d-001",
-    pangkalanId: "p-001",
-    driverCoord: { lat: -6.2332, lng: 107.0057 },
-  },
-  {
-    id: "a-002",
-    driverId: "d-002",
-    pangkalanId: "p-002",
-    driverCoord: { lat: -6.2419, lng: 106.9955 },
-  },
-  {
-    id: "a-003",
-    driverId: "d-003",
-    pangkalanId: "p-003",
-    driverCoord: { lat: -6.2245, lng: 106.9921 },
-  },
-  {
-    id: "a-004",
-    driverId: "d-004",
-    pangkalanId: "p-004",
-    driverCoord: { lat: -6.2497, lng: 107.0131 },
-  },
-];
-
-function isoNowMinute() {
-  const now = new Date();
-  now.setSeconds(0, 0);
-  return now.toISOString();
-}
-
-export async function getMonitoringSnapshot(_dateRange: {
+export async function getMonitoringSnapshot(dateRange: {
   from: string;
   to: string;
 }): Promise<MonitoringSnapshot> {
-  await delay();
+  await latency("read");
+  const db = getDb();
+
+  const drops = db.deliveries
+    .filter((d) => d.tanggal >= dateRange.from && d.tanggal <= dateRange.to)
+    .sort((a, b) => a.jamRencana.localeCompare(b.jamRencana));
+
+  const rows: MonitoringRow[] = drops.map((d) => {
+    const pkl = db.pangkalan.find((p) => p.id === d.pangkalanId);
+    const drv = db.drivers.find((x) => x.id === d.driverId);
+    return {
+      id: d.id,
+      kode: d.kode,
+      pangkalanId: d.pangkalanId,
+      pangkalan: pkl?.nama ?? "—",
+      alamat: pkl ? `Kec. ${pkl.kecamatan}` : "—",
+      driverId: d.driverId,
+      driver: drv?.nama ?? "—",
+      jamRencana: d.jamRencana,
+      target: d.target,
+      realisasi: d.realisasi,
+      pencapaianPersen: d.target === 0 ? 0 : (d.realisasi / d.target) * 100,
+      status: d.status,
+      coord: { lat: pkl?.lat ?? -6.24, lng: pkl?.lng ?? 107.0 },
+      catatan: d.catatan,
+    };
+  });
+
+  // Colour slot is assigned across the day's crew, not the whole roster: with
+  // eight drivers and five hues, roster indices would collide and put two of
+  // today's trucks on the same colour. The crew is fixed by the date range, so
+  // filtering the board downstream never repaints the survivors.
+  const crew = db.drivers.filter((driver) =>
+    drops.some((d) => d.driverId === driver.id),
+  );
+  const slotOf = new Map(crew.map((d, i) => [d.id, i]));
+
+  const drivers: DriverCard[] = crew
+    .map((driver) => {
+      const mine = drops.filter((d) => d.driverId === driver.id);
+      const running = mine.find((d) => d.status === "Proses");
+      const target = running
+        ? db.pangkalan.find((p) => p.id === running.pangkalanId)
+        : undefined;
+
+      return {
+        id: driver.id,
+        name: driver.nama,
+        slot: slotOf.get(driver.id) ?? 0,
+        plat: driver.plat,
+        armada: driver.armada,
+        kapasitas: driver.kapasitas,
+        status: driver.status,
+        muatan: mine.reduce((s, d) => s + d.target, 0),
+        tujuanPangkalan: target?.nama,
+        eta: running ? `${running.jamRencana} WIB` : undefined,
+        lokasi: driver.status === "Standby" ? "Pool Bekasi" : target?.kecamatan,
+        durasi: driver.status === "Bongkar Muat" ? "±15 menit" : undefined,
+        selesai: mine.filter((d) => d.status === "Selesai").length,
+        total: mine.length,
+      };
+    });
+
+  // One assignment per truck, not per stop: the map draws the whole round so a
+  // standby truck still shows the route it is about to drive.
+  const assignments: MonitoringAssignment[] = drivers
+    .map((driver, index) => {
+      const mine = drops
+        .filter((d) => d.driverId === driver.id)
+        .sort((a, b) => a.jamRencana.localeCompare(b.jamRencana));
+      if (mine.length === 0) return null;
+
+      const running = mine.find((d) => d.status === "Proses");
+      const remaining = mine.filter((d) => d.status !== "Selesai");
+      const coordOf = (pangkalanId: string) => {
+        const pkl = db.pangkalan.find((p) => p.id === pangkalanId);
+        return { lat: pkl?.lat ?? DEPOT.lat, lng: pkl?.lng ?? DEPOT.lng };
+      };
+
+      // Where the truck is: its live position if moving, the last drop it made
+      // if the round is done, otherwise still in the yard.
+      const lastDone = [...mine].reverse().find((d) => d.status === "Selesai");
+
+      // Trucks waiting in the yard share one coordinate, so their pins would
+      // stack into a single unreadable marker. Fan them around the yard.
+      const angle = (index / Math.max(1, drivers.length)) * Math.PI * 2;
+      const parked = {
+        lat: DEPOT.lat + Math.sin(angle) * 0.006,
+        lng: DEPOT.lng + Math.cos(angle) * 0.006,
+      };
+
+      const driverCoord =
+        running && running.driverLat != null && running.driverLng != null
+          ? { lat: running.driverLat, lng: running.driverLng }
+          : lastDone && remaining.length === 0
+            ? coordOf(lastDone.pangkalanId)
+            : parked;
+
+      const target = remaining[0] ?? mine[mine.length - 1];
+
+      return {
+        id: driver.id,
+        driverId: driver.id,
+        pangkalanId: target.pangkalanId,
+        driverCoord,
+        stops: (remaining.length > 0 ? remaining : mine).map((d) =>
+          coordOf(d.pangkalanId),
+        ),
+        berjalan: !!running,
+        selesai: remaining.length === 0,
+      } satisfies MonitoringAssignment;
+    })
+    .filter((a): a is MonitoringAssignment => a !== null);
+
   return {
-    drivers: MOCK_DRIVERS,
-    rows: MOCK_ROWS,
-    assignments: MOCK_ASSIGNMENTS,
-    lastSyncAt: isoNowMinute(),
+    drivers,
+    rows,
+    assignments,
+    lastSyncAt: new Date().toISOString(),
+    totals: {
+      target: rows.reduce((s, r) => s + r.target, 0),
+      realisasi: rows.reduce((s, r) => s + r.realisasi, 0),
+      selesai: rows.filter((r) => r.status === "Selesai").length,
+      proses: rows.filter((r) => r.status === "Proses").length,
+      antrian: rows.filter((r) => r.status === "Antrian").length,
+      tertunda: rows.filter((r) => r.status === "Tertunda").length,
+    },
   };
 }
 
-export async function getDriverCards(_dateRange: {
-  from: string;
-  to: string;
-}): Promise<DriverCard[]> {
-  const snapshot = await getMonitoringSnapshot(_dateRange);
-  return snapshot.drivers;
+export async function getDriverCards(dateRange: { from: string; to: string }) {
+  return (await getMonitoringSnapshot(dateRange)).drivers;
 }
 
-export async function getMonitoringTable(_dateRange: {
-  from: string;
-  to: string;
-}): Promise<MonitoringRow[]> {
-  const snapshot = await getMonitoringSnapshot(_dateRange);
-  return snapshot.rows;
+export async function getMonitoringTable(dateRange: { from: string; to: string }) {
+  return (await getMonitoringSnapshot(dateRange)).rows;
+}
+
+/** Records what actually happened at a stop. */
+export async function setDeliveryStatus(input: {
+  deliveryId: string;
+  status: "Antrian" | "Proses" | "Selesai" | "Tertunda";
+  realisasi?: number;
+}) {
+  await latency("write");
+  return updateDeliveryStatus(input.deliveryId, input.status, input.realisasi);
+}
+
+/** Prints the surat jalan carried with the load. */
+export async function printSuratJalan(deliveryId: string): Promise<void> {
+  await latency("read");
+  const db = getDb();
+  const d = db.deliveries.find((x) => x.id === deliveryId);
+  if (!d) throw new Error("Surat jalan tidak ditemukan.");
+
+  const pkl = db.pangkalan.find((p) => p.id === d.pangkalanId);
+  const drv = db.drivers.find((x) => x.id === d.driverId);
+  const fmt = (n: number) => n.toLocaleString("id-ID");
+
+  printDocument(
+    `${d.kode} — Surat Jalan`,
+    `
+    <p class="eyebrow">${db.settings.namaPerusahaan} · Agen ${db.settings.nomorAgen}</p>
+    <h1>Surat Jalan</h1>
+    <hr class="rule" />
+    <div class="meta">
+      <div>Nomor<strong class="code">${d.kode}</strong></div>
+      <div>Tanggal<strong>${new Date(d.tanggal).toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" })}</strong></div>
+      <div>Jam rencana<strong class="code">${d.jamRencana}</strong></div>
+      <div>Status<strong>${d.status}</strong></div>
+    </div>
+    <table>
+      <thead><tr><th>Tujuan</th><th>Armada</th><th style="text-align:right">Target</th><th style="text-align:right">Realisasi</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>${pkl?.nama ?? "—"}</strong><br />${pkl ? `${pkl.alamat}, Kec. ${pkl.kecamatan}` : ""}<br />${pkl?.penanggungJawab ?? ""} · ${pkl?.telepon ?? ""}</td>
+          <td>${drv?.nama ?? "—"}<br /><span class="code">${drv?.plat ?? ""}</span><br />${drv?.armada ?? ""}</td>
+          <td class="num">${fmt(d.target)}</td>
+          <td class="num">${fmt(d.realisasi)}</td>
+        </tr>
+      </tbody>
+    </table>
+    ${d.catatan ? `<p style="margin-top:12px"><strong>Catatan:</strong> ${d.catatan}</p>` : ""}
+    <div class="sign">
+      <div>Pengirim<span>${drv?.nama ?? ""}</span></div>
+      <div>Penerima<span>${pkl?.penanggungJawab ?? ""}</span></div>
+    </div>`,
+  );
 }

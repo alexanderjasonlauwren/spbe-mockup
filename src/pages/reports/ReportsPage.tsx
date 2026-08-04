@@ -1,442 +1,438 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
-  BarChart,
+  Area,
+  AreaChart,
   Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
 } from "recharts";
+import { Download, Printer, TrendingUp } from "lucide-react";
 import {
-  TrendingUp,
-  AlertTriangle,
-  Truck,
-  Wallet,
-  Download,
-  FileSpreadsheet,
-  Search,
-  Eye,
-  MessageSquare,
-  Filter,
-} from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
-import { cn } from "@/lib/utils";
+  exportReport,
+  getDailySeries,
+  getDriverPerformance,
+  getReportSummary,
+  getTopPangkalan,
+  printReport,
+  RANGE_LABEL,
+  type ReportRange,
+} from "@/features/reports/api/reportApi";
+import { useDeskMutation } from "@/hooks/useDeskMutation";
+import { useTheme } from "@/hooks/useTheme";
+import { PageHeader } from "@/components/common/PageHeader";
+import { Panel, PanelBody, PanelHeader, Meter, Skeleton } from "@/components/common/Panel";
+import { DataTable, type Column } from "@/components/common/DataTable";
+import { ChartTooltip } from "@/components/common/ChartTooltip";
+import { SegmentedControl } from "@/components/common/Field";
+import { Button } from "@/components/ui/button";
+import { axisProps, chartTheme, compactTabung, seriesColor } from "@/lib/chart";
+import {
+  formatDateId,
+  formatNumber,
+  formatPercentId,
+  formatRupiah,
+  formatRupiahShort,
+} from "@/lib/format";
 
-// ── Mock data ────────────────────────────────────────────────────────────────
-const kpiData = [
-  {
-    label: "Total Pendapatan",
-    value: 284500000,
-    sub: "+12.4% vs bulan lalu",
-    subType: "positive" as const,
-    icon: TrendingUp,
-    borderColor: "border-[#1565C0]",
-    iconBg: "bg-blue-50",
-    iconColor: "text-[#1565C0]",
-  },
-  {
-    label: "Total Piutang Pangkalan",
-    value: 45800000,
-    sub: "12 pangkalan belum lunas",
-    subType: "negative" as const,
-    icon: AlertTriangle,
-    borderColor: "border-red-500",
-    iconBg: "bg-red-50",
-    iconColor: "text-red-600",
-  },
-  {
-    label: "Biaya Operasional",
-    value: 38200000,
-    sub: "Driver + BBM + lainnya",
-    subType: "neutral" as const,
-    icon: Truck,
-    borderColor: "border-amber-500",
-    iconBg: "bg-amber-50",
-    iconColor: "text-amber-600",
-  },
-  {
-    label: "Laba Bersih Estimasi",
-    value: 246300000,
-    sub: "Margin 86.6%",
-    subType: "positive" as const,
-    icon: Wallet,
-    borderColor: "border-emerald-500",
-    iconBg: "bg-emerald-50",
-    iconColor: "text-emerald-600",
-  },
-];
+const RANGES: ReportRange[] = ["7h", "30h", "bulan-ini", "bulan-lalu"];
 
-const monthlyData = [
-  { bulan: "Des", pendapatan: 198000000, pengeluaran: 49000000 },
-  { bulan: "Jan", pendapatan: 215000000, pengeluaran: 41000000 },
-  { bulan: "Feb", pendapatan: 187000000, pengeluaran: 57000000 },
-  { bulan: "Mar", pendapatan: 251000000, pengeluaran: 36000000 },
-  { bulan: "Apr", pendapatan: 228000000, pengeluaran: 48000000 },
-  { bulan: "Mei", pendapatan: 284500000, pengeluaran: 38200000 },
-];
+type DriverRow = Awaited<ReturnType<typeof getDriverPerformance>>[number];
+type TopRow = Awaited<ReturnType<typeof getTopPangkalan>>[number];
 
-const komposisiData = [
-  { name: "Pembayaran Pangkalan", value: 60, color: "#1565C0" },
-  { name: "Margin Distribusi", value: 25, color: "#F59E0B" },
-  { name: "Lain-lain", value: 15, color: "#CBD5E1" },
-];
-
-type PaymentStatus = "Lunas" | "Sebagian" | "Belum";
-
-interface PangkalanRow {
-  id: string;
-  nama: string;
-  totalTagihan: number;
-  paidPct: number;
-  transaksi: number;
-  status: PaymentStatus;
-}
-
-const reconciliationData: PangkalanRow[] = [
-  { id: "P1", nama: "Pangkalan Jaya Abadi", totalTagihan: 12450000, paidPct: 100, transaksi: 24, status: "Lunas" },
-  { id: "P2", nama: "Agen Gas Sumber Makmur", totalTagihan: 25800000, paidPct: 60, transaksi: 42, status: "Sebagian" },
-  { id: "P3", nama: "Toko Kelontong Bersama", totalTagihan: 8120000, paidPct: 0, transaksi: 15, status: "Belum" },
-  { id: "P4", nama: "Pangkalan Berkah LPG", totalTagihan: 15600000, paidPct: 100, transaksi: 28, status: "Lunas" },
-  { id: "P5", nama: "UD Maju Gasindo", totalTagihan: 42000000, paidPct: 100, transaksi: 56, status: "Lunas" },
-  { id: "P6", nama: "Warung Gas Lestari", totalTagihan: 5400000, paidPct: 80, transaksi: 10, status: "Sebagian" },
-];
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-function CustomBarTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: { value: number; name: string; color: string }[];
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-white border border-slate-100 rounded-xl p-3 shadow-xl text-xs space-y-1">
-      <p className="font-bold text-on-surface mb-1">{label}</p>
-      {payload.map((p) => (
-        <p key={p.name} style={{ color: p.color }} className="font-medium">
-          {p.name}: {formatCurrency(p.value)}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-function PayStatusBadge({ status }: { status: PaymentStatus }) {
-  const styles: Record<PaymentStatus, string> = {
-    Lunas: "bg-emerald-100 text-emerald-700",
-    Sebagian: "bg-amber-100 text-amber-700",
-    Belum: "bg-red-100 text-red-700",
-  };
-  return (
-    <span className={cn("px-2.5 py-1 rounded-full text-[11px] font-black uppercase", styles[status])}>
-      {status}
-    </span>
-  );
-}
-
-function ProgressBar({ pct }: { pct: number }) {
-  const color = pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-500" : "bg-red-500";
-  return (
-    <div className="flex items-center gap-2.5">
-      <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden min-w-[60px]">
-        <div className={cn("h-full rounded-full transition-all", color)} style={{ width: pct + "%" }} />
-      </div>
-      <span className="text-xs font-bold text-on-surface tabular-nums w-8">{pct}%</span>
-    </div>
-  );
-}
-
-// ── Main page ─────────────────────────────────────────────────────────────────
 export function ReportsPage() {
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("Semua");
+  const [range, setRange] = useState<ReportRange>("30h");
+  const { isDark } = useTheme();
+  const t = chartTheme(isDark);
 
-  const filtered = reconciliationData.filter((row) => {
-    const matchSearch = row.nama.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === "Semua" || row.status === statusFilter;
-    return matchSearch && matchStatus;
+  const summary = useQuery({
+    queryKey: ["report-summary", range],
+    queryFn: () => getReportSummary(range),
+  });
+  const series = useQuery({
+    queryKey: ["report-series", range],
+    queryFn: () => getDailySeries(range),
+  });
+  const top = useQuery({
+    queryKey: ["report-top", range],
+    queryFn: () => getTopPangkalan(range, 8),
+  });
+  const drivers = useQuery({
+    queryKey: ["report-drivers", range],
+    queryFn: () => getDriverPerformance(range),
   });
 
-  const totalTagihan = reconciliationData.reduce((s, r) => s + r.totalTagihan, 0);
-  const totalPiutang = reconciliationData.reduce((s, r) => s + (r.totalTagihan * (100 - r.paidPct)) / 100, 0);
-  const totalTransaksi = reconciliationData.reduce((s, r) => s + r.transaksi, 0);
-  const avgPaid = Math.round(
-    reconciliationData.reduce((s, r) => s + r.paidPct, 0) / reconciliationData.length
-  );
+  const exportMutation = useDeskMutation({
+    mutationFn: () => exportReport(range),
+    errorTitle: "Unduh gagal",
+    success: (count) => ({
+      title: "Berkas CSV diunduh",
+      description: `${count} hari data diekspor.`,
+    }),
+  });
+
+  const printMutation = useDeskMutation({
+    mutationFn: () => printReport(range),
+    errorTitle: "Cetak gagal",
+  });
+
+  const s = summary.data;
+  const chartData = (series.data ?? []).map((p) => ({
+    ...p,
+    label: formatDateId(p.tanggal).replace(/ \d{4}$/, ""),
+  }));
+
+  const topColumns: Column<TopRow>[] = [
+    {
+      key: "nama",
+      header: "Pangkalan",
+      render: (row, i) => (
+        <>
+          <span className="flex items-baseline gap-2">
+            <span className="data text-2xs text-ink-muted">{i + 1}</span>
+            <span className="font-medium text-ink">{row.nama}</span>
+          </span>
+          <span className="block pl-5 text-xs text-ink-muted">Kec. {row.kecamatan}</span>
+        </>
+      ),
+    },
+    {
+      key: "suratJalan",
+      header: "Surat jalan",
+      align: "right",
+      render: (row) => <span className="data text-ink-muted">{formatNumber(row.suratJalan)}</span>,
+      sortValue: (row) => row.suratJalan,
+    },
+    {
+      key: "tabung",
+      header: "Tabung",
+      align: "right",
+      render: (row) => (
+        <span className="data font-semibold text-ink">{formatNumber(row.tabung)}</span>
+      ),
+      sortValue: (row) => row.tabung,
+    },
+    {
+      key: "nilai",
+      header: "Nilai",
+      align: "right",
+      render: (row) => <span className="data text-ink">{formatRupiah(row.nilai)}</span>,
+      sortValue: (row) => row.nilai,
+    },
+  ];
+
+  const driverColumns: Column<DriverRow>[] = [
+    {
+      key: "nama",
+      header: "Driver",
+      render: (row) => (
+        <>
+          <span className="block font-medium text-ink">{row.nama}</span>
+          <span className="data block text-2xs text-ink-muted">
+            {row.plat} · {row.armada}
+          </span>
+        </>
+      ),
+      sortValue: (row) => row.nama,
+    },
+    {
+      key: "suratJalan",
+      header: "Surat jalan",
+      align: "right",
+      render: (row) => (
+        <span className="data text-ink">
+          {formatNumber(row.selesai)}
+          <span className="text-ink-muted"> / {formatNumber(row.suratJalan)}</span>
+        </span>
+      ),
+      sortValue: (row) => row.suratJalan,
+    },
+    {
+      key: "tabung",
+      header: "Tabung",
+      align: "right",
+      render: (row) => (
+        <span className="data font-semibold text-ink">{formatNumber(row.tabung)}</span>
+      ),
+      sortValue: (row) => row.tabung,
+    },
+    {
+      key: "ketepatan",
+      header: "Ketepatan",
+      width: "11rem",
+      render: (row) => (
+        <div className="min-w-[7rem]">
+          <p className="data mb-1.5 text-xs text-ink-muted">
+            {formatPercentId(row.ketepatan)}
+            {row.tertunda > 0 && (
+              <span className="ml-2 text-rust-ink">{row.tertunda} tertunda</span>
+            )}
+          </p>
+          <Meter
+            value={row.ketepatan}
+            max={100}
+            tone={row.ketepatan >= 95 ? "pine" : row.ketepatan >= 80 ? "signal" : "rust"}
+            label={`Ketepatan ${row.nama}`}
+          />
+        </div>
+      ),
+      sortValue: (row) => row.ketepatan,
+    },
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* Top bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-black text-on-surface">Laporan Keuangan</h1>
-          <span className="text-xs font-bold text-on-surface-variant bg-surface-container px-2.5 py-1 rounded-full">
-            Mei 2026
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-4 py-2 border border-outline-variant text-on-surface-variant text-sm font-semibold rounded-lg hover:bg-surface-container-low transition-all active:scale-[0.98]">
-            <Download className="h-4 w-4" />
-            Export PDF
-          </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#1565C0] text-white text-sm font-semibold rounded-lg hover:bg-[#1255A0] transition-all active:scale-[0.98] shadow-sm">
-            <FileSpreadsheet className="h-4 w-4" />
-            Export Excel
-          </button>
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-        {kpiData.map((kpi) => (
-          <div
-            key={kpi.label}
-            className={"bg-surface-container-lowest rounded-xl p-6 border-t-4 shadow-sm " + kpi.borderColor}
-          >
-            <div className="flex items-start justify-between mb-4">
-              <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider leading-tight pr-2">
-                {kpi.label}
-              </p>
-              <div className={"w-9 h-9 rounded-lg flex items-center justify-center shrink-0 " + kpi.iconBg}>
-                <kpi.icon className={"h-5 w-5 " + kpi.iconColor} />
-              </div>
-            </div>
-            <p className="text-2xl font-black text-on-surface mb-2">
-              {formatCurrency(kpi.value)}
-            </p>
-            <p
-              className={
-                "text-xs font-bold " +
-                (kpi.subType === "positive" ? "text-emerald-600" :
-                 kpi.subType === "negative" ? "text-red-600" :
-                 "text-on-surface-variant")
-              }
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Keuangan"
+        title="Laporan"
+        description="Rekapitulasi distribusi dan pendapatan untuk periode yang dipilih, siap diunduh atau dicetak untuk arsip."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => exportMutation.mutate(undefined as never)}
+              disabled={exportMutation.isPending}
             >
-              {kpi.sub}
-            </p>
-          </div>
-        ))}
+              <Download className="h-3.5 w-3.5" />
+              Unduh CSV
+            </Button>
+            <Button
+              onClick={() => printMutation.mutate(undefined as never)}
+              disabled={printMutation.isPending}
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Cetak rekap
+            </Button>
+          </>
+        }
+        meta={
+          <SegmentedControl
+            value={range}
+            onChange={setRange}
+            options={RANGES.map((r) => ({ value: r, label: RANGE_LABEL[r] }))}
+          />
+        }
+      />
+
+      {s && (
+        <p className="text-xs text-ink-muted">
+          Periode <span className="data">{formatDateId(s.range.from)}</span> –{" "}
+          <span className="data">{formatDateId(s.range.to)}</span> ·{" "}
+          <span className="data">{formatNumber(s.suratJalan)}</span> surat jalan ·{" "}
+          <span className="data">{formatNumber(s.pangkalanDilayani)}</span> pangkalan
+          dilayani
+        </p>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat
+          label="Tabung terkirim"
+          value={formatNumber(s?.tabungTerkirim ?? 0)}
+          unit="tabung"
+          meter={s ? { value: s.tabungTerkirim, max: s.tabungTarget } : undefined}
+          hint={
+            s
+              ? `${formatPercentId(s.pencapaian, 1)} dari target ${formatNumber(s.tabungTarget)}`
+              : undefined
+          }
+          isLoading={summary.isLoading}
+        />
+        <Stat
+          label="Pendapatan terverifikasi"
+          value={formatRupiahShort(s?.pendapatan ?? 0)}
+          hint="Hanya pembayaran yang sudah diverifikasi keuangan"
+          isLoading={summary.isLoading}
+          tone="pine"
+        />
+        <Stat
+          label="Piutang berjalan"
+          value={formatRupiahShort(s?.piutang ?? 0)}
+          hint="Tagihan terbit yang belum diverifikasi"
+          isLoading={summary.isLoading}
+          tone={s && s.piutang > 0 ? "signal" : undefined}
+        />
+        <Stat
+          label="Rata-rata harian"
+          value={formatNumber(s?.rerataPerHari ?? 0)}
+          unit="tabung"
+          hint={
+            s
+              ? `${formatNumber(s.suratJalanTertunda)} surat jalan tertunda pada periode ini`
+              : undefined
+          }
+          isLoading={summary.isLoading}
+          tone={s && s.suratJalanTertunda > 0 ? "rust" : undefined}
+        />
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Bar chart */}
-        <div className="lg:col-span-7 bg-surface-container-lowest rounded-xl p-6 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
-            <h3 className="text-base font-bold text-on-surface">
-              Pendapatan vs Pengeluaran Bulanan
-            </h3>
-            <div className="flex items-center gap-4 text-[11px] font-bold uppercase tracking-wider">
-              <span className="flex items-center gap-1.5">
-                <span className="inline-block w-3 h-3 rounded-full bg-[#1565C0]" />
-                <span className="text-on-surface-variant">Pendapatan</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="inline-block w-3 h-3 rounded-full bg-amber-500" />
-                <span className="text-on-surface-variant">Pengeluaran</span>
-              </span>
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={monthlyData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f2f4f7" vertical={false} />
-              <XAxis
-                dataKey="bulan"
-                tick={{ fontSize: 11, fontWeight: 700, fill: "#424752" }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 10, fill: "#424752" }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(v) => (v / 1000000).toFixed(0) + "jt"}
-              />
-              <Tooltip content={<CustomBarTooltip />} />
-              <Bar dataKey="pendapatan" name="Pendapatan" fill="#1565C0" radius={[4, 4, 0, 0]} maxBarSize={28} />
-              <Bar dataKey="pengeluaran" name="Pengeluaran" fill="#F59E0B" radius={[4, 4, 0, 0]} maxBarSize={28} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Donut chart */}
-        <div className="lg:col-span-5 bg-surface-container-lowest rounded-xl p-6 shadow-sm flex flex-col">
-          <h3 className="text-base font-bold text-on-surface mb-6">Komposisi Pendapatan</h3>
-          <div className="flex-1 flex flex-col items-center justify-center gap-6">
-            <div className="relative w-44 h-44">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={komposisiData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={54}
-                    outerRadius={74}
-                    dataKey="value"
-                    paddingAngle={2}
-                    startAngle={90}
-                    endAngle={-270}
-                  >
-                    {komposisiData.map((d) => (
-                      <Cell key={d.name} fill={d.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v) => [v + "%", ""]} />
-                </PieChart>
+      {/* Two measures, two charts — never two y-axes on one plot. */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel>
+          <PanelHeader title="Volume harian" hint="Realisasi terhadap target, dalam tabung" />
+          <PanelBody>
+            {series.isLoading ? (
+              <Skeleton className="h-[240px] w-full" />
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={chartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                  <CartesianGrid stroke={t.grid} vertical={false} />
+                  <XAxis dataKey="label" {...axisProps(isDark)} interval="preserveStartEnd" />
+                  <YAxis {...axisProps(isDark)} tickFormatter={compactTabung} width={58} />
+                  <Tooltip
+                    cursor={{ fill: t.grid, fillOpacity: 0.45 }}
+                    content={<ChartTooltip unit="tabung" />}
+                  />
+                  <Legend
+                    iconType="square"
+                    iconSize={9}
+                    wrapperStyle={{ fontSize: "11px", paddingTop: "10px", color: t.muted }}
+                  />
+                  <Bar dataKey="target" name="Target" fill={t.reference} maxBarSize={18} radius={[3, 3, 0, 0]} />
+                  <Bar
+                    dataKey="realisasi"
+                    name="Realisasi"
+                    fill={seriesColor(0, isDark)}
+                    maxBarSize={18}
+                    radius={[3, 3, 0, 0]}
+                  />
+                </BarChart>
               </ResponsiveContainer>
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-2xl font-black text-on-surface">100%</span>
-                <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">
-                  Total
-                </span>
-              </div>
-            </div>
-            <div className="w-full space-y-3">
-              {komposisiData.map((d) => (
-                <div key={d.name} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-                    <span className="text-sm text-on-surface-variant">{d.name}</span>
-                  </div>
-                  <span className="text-sm font-bold text-on-surface">{d.value}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+            )}
+          </PanelBody>
+        </Panel>
+
+        <Panel>
+          <PanelHeader
+            title="Pendapatan harian"
+            hint="Nilai pembayaran yang diverifikasi pada hari itu"
+          />
+          <PanelBody>
+            {series.isLoading ? (
+              <Skeleton className="h-[240px] w-full" />
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="pendapatan" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={seriesColor(1, isDark)} stopOpacity={0.28} />
+                      <stop offset="100%" stopColor={seriesColor(1, isDark)} stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke={t.grid} vertical={false} />
+                  <XAxis dataKey="label" {...axisProps(isDark)} interval="preserveStartEnd" />
+                  <YAxis
+                    {...axisProps(isDark)}
+                    width={64}
+                    tickFormatter={(v: number) => formatRupiahShort(v).replace("Rp ", "")}
+                  />
+                  <Tooltip
+                    cursor={{ stroke: t.axis, strokeWidth: 1 }}
+                    content={
+                      <ChartTooltip unit="" formatValue={(v) => formatRupiah(v)} />
+                    }
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="pendapatan"
+                    name="Pendapatan"
+                    stroke={seriesColor(1, isDark)}
+                    strokeWidth={2}
+                    fill="url(#pendapatan)"
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 2, stroke: t.surface }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </PanelBody>
+        </Panel>
       </div>
 
-      {/* Reconciliation Table */}
-      <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
-        <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3 bg-surface-container-low/40 border-b border-slate-100">
-          <h3 className="text-base font-bold text-on-surface">
-            Rekonsiliasi Pembayaran Pangkalan
-          </h3>
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1">
-              {["Semua", "Lunas", "Sebagian", "Belum"].map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setStatusFilter(s)}
-                  className={
-                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all " +
-                    (statusFilter === s
-                      ? "bg-[#1565C0] text-white"
-                      : "text-on-surface-variant hover:bg-surface-container")
-                  }
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-on-surface-variant" />
-              <input
-                type="text"
-                placeholder="Cari Pangkalan..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 pr-3 py-1.5 bg-surface border border-outline-variant rounded-lg text-sm w-48 focus:outline-none focus:ring-2 focus:ring-[#1565C0]/30"
-              />
-            </div>
-            <button className="p-2 border border-outline-variant rounded-lg hover:bg-surface-container transition-colors">
-              <Filter className="h-4 w-4 text-on-surface-variant" />
-            </button>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel>
+          <PanelHeader title="Pangkalan teratas" hint="Menurut tabung diterima" />
+          <DataTable
+            columns={topColumns}
+            data={top.data ?? []}
+            isLoading={top.isLoading}
+            rowKey={(row) => row.id}
+            emptyIcon={TrendingUp}
+            emptyMessage="Belum ada pengiriman pada periode ini"
+            emptyDescription="Pilih rentang lain, atau konfirmasi rencana distribusi untuk mengisi data."
+            dense
+          />
+        </Panel>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-surface-container-low/30">
-                {["Pangkalan", "Total Tagihan", "Sudah Dibayar", "Sisa Piutang", "Transaksi", "Status", "Aksi"].map((h) => (
-                  <th key={h} className="px-5 py-3.5 text-[10px] font-bold text-on-surface-variant uppercase tracking-widest whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filtered.map((row) => {
-                const sisaPiutang = row.totalTagihan * (1 - row.paidPct / 100);
-                return (
-                  <tr key={row.id} className="hover:bg-surface-container-low/20 transition-colors">
-                    <td className="px-5 py-4 font-bold text-on-surface text-sm">{row.nama}</td>
-                    <td className="px-5 py-4 text-right font-medium text-sm text-on-surface whitespace-nowrap">
-                      {formatCurrency(row.totalTagihan)}
-                    </td>
-                    <td className="px-5 py-4 min-w-[140px]">
-                      <ProgressBar pct={row.paidPct} />
-                    </td>
-                    <td className="px-5 py-4 text-right font-bold text-sm whitespace-nowrap">
-                      {sisaPiutang === 0 ? (
-                        <span className="text-slate-400 font-medium">Rp 0</span>
-                      ) : (
-                        <span className="text-red-600">{formatCurrency(sisaPiutang)}</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-4 text-center font-medium text-sm">{row.transaksi}</td>
-                    <td className="px-5 py-4">
-                      <PayStatusBadge status={row.status} />
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          title="Lihat detail"
-                          className="p-1.5 text-on-surface-variant hover:text-[#1565C0] hover:bg-blue-50 rounded-md transition-all"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        <button
-                          title="Kirim pesan"
-                          className="p-1.5 text-on-surface-variant hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-all"
-                        >
-                          <MessageSquare className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center text-sm text-on-surface-variant">
-                    Tidak ada data yang cocok
-                  </td>
-                </tr>
-              )}
-            </tbody>
-            <tfoot>
-              <tr className="bg-surface-container-low/50 border-t-2 border-slate-200">
-                <td className="px-5 py-4 text-xs font-black text-on-surface uppercase tracking-wider">
-                  Total Rekonsiliasi
-                </td>
-                <td className="px-5 py-4 text-right font-black text-sm text-on-surface whitespace-nowrap">
-                  {formatCurrency(totalTagihan)}
-                </td>
-                <td className="px-5 py-4">
-                  <ProgressBar pct={avgPaid} />
-                </td>
-                <td className="px-5 py-4 text-right font-black text-sm text-red-600 whitespace-nowrap">
-                  {formatCurrency(totalPiutang)}
-                </td>
-                <td className="px-5 py-4 text-center font-black text-sm">{totalTransaksi}</td>
-                <td className="px-5 py-4" />
-                <td className="px-5 py-4 text-[11px] text-on-surface-variant italic">
-                  Data diperbarui otomatis per transaksi divalidasi
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+        <Panel>
+          <PanelHeader title="Kinerja armada" hint="Surat jalan diselesaikan per driver" />
+          <DataTable
+            columns={driverColumns}
+            data={drivers.data ?? []}
+            isLoading={drivers.isLoading}
+            rowKey={(row) => row.id}
+            defaultSortKey="tabung"
+            defaultSortDir="desc"
+            emptyIcon={TrendingUp}
+            emptyMessage="Belum ada armada yang bertugas"
+            emptyDescription="Data kinerja muncul setelah surat jalan pertama ditutup."
+            dense
+          />
+        </Panel>
       </div>
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  unit,
+  hint,
+  meter,
+  tone,
+  isLoading,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  hint?: string;
+  meter?: { value: number; max: number };
+  tone?: "signal" | "pine" | "rust";
+  isLoading?: boolean;
+}) {
+  const spine = {
+    signal: "spine text-signal",
+    pine: "spine text-pine",
+    rust: "spine text-rust",
+  };
+  return (
+    <div
+      className={`rounded-md border border-line bg-panel p-4 ${tone ? spine[tone] : ""}`}
+    >
+      <p className="label text-2xs text-ink-muted">{label}</p>
+      {isLoading ? (
+        <Skeleton className="mt-2 h-8 w-2/3" />
+      ) : (
+        <p className="data mt-1.5 text-figure font-semibold text-ink">
+          {value}
+          {unit && (
+            <span className="ml-1.5 font-sans text-sm font-medium tracking-normal text-ink-muted">
+              {unit}
+            </span>
+          )}
+        </p>
+      )}
+      {meter && !isLoading && (
+        <Meter className="mt-3" value={meter.value} max={meter.max} label={label} />
+      )}
+      {hint && !isLoading && (
+        <p className="mt-2 text-xs leading-relaxed text-ink-muted">{hint}</p>
+      )}
     </div>
   );
 }

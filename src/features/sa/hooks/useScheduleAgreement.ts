@@ -1,10 +1,17 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getSAList, uploadSA, convertSAToPlan } from "../api/saApi";
+import { useQuery } from "@tanstack/react-query";
+import { useDeskMutation } from "@/hooks/useDeskMutation";
+import {
+  activateSA,
+  deleteSA,
+  getSAList,
+  getSpbeOptions,
+  printSA,
+  uploadSA,
+} from "../api/saApi";
 import type { SAFilterParams, UploadSAPayload } from "../types";
 
 export function useScheduleAgreement() {
-  const queryClient = useQueryClient();
   const [filters, setFilters] = useState<SAFilterParams>({});
 
   const saList = useQuery({
@@ -12,26 +19,52 @@ export function useScheduleAgreement() {
     queryFn: () => getSAList(filters),
   });
 
-  const uploadMutation = useMutation({
-    mutationFn: (payload: UploadSAPayload) => uploadSA(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sa-list"] });
-    },
+  const spbeOptions = useQuery({
+    queryKey: ["spbe-options"],
+    queryFn: getSpbeOptions,
   });
 
-  const convertMutation = useMutation({
-    mutationFn: (saId: string) => convertSAToPlan(saId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sa-list"] });
-    },
+  const uploadMutation = useDeskMutation({
+    mutationFn: (payload: UploadSAPayload) => uploadSA(payload),
+    errorTitle: "Unggah SA gagal",
+    success: (sa) => ({
+      title: `${sa.nomorSA} diunggah`,
+      description: `${sa.totalKuota.toLocaleString("id-ID")} tabung tercatat sebagai draf. Aktifkan agar bisa dipakai untuk perencanaan.`,
+    }),
+  });
+
+  const activateMutation = useDeskMutation({
+    mutationFn: (saId: string) => activateSA(saId),
+    errorTitle: "Aktivasi gagal",
+    success: (sa) => ({
+      title: `${sa.nomorSA} aktif`,
+      description: "Kuota siap ditarik oleh rencana distribusi.",
+    }),
+  });
+
+  const deleteMutation = useDeskMutation({
+    mutationFn: (saId: string) => deleteSA(saId),
+    errorTitle: "Hapus SA gagal",
+    success: "Schedule Agreement dihapus",
+  });
+
+  const printMutation = useDeskMutation({
+    mutationFn: (saId: string) => printSA(saId),
+    errorTitle: "Cetak gagal",
   });
 
   return {
     saList: saList.data ?? [],
     isLoading: saList.isLoading,
+    isError: saList.isError,
+    error: saList.error as Error | null,
+    refetch: saList.refetch,
+    spbeOptions: spbeOptions.data ?? [],
     filters,
     setFilters,
     uploadMutation,
-    convertMutation,
+    activateMutation,
+    deleteMutation,
+    printMutation,
   };
 }

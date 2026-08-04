@@ -1,5 +1,5 @@
 export const APP_NAME = "SiDistrib";
-export const APP_SUBTITLE = "Industrial Curator";
+export const APP_SUBTITLE = "Konsol Agen LPG";
 
 export const MONTH_NAMES_ID = [
   "Januari",

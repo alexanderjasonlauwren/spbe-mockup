@@ -1,6 +1,11 @@
-import { Plus } from "lucide-react";
-import { StatusBadge, getStatusVariant } from "@/components/common/StatusBadge";
+import { CalendarPlus } from "lucide-react";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { getStatusVariant, spineFor } from "@/lib/status";
+import { Skeleton } from "@/components/common/Panel";
+import { EmptyState } from "@/components/common/EmptyState";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatDateId, formatNumber } from "@/lib/format";
 import type { DistributionPlan } from "../types";
 
 interface PlanListPanelProps {
@@ -8,6 +13,7 @@ interface PlanListPanelProps {
   isLoading: boolean;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onCreate: () => void;
 }
 
 export function PlanListPanel({
@@ -15,49 +21,68 @@ export function PlanListPanel({
   isLoading,
   selectedId,
   onSelect,
+  onCreate,
 }: PlanListPanelProps) {
   return (
-    <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden h-full flex flex-col">
-      <div className="p-4 border-b border-slate-50">
-        <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold bg-[#1565C0] text-white rounded-lg hover:bg-[#004d99] transition-all">
-          <Plus className="h-4 w-4" />
-          Buat Rencana Baru
-        </button>
+    <div className="flex h-full flex-col overflow-hidden rounded-md border border-line bg-panel">
+      <div className="border-b border-line p-3">
+        <Button onClick={onCreate} className="w-full">
+          <CalendarPlus className="h-4 w-4" />
+          Rencana baru
+        </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
-        {isLoading
-          ? Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="p-4 space-y-2">
-                <div className="h-4 bg-slate-200 rounded animate-pulse" />
-                <div className="h-3 bg-slate-100 rounded animate-pulse w-3/4" />
-              </div>
-            ))
-          : plans.map((plan) => (
+      <div className="flex-1 divide-y divide-line overflow-y-auto">
+        {isLoading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="space-y-2 p-4">
+              <Skeleton className="h-3.5 w-2/3" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+          ))
+        ) : plans.length === 0 ? (
+          <EmptyState
+            icon={CalendarPlus}
+            title="Belum ada rencana"
+            description="Buat rencana untuk tanggal pengiriman, lalu tambahkan pangkalan dan armada."
+          />
+        ) : (
+          plans.map((plan) => {
+            const active = selectedId === plan.id;
+            return (
               <button
                 key={plan.id}
                 onClick={() => onSelect(plan.id)}
+                aria-current={active ? "true" : undefined}
                 className={cn(
-                  "w-full text-left p-4 hover:bg-slate-50 transition-colors",
-                  selectedId === plan.id &&
-                    "border-l-4 border-[#1565C0] bg-blue-50/40",
+                  "spine w-full p-4 text-left transition-colors",
+                  spineFor(plan.status),
+                  active ? "bg-panel-raised" : "hover:bg-panel-sunk",
                 )}
               >
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <p className="text-sm font-bold text-on-surface">
-                    {plan.tanggal}
-                  </p>
+                <div className="mb-1.5 flex items-start justify-between gap-2">
+                  <span
+                    className={cn(
+                      "text-sm text-ink",
+                      active ? "font-semibold" : "font-medium",
+                    )}
+                  >
+                    {formatDateId(plan.tanggal)}
+                  </span>
                   <StatusBadge
                     variant={getStatusVariant(plan.status)}
                     label={plan.status}
                   />
                 </div>
-                <p className="text-xs text-on-surface-variant">
-                  {plan.totalTabung.toLocaleString("id-ID")} tabung •{" "}
-                  {plan.jumlahPangkalan} pangkalan
+                <p className="data text-2xs text-ink-muted">{plan.kode}</p>
+                <p className="mt-1 text-xs text-ink-muted">
+                  <span className="data">{formatNumber(plan.totalTabung)}</span> tabung ·{" "}
+                  {plan.jumlahPangkalan} pangkalan · {plan.jumlahDriver} armada
                 </p>
               </button>
-            ))}
+            );
+          })
+        )}
       </div>
     </div>
   );

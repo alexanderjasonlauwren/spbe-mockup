@@ -1,59 +1,51 @@
 import { useRouteError, Link } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Home, RefreshCw } from "lucide-react";
 
 export function ErrorBoundary() {
   const error = useRouteError() as Error | null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-4">
-      <div className="max-w-lg w-full text-center">
-        <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-red-500 to-orange-600 rounded-full mb-6 shadow-xl">
-          <AlertTriangle className="h-12 w-12 text-white" />
-        </div>
+    <div className="flex min-h-screen items-center justify-center bg-paper px-4">
+      <div className="w-full max-w-lg">
+        {/* Errors state what happened and what to do — they do not apologise. */}
+        <div className="spine rounded-md border border-line bg-panel p-6 text-rust">
+          <p className="label text-2xs text-ink-muted">Kesalahan sistem</p>
+          <h1 className="mt-2 text-xl font-bold tracking-[-0.02em] text-ink">
+            Halaman gagal dimuat
+          </h1>
+          <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+            Konsol berhenti sebelum halaman ini selesai ditampilkan. Data Anda
+            tersimpan — muat ulang biasanya cukup.
+          </p>
 
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Oops! Something went wrong
-        </h1>
+          {error?.message && (
+            <p className="data mt-4 break-words rounded-sm border border-line bg-panel-sunk px-3 py-2 text-xs text-ink-muted">
+              {error.message}
+            </p>
+          )}
 
-        <p className="text-gray-600 mb-2">
-          We're sorry, but something unexpected happened.
-        </p>
-
-        {error?.message && (
-          <p className="text-sm text-gray-500 mb-6">Error: {error.message}</p>
-        )}
-
-        <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
-          <Button
-            asChild
-            size="lg"
-            className="gap-2 bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700"
-          >
-            <Link to="/dashboard">
-              <Home className="h-4 w-4" />
-              Go to Dashboard
-            </Link>
-          </Button>
-
-          <Button
-            variant="outline"
-            size="lg"
-            className="gap-2"
-            onClick={() => window.location.reload()}
-          >
-            <RefreshCw className="h-4 w-4" />
-            Reload Page
-          </Button>
-        </div>
-
-        {import.meta.env.VITE_DEV && error?.stack && (
-          <div className="mt-8 p-4 bg-gray-900 rounded-lg text-left overflow-auto max-h-64">
-            <pre className="text-xs text-red-400 whitespace-pre-wrap">
-              {error.stack}
-            </pre>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Button onClick={() => window.location.reload()}>
+              <RefreshCw className="h-3.5 w-3.5" />
+              Muat ulang halaman
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/dashboard">Ke papan berangkat</Link>
+            </Button>
           </div>
-        )}
+
+          {import.meta.env.DEV && error?.stack && (
+            <details className="mt-5">
+              <summary className="cursor-pointer text-xs font-semibold text-ink-muted hover:text-ink">
+                Rincian teknis
+              </summary>
+              <pre className="data mt-2 max-h-64 overflow-auto rounded-sm bg-ink p-3 text-2xs leading-relaxed text-ink-on">
+                {error.stack}
+              </pre>
+            </details>
+          )}
+        </div>
       </div>
     </div>
   );

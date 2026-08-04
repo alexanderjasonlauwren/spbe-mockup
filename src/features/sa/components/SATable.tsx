@@ -1,149 +1,185 @@
-import { Eye, ArrowRight, Download } from "lucide-react";
+import { CheckCircle2, FileText, Printer, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "@/components/common/DataTable";
-import { StatusBadge, getStatusVariant } from "@/components/common/StatusBadge";
-import { InlineProgress } from "@/components/common/InlineProgress";
-import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { getStatusVariant, spineFor } from "@/lib/status";
+import { Meter } from "@/components/common/Panel";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { formatDateId, formatNumber, formatPercentId } from "@/lib/format";
 import type { ScheduleAgreement } from "../types";
-import { useState } from "react";
 
 interface SATableProps {
   data: ScheduleAgreement[];
   isLoading: boolean;
-  onConvert: (id: string) => void;
-  onDownload: (id: string) => void;
+  onActivate: (id: string) => void;
+  onPrint: (id: string) => void;
+  onDelete: (sa: ScheduleAgreement) => void;
+  pendingId?: string;
 }
 
 export function SATable({
   data,
   isLoading,
-  onConvert,
-  onDownload,
+  onActivate,
+  onPrint,
+  onDelete,
+  pendingId,
 }: SATableProps) {
-  const [confirmId, setConfirmId] = useState<string | null>(null);
-
   const columns: Column<ScheduleAgreement>[] = [
     {
       key: "nomorSA",
-      header: "No SA",
+      header: "Nomor SA",
+      width: "13rem",
       render: (row) => (
-        <span className="font-bold text-on-surface text-xs">{row.nomorSA}</span>
+        <>
+          <span className="data block whitespace-nowrap text-xs font-semibold text-ink">
+            {row.nomorSA}
+          </span>
+          <span className="block text-xs text-ink-muted">{row.spbe}</span>
+        </>
       ),
-    },
-    {
-      key: "spbe",
-      header: "SPBE",
-      render: (row) => (
-        <span className="text-xs text-on-surface">{row.spbe}</span>
-      ),
+      sortValue: (row) => row.nomorSA,
     },
     {
       key: "periode",
       header: "Periode",
+      width: "12rem",
       render: (row) => (
-        <span className="text-xs text-on-surface-variant">
-          {row.periodeMultai} – {row.periodeBerakhir}
-        </span>
+        <>
+          <span className="block whitespace-nowrap text-xs text-ink">
+            {formatDateId(row.periodeMulai)} – {formatDateId(row.periodeBerakhir)}
+          </span>
+          <span
+            className={cn(
+              "block text-2xs",
+              row.sisaHari < 0
+                ? "text-ink-muted"
+                : row.sisaHari <= 7
+                  ? "font-semibold text-rust-ink"
+                  : "text-ink-muted",
+            )}
+          >
+            {row.sisaHari < 0
+              ? "Periode berakhir"
+              : row.sisaHari === 0
+                ? "Berakhir hari ini"
+                : `${row.sisaHari} hari lagi`}
+          </span>
+        </>
       ),
+      sortValue: (row) => row.periodeMulai,
     },
     {
-      key: "totalKuota",
-      header: "Total Kuota",
-      align: "right",
-      render: (row) => (
-        <span className="text-xs font-bold text-on-surface">
-          {row.totalKuota.toLocaleString("id-ID")} MT
-        </span>
-      ),
-    },
-    {
-      key: "distribusi",
-      header: "Didistribusikan",
-      align: "right",
-      render: (row) => (
-        <span className="text-xs font-bold text-[#1565C0]">
-          {row.sudahDidistribusikan.toLocaleString("id-ID")} MT
-        </span>
-      ),
-    },
-    {
-      key: "sisaKuota",
-      header: "Sisa Kuota",
+      key: "kuota",
+      header: "Penarikan kuota",
+      width: "16rem",
       render: (row) => {
-        const pct =
-          row.totalKuota > 0 ? (row.sisaKuota / row.totalKuota) * 100 : 0;
+        const pct = row.totalKuota === 0 ? 0 : (row.sudahDidistribusikan / row.totalKuota) * 100;
         return (
-          <div className="min-w-[120px]">
-            <div className="flex justify-between mb-1">
-              <span className="text-xs text-on-surface-variant">
-                {row.sisaKuota.toLocaleString("id-ID")}
+          <div className="min-w-[11rem]">
+            <div className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">
+              <span className="data text-ink">
+                {formatNumber(row.sudahDidistribusikan)}
+                <span className="text-ink-muted"> / {formatNumber(row.totalKuota)}</span>
               </span>
+              <span className="data text-ink-muted">{formatPercentId(pct)}</span>
             </div>
-            <InlineProgress value={pct} showLabel colorAuto />
+            <Meter
+              value={row.sudahDidistribusikan}
+              max={row.totalKuota}
+              tone={pct >= 95 ? "rust" : pct >= 70 ? "signal" : "pine"}
+              label={`Kuota ${row.nomorSA} terpakai ${formatPercentId(pct)}`}
+            />
           </div>
         );
       },
+      sortValue: (row) =>
+        row.totalKuota === 0 ? 0 : row.sudahDidistribusikan / row.totalKuota,
+    },
+    {
+      key: "sisaKuota",
+      header: "Sisa",
+      align: "right",
+      render: (row) => (
+        <span className="data font-semibold text-ink">{formatNumber(row.sisaKuota)}</span>
+      ),
+      sortValue: (row) => row.sisaKuota,
+    },
+    {
+      key: "rencana",
+      header: "Rencana",
+      align: "right",
+      render: (row) => (
+        <span className="data text-ink-muted">{formatNumber(row.jumlahRencana)}</span>
+      ),
+      sortValue: (row) => row.jumlahRencana,
     },
     {
       key: "status",
       header: "Status",
+      width: "7rem",
       render: (row) => (
-        <StatusBadge
-          variant={getStatusVariant(row.status)}
-          label={row.status}
-        />
+        <StatusBadge variant={getStatusVariant(row.status)} label={row.status} />
       ),
+      sortValue: (row) => row.status,
     },
     {
       key: "aksi",
-      header: "Aksi",
+      header: "",
+      align: "right",
+      width: "1%",
       render: (row) => (
-        <div className="flex items-center gap-1">
-          <button
-            title="Detail"
-            className="p-1.5 rounded-lg hover:bg-slate-100 text-on-surface-variant transition-colors"
+        <div className="flex items-center justify-end gap-1">
+          {row.status === "Draft" && (
+            <Button
+              size="xs"
+              onClick={() => onActivate(row.id)}
+              disabled={pendingId === row.id}
+            >
+              <CheckCircle2 className="h-3 w-3" />
+              Aktifkan
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Cetak ringkasan ${row.nomorSA}`}
+            title="Cetak ringkasan kuota"
+            onClick={() => onPrint(row.id)}
           >
-            <Eye className="h-4 w-4" />
-          </button>
-          <button
-            title="Konversi ke Rencana"
-            onClick={() => setConfirmId(row.id)}
-            className="p-1.5 rounded-lg hover:bg-blue-50 text-[#1565C0] transition-colors"
-          >
-            <ArrowRight className="h-4 w-4" />
-          </button>
-          <button
-            title="Download PDF"
-            onClick={() => onDownload(row.id)}
-            className="p-1.5 rounded-lg hover:bg-slate-100 text-on-surface-variant transition-colors"
-          >
-            <Download className="h-4 w-4" />
-          </button>
+            <Printer className="h-3.5 w-3.5" />
+          </Button>
+          {row.sudahDidistribusikan === 0 && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Hapus ${row.nomorSA}`}
+              title="Hapus agreement"
+              onClick={() => onDelete(row)}
+              className="hover:bg-rust-soft hover:text-rust-ink"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       ),
     },
   ];
 
   return (
-    <>
-      <DataTable
-        columns={columns}
-        data={data}
-        isLoading={isLoading}
-        emptyMessage="Belum ada Schedule Agreement"
-        emptyDescription="Upload SA baru untuk memulai distribusi"
-      />
-      <ConfirmDialog
-        isOpen={confirmId !== null}
-        title="Konversi Schedule Agreement"
-        message="Konversi SA ini menjadi rencana distribusi? Tindakan ini tidak dapat dibatalkan."
-        confirmLabel="Ya, Konversi"
-        onConfirm={() => {
-          if (confirmId) onConvert(confirmId);
-          setConfirmId(null);
-        }}
-        onCancel={() => setConfirmId(null)}
-        variant="default"
-      />
-    </>
+    <DataTable
+      columns={columns}
+      data={data}
+      isLoading={isLoading}
+      rowKey={(row) => row.id}
+      spineFor={(row) => spineFor(row.status)}
+      pageSize={8}
+      defaultSortKey="periode"
+      defaultSortDir="desc"
+      emptyIcon={FileText}
+      emptyMessage="Tidak ada agreement yang cocok"
+      emptyDescription="Ubah filter, atau unggah Schedule Agreement baru dari panel di samping."
+      dense
+    />
   );
 }

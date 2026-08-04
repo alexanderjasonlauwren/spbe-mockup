@@ -1,309 +1,260 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { PageHeader } from "@/components/common/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft, Loader2, Save } from "lucide-react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { ArrowLeft, Save, Upload, X } from "lucide-react";
+  createOrUpdateProduct,
+  getProductDetail,
+} from "@/features/products/api/productApi";
+import { useDeskMutation } from "@/hooks/useDeskMutation";
+import { PageHeader } from "@/components/common/PageHeader";
+import { Panel, PanelBody, PanelHeader, Skeleton } from "@/components/common/Panel";
+import { Field, TextInput, Toggle } from "@/components/common/Field";
+import { Button } from "@/components/ui/button";
+import { formatPercentId, formatRupiah } from "@/lib/format";
 
-const productSchema = z.object({
-  name: z.string().min(1, "Nama produk harus diisi"),
-  sku: z.string().min(1, "SKU harus diisi"),
-  category: z.string().min(1, "Kategori harus dipilih"),
-  price: z.number().min(0, "Harga harus lebih dari 0"),
-  stock: z.number().int().min(0, "Stok tidak boleh negatif"),
-  description: z.string().optional(),
-  status: z.enum(["active", "draft", "archived"]),
-});
+interface FormState {
+  kode: string;
+  nama: string;
+  ukuran: string;
+  hargaBeli: number;
+  hargaJual: number;
+  stok: number;
+  stokMinimum: number;
+  aktif: boolean;
+}
 
-type ProductFormData = z.infer<typeof productSchema>;
+const EMPTY: FormState = {
+  kode: "",
+  nama: "",
+  ukuran: "",
+  hargaBeli: 0,
+  hargaJual: 0,
+  stok: 0,
+  stokMinimum: 0,
+  aktif: true,
+};
 
 export function ProductFormPage() {
+  const { id } = useParams();
   const navigate = useNavigate();
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isEdit = !!id;
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    formState: { errors },
-  } = useForm<ProductFormData>({
-    resolver: zodResolver(productSchema),
-    defaultValues: {
-      status: "active",
-      stock: 0,
-      price: 0,
-    },
+  const [form, setForm] = useState<FormState>(EMPTY);
+  const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+
+  const detail = useQuery({
+    queryKey: ["product-detail", id],
+    queryFn: () => getProductDetail(id!),
+    enabled: isEdit,
   });
 
-  const onSubmit = async (data: ProductFormData) => {
-    setIsSubmitting(true);
-    try {
-      // TODO: Replace with actual API call
-      console.log("Product data:", data);
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
+  useEffect(() => {
+    if (!detail.data) return;
+    const p = detail.data;
+    setForm({
+      kode: p.kode,
+      nama: p.nama,
+      ukuran: p.ukuran,
+      hargaBeli: p.hargaBeli,
+      hargaJual: p.hargaJual,
+      stok: p.stok,
+      stokMinimum: p.stokMinimum,
+      aktif: p.aktif,
+    });
+  }, [detail.data]);
 
-      // Show success message (you can use toast here)
-      alert("Produk berhasil ditambahkan!");
-      navigate("/products");
-    } catch (error) {
-      console.error("Error saving product:", error);
-      alert("Gagal menyimpan produk");
-    } finally {
-      setIsSubmitting(false);
-    }
+  const saveMutation = useDeskMutation({
+    mutationFn: (values: FormState) =>
+      createOrUpdateProduct(isEdit ? { ...values, id } : values),
+    errorTitle: isEdit ? "Perubahan tidak tersimpan" : "Produk tidak ditambahkan",
+    success: (p) => ({ title: `${p.nama} tersimpan` }),
+    onDone: () => navigate("/products"),
+  });
+
+  const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm((f) => ({ ...f, [key]: value }));
+    setErrors((e) => ({ ...e, [key]: undefined }));
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+  const margin = form.hargaJual - form.hargaBeli;
+  const marginPct = form.hargaJual === 0 ? 0 : (margin / form.hargaJual) * 100;
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const next: typeof errors = {};
+    if (!form.nama.trim()) next.nama = "Nama produk wajib diisi.";
+    if (form.hargaJual <= 0) next.hargaJual = "Harga jual harus lebih dari nol.";
+    if (form.hargaBeli > form.hargaJual)
+      next.hargaBeli = "Harga beli melebihi harga jual — margin akan negatif.";
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
+    saveMutation.mutate(form);
   };
 
-  const handleStatusChange = (value: string) => {
-    if (value === "active" || value === "draft" || value === "archived") {
-      setValue("status", value);
-    }
-  };
+  if (isEdit && detail.isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-80 w-full" />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-5">
+      <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="-ml-2">
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Kembali
+      </Button>
+
       <PageHeader
-        title="Tambah Produk Baru"
-        description="Isi formulir di bawah untuk menambahkan produk baru ke inventori."
-        actions={
-          <Button
-            variant="outline"
-            onClick={() => navigate("/products")}
-            className="gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Kembali
-          </Button>
-        }
+        eyebrow="Data induk"
+        title={isEdit ? `Ubah ${detail.data?.nama ?? "produk"}` : "Tambah produk"}
+        description="Harga jual dipakai untuk menghitung nilai tagihan, dan stok minimum memicu peringatan otomatis."
       />
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        {/* Basic Information */}
-        <Card className="dark:bg-gray-800/50 dark:border-gray-700">
-          <CardHeader className="border-b dark:border-gray-700">
-            <CardTitle className="dark:text-white">Informasi Dasar</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name" className="dark:text-gray-200">
-                  Nama Produk <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="name"
-                  {...register("name")}
-                  placeholder="Contoh: Sepatu Sneakers"
-                  className="dark:bg-gray-900 dark:border-gray-600"
+      <form onSubmit={submit}>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <Panel className="lg:col-span-2">
+            <PanelHeader title="Identitas produk" />
+            <PanelBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field
+                label="Nama produk"
+                htmlFor="nama"
+                error={errors.nama}
+                required
+                className="sm:col-span-2"
+              >
+                <TextInput
+                  id="nama"
+                  value={form.nama}
+                  invalid={!!errors.nama}
+                  placeholder="LPG 3 kg Subsidi"
+                  onChange={(e) => set("nama", e.target.value)}
                 />
-                {errors.name && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {errors.name.message}
-                  </p>
-                )}
-              </div>
+              </Field>
 
-              <div className="space-y-2">
-                <Label htmlFor="sku" className="dark:text-gray-200">
-                  SKU <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="sku"
-                  {...register("sku")}
-                  placeholder="Contoh: SNK-001"
-                  className="dark:bg-gray-900 dark:border-gray-600"
+              <Field
+                label="Kode SKU"
+                htmlFor="kode"
+                hint={isEdit ? undefined : "Dibuat otomatis jika dikosongkan."}
+              >
+                <TextInput
+                  id="kode"
+                  mono
+                  value={form.kode}
+                  placeholder="SKU-0007"
+                  onChange={(e) => set("kode", e.target.value)}
                 />
-                {errors.sku && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {errors.sku.message}
-                  </p>
-                )}
-              </div>
-            </div>
+              </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="description" className="dark:text-gray-200">
-                Deskripsi
-              </Label>
-              <Textarea
-                id="description"
-                {...register("description")}
-                placeholder="Deskripsi produk..."
-                rows={4}
-                className="dark:bg-gray-900 dark:border-gray-600"
-              />
-            </div>
-          </CardContent>
-        </Card>
+              <Field label="Ukuran" htmlFor="ukuran">
+                <TextInput
+                  id="ukuran"
+                  value={form.ukuran}
+                  placeholder="3 kg"
+                  onChange={(e) => set("ukuran", e.target.value)}
+                />
+              </Field>
 
-        {/* Pricing & Inventory */}
-        <Card className="dark:bg-gray-800/50 dark:border-gray-700">
-          <CardHeader className="border-b dark:border-gray-700">
-            <CardTitle className="dark:text-white">Harga & Inventori</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="price" className="dark:text-gray-200">
-                  Harga (Rp) <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="price"
+              <Field label="Harga beli" htmlFor="beli" error={errors.hargaBeli}>
+                <TextInput
+                  id="beli"
                   type="number"
-                  {...register("price", { valueAsNumber: true })}
-                  placeholder="100000"
-                  className="dark:bg-gray-900 dark:border-gray-600"
+                  min={0}
+                  step={100}
+                  mono
+                  value={form.hargaBeli}
+                  invalid={!!errors.hargaBeli}
+                  onChange={(e) => set("hargaBeli", Number(e.target.value))}
                 />
-                {errors.price && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {errors.price.message}
-                  </p>
-                )}
-              </div>
+              </Field>
 
-              <div className="space-y-2">
-                <Label htmlFor="stock" className="dark:text-gray-200">
-                  Stok <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="stock"
+              <Field
+                label="Harga jual"
+                htmlFor="jual"
+                error={errors.hargaJual}
+                required
+              >
+                <TextInput
+                  id="jual"
                   type="number"
-                  {...register("stock", { valueAsNumber: true })}
-                  placeholder="50"
-                  className="dark:bg-gray-900 dark:border-gray-600"
+                  min={1}
+                  step={100}
+                  mono
+                  value={form.hargaJual}
+                  invalid={!!errors.hargaJual}
+                  onChange={(e) => set("hargaJual", Number(e.target.value))}
                 />
-                {errors.stock && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {errors.stock.message}
-                  </p>
-                )}
-              </div>
+              </Field>
+            </PanelBody>
+          </Panel>
 
-              <div className="space-y-2">
-                <Label htmlFor="category" className="dark:text-gray-200">
-                  Kategori <span className="text-red-500">*</span>
-                </Label>
-                <Select onValueChange={(value) => setValue("category", value)}>
-                  <SelectTrigger className="dark:bg-gray-900 dark:border-gray-600">
-                    <SelectValue placeholder="Pilih kategori" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="electronics">Electronics</SelectItem>
-                    <SelectItem value="fashion">Fashion</SelectItem>
-                    <SelectItem value="home">Home</SelectItem>
-                    <SelectItem value="sports">Sports</SelectItem>
-                    <SelectItem value="books">Books</SelectItem>
-                  </SelectContent>
-                </Select>
-                {errors.category && (
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {errors.category.message}
-                  </p>
-                )}
-              </div>
-            </div>
+          <div className="space-y-4">
+            <Panel>
+              <PanelHeader title="Margin" />
+              <PanelBody>
+                <p className="data text-figure font-semibold text-ink">
+                  {formatRupiah(margin)}
+                </p>
+                <p className="mt-1 text-xs text-ink-muted">
+                  {formatPercentId(marginPct, 1)} dari harga jual
+                </p>
+              </PanelBody>
+            </Panel>
 
-            <div className="space-y-2">
-              <Label htmlFor="status" className="dark:text-gray-200">
-                Status
-              </Label>
-              <Select defaultValue="active" onValueChange={handleStatusChange}>
-                <SelectTrigger className="dark:bg-gray-900 dark:border-gray-600">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Aktif</SelectItem>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Product Image */}
-        <Card className="dark:bg-gray-800/50 dark:border-gray-700">
-          <CardHeader className="border-b dark:border-gray-700">
-            <CardTitle className="dark:text-white">Gambar Produk</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-6">
-            <div className="space-y-4">
-              {imagePreview ? (
-                <div className="relative w-full h-64 bg-gray-100 dark:bg-gray-900 rounded-lg overflow-hidden">
-                  <img
-                    src={imagePreview}
-                    alt="Preview"
-                    className="w-full h-full object-contain"
+            <Panel>
+              <PanelHeader title="Stok" />
+              <PanelBody className="space-y-4">
+                <Field label="Stok saat ini" htmlFor="stok">
+                  <TextInput
+                    id="stok"
+                    type="number"
+                    min={0}
+                    mono
+                    value={form.stok}
+                    onChange={(e) => set("stok", Number(e.target.value))}
                   />
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon"
-                    className="absolute top-2 right-2"
-                    onClick={() => setImagePreview(null)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+                </Field>
+                <Field
+                  label="Stok minimum"
+                  htmlFor="min"
+                  hint="Peringatan muncul saat stok turun di bawah angka ini."
+                >
+                  <TextInput
+                    id="min"
+                    type="number"
+                    min={0}
+                    mono
+                    value={form.stokMinimum}
+                    onChange={(e) => set("stokMinimum", Number(e.target.value))}
+                  />
+                </Field>
+                <div className="border-t border-line">
+                  <Toggle
+                    label="Aktif dijual"
+                    description="Produk nonaktif tetap tersimpan tapi tidak muncul di katalog aktif."
+                    checked={form.aktif}
+                    onChange={(aktif) => set("aktif", aktif)}
+                  />
                 </div>
-              ) : (
-                <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 transition-colors">
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    <Upload className="w-10 h-10 mb-3 text-gray-400" />
-                    <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
-                      <span className="font-semibold">Klik untuk upload</span>{" "}
-                      atau drag and drop
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      PNG, JPG atau JPEG (MAX. 2MB)
-                    </p>
-                  </div>
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                  />
-                </label>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+              </PanelBody>
+            </Panel>
+          </div>
+        </div>
 
-        {/* Actions */}
-        <div className="flex justify-end gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => navigate("/products")}
-          >
-            Batal
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+          <Button asChild variant="outline" type="button">
+            <Link to="/products">Batal</Link>
           </Button>
-          <Button type="submit" disabled={isSubmitting} className="gap-2">
-            <Save className="h-4 w-4" />
-            {isSubmitting ? "Menyimpan..." : "Simpan Produk"}
+          <Button type="submit" disabled={saveMutation.isPending}>
+            {saveMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            {isEdit ? "Simpan perubahan" : "Tambah produk"}
           </Button>
         </div>
       </form>

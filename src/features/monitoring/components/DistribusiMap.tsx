@@ -8,8 +8,10 @@ import {
   useMap,
 } from "react-leaflet";
 import L from "leaflet";
-import { getInitials } from "@/lib/utils";
-import { getStatusVariant } from "@/components/common/StatusBadge";
+import { cn, getInitials } from "@/lib/utils";
+import { fleetColor } from "@/lib/chart";
+import { useTheme } from "@/hooks/useTheme";
+import { STATUS_HEX, getStatusVariant } from "@/lib/status";
 import type { DriverCard, MonitoringAssignment, MonitoringRow } from "../types";
 
 // Fix default marker icons broken by bundlers.
@@ -26,32 +28,30 @@ type Coord = [number, number];
 
 type RouteMap = Record<string, Coord[]>;
 
+/** Map marks read from the same status palette as badges and row spines. */
 function colorForVariant(variant: ReturnType<typeof getStatusVariant>) {
-  if (variant === "success") return "#10B981";
-  if (variant === "process") return "#1565C0";
-  if (variant === "warning") return "#F59E0B";
-  if (variant === "danger") return "#EF4444";
-  return "#64748B";
+  return STATUS_HEX[variant];
 }
 
-function makeDriverIcon(initials: string, isSelected: boolean) {
-  const ring = isSelected ? "0 0 0 4px rgba(21,101,192,.22)" : "none";
+function makeDriverIcon(initials: string, color: string, isSelected: boolean) {
+  const ring = isSelected ? "0 0 0 4px rgba(224,163,46,.45)" : "none";
   return L.divIcon({
     className: "",
     html: `<div style="
-      background:#1565C0;
-      color:white;
-      border:2px solid white;
-      border-radius:9999px;
-      width:34px;height:34px;
+      background:${color};
+      color:#ffffff;
+      border:2px solid #ffffff;
+      border-radius:4px;
+      width:32px;height:32px;
       display:flex;align-items:center;justify-content:center;
-      font-size:10px;font-weight:800;
+      font-family:'IBM Plex Mono',ui-monospace,monospace;
+      font-size:10px;font-weight:600;
       letter-spacing:.02em;
-      box-shadow:0 4px 12px rgba(0,0,0,0.22), ${ring};
+      box-shadow:0 4px 12px rgba(0,0,0,0.24), ${ring};
     ">${initials}</div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
-    popupAnchor: [0, -17],
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -16],
   });
 }
 
@@ -59,13 +59,13 @@ function makePangkalanIcon(color: string) {
   return L.divIcon({
     className: "",
     html: `<div style="
-      width:16px;height:16px;border-radius:9999px;
+      width:14px;height:14px;border-radius:3px;
       background:${color};
-      border:2px solid white;
+      border:2px solid #ffffff;
       box-shadow:0 2px 8px rgba(0,0,0,.28);
     "></div>`,
-    iconSize: [16, 16],
-    iconAnchor: [8, 8],
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
   });
 }
 
@@ -97,6 +97,7 @@ export function DistribusiMap({
   selectedDriverId,
   onSelectDriver,
 }: DistribusiMapProps) {
+  const { isDark } = useTheme();
   const [routesByAssignmentId, setRoutesByAssignmentId] = useState<RouteMap>(
     {},
   );
@@ -112,96 +113,93 @@ export function DistribusiMap({
   );
 
   const resolvedAssignments = useMemo(() => {
-    const rowById = new Map(points.map((row) => [row.id, row]));
+    const pangkalanRow = new Map(points.map((row) => [row.pangkalanId, row]));
     const driverById = new Map(drivers.map((driver) => [driver.id, driver]));
+
     return assignments
       .map((assignment) => {
         const driver = driverById.get(assignment.driverId);
-        const target = rowById.get(assignment.pangkalanId);
-        if (!driver || !target) return null;
+        if (!driver) return null;
         return {
           assignment,
           driver,
-          target,
+          target: pangkalanRow.get(assignment.pangkalanId),
           driverCoord: [
             assignment.driverCoord.lat,
             assignment.driverCoord.lng,
           ] as Coord,
+          // Truck position first, then every stop still to be made.
+          waypoints: [
+            [assignment.driverCoord.lat, assignment.driverCoord.lng] as Coord,
+            ...assignment.stops.map((s) => [s.lat, s.lng] as Coord),
+          ],
         };
       })
       .filter((item): item is NonNullable<typeof item> => Boolean(item));
   }, [assignments, drivers, points]);
 
+  // Snap each round to real roads. A straight line between stops looks like a
+  // sketch; the driver follows the road, so the map should too.
   useEffect(() => {
     let cancelled = false;
 
     async function loadRoutes() {
       const entries = await Promise.all(
         resolvedAssignments.map(async (a) => {
-          const from = a.driverCoord;
-          const to = a.target.coord;
-          const fallback: Coord[] = [from, to];
+          const fallback = a.waypoints;
+          if (a.waypoints.length < 2) return [a.assignment.id, fallback] as const;
 
           try {
-            const url =
-              "https://router.project-osrm.org/route/v1/driving/" +
-              `${from[1]},${from[0]};${to[1]},${to[0]}` +
-              "?overview=full&geometries=geojson";
-
-            const response = await fetch(url);
-            if (!response.ok) {
-              return [a.assignment.id, fallback] as const;
-            }
+            const path = a.waypoints.map(([lat, lng]) => `${lng},${lat}`).join(";");
+            const response = await fetch(
+              `https://router.project-osrm.org/route/v1/driving/${path}?overview=full&geometries=geojson`,
+            );
+            if (!response.ok) return [a.assignment.id, fallback] as const;
 
             const data = (await response.json()) as {
               routes?: Array<{ geometry?: { coordinates?: number[][] } }>;
             };
-
             const coordinates = data.routes?.[0]?.geometry?.coordinates;
-            if (!coordinates?.length) {
-              return [a.assignment.id, fallback] as const;
-            }
+            if (!coordinates?.length) return [a.assignment.id, fallback] as const;
 
-            const routeCoords: Coord[] = coordinates.map(([lng, lat]) => [
-              lat,
-              lng,
-            ]);
-            return [a.assignment.id, routeCoords] as const;
+            return [
+              a.assignment.id,
+              coordinates.map(([lng, lat]) => [lat, lng] as Coord),
+            ] as const;
           } catch {
+            // Offline or the router is down — the straight path still shows the
+            // shape of the round.
             return [a.assignment.id, fallback] as const;
           }
         }),
       );
 
-      if (!cancelled) {
-        setRoutesByAssignmentId(Object.fromEntries(entries));
-      }
+      if (!cancelled) setRoutesByAssignmentId(Object.fromEntries(entries));
     }
 
-    if (resolvedAssignments.length) {
-      loadRoutes();
-    } else {
-      setRoutesByAssignmentId({});
-    }
+    if (resolvedAssignments.length) loadRoutes();
+    else setRoutesByAssignmentId({});
 
     return () => {
       cancelled = true;
     };
   }, [resolvedAssignments]);
 
-  const activeDrivers = drivers.filter((d) => d.status !== "Selesai").length;
+  // "Berjalan" means actually on the road, not merely rostered for today.
+  const activeDrivers = resolvedAssignments.filter((a) => a.assignment.berjalan).length;
   const selected =
     resolvedAssignments.find((a) => a.driver.id === selectedDriverId) ??
     resolvedAssignments[0];
 
+  // Fit to the whole round, so the yard and the last stop are both in frame.
   const fitPoints: Coord[] = [
-    ...resolvedAssignments.map((a) => a.driverCoord),
+    ...resolvedAssignments.flatMap((a) => a.waypoints),
     ...points.map((p) => p.coord),
   ];
 
   return (
     <div
-      className="relative rounded-xl overflow-hidden shadow-sm border border-outline-variant/30"
+      className="relative overflow-hidden rounded-md border border-line"
       style={{ height }}
     >
       <MapContainer
@@ -219,16 +217,16 @@ export function DistribusiMap({
 
         {points.map((p) => (
           <Marker
-            key={p.pangkalan}
+            key={p.id}
             position={p.coord}
             icon={makePangkalanIcon(p.color)}
           >
             <Popup>
               <div className="text-xs space-y-1 min-w-[160px]">
                 <p className="font-bold text-sm">{p.pangkalan}</p>
-                <p className="text-slate-500">{p.alamat}</p>
-                <p className="text-slate-500">Status: {p.status}</p>
-                <p className="text-slate-500">
+                <p className="text-ink-muted">{p.alamat}</p>
+                <p className="text-ink-muted">Status: {p.status}</p>
+                <p className="text-ink-muted">
                   Realisasi: {p.realisasi.toLocaleString("id-ID")} /{" "}
                   {p.target.toLocaleString("id-ID")} tabung
                 </p>
@@ -238,67 +236,68 @@ export function DistribusiMap({
         ))}
 
         {resolvedAssignments.map((a) => {
-          const isActive = a.driver.status === "Dalam Perjalanan";
-          const isSelesai = a.driver.status === "Selesai";
-          const routeColor = isSelesai
-            ? "#10B981"
-            : isActive
-              ? "#1565C0"
-              : "#94A3B8";
-          const routePositions = routesByAssignmentId[a.assignment.id] ?? [
-            a.driverCoord,
-            a.target.coord,
-          ];
+          const { berjalan, selesai } = a.assignment;
+          // Colour identifies the truck; the line style carries its progress —
+          // dashed = round still to drive, animated = on the road, solid = done.
+          const routeColor = fleetColor(a.driver.slot, isDark);
+          const routePositions =
+            routesByAssignmentId[a.assignment.id] ?? a.waypoints;
+
+          // Dim every other round when one truck is selected.
+          const dimmed = !!selectedDriverId && selectedDriverId !== a.driver.id;
+          if (routePositions.length < 2) return null;
 
           return (
             <div key={a.driver.id}>
-              {/* White halo — ensures the route pops against any map tile */}
-              {a.target && (
-                <Polyline
-                  positions={routePositions}
-                  pathOptions={{
-                    color: "#ffffff",
-                    weight: 7,
-                    opacity: 0.85,
-                    lineCap: "round",
-                    lineJoin: "round",
-                  }}
-                />
-              )}
-              {/* Colored route on top */}
-              {a.target && (
-                <Polyline
-                  positions={routePositions}
-                  pathOptions={{
-                    color: routeColor,
-                    weight: 3.5,
-                    opacity: 1,
-                    lineCap: "round",
-                    lineJoin: "round",
-                    dashArray: isSelesai ? undefined : "10 8",
-                    className: isActive ? "route-animated" : undefined,
-                  }}
-                />
-              )}
+              {/* White halo keeps the route legible over any map tile. */}
+              <Polyline
+                positions={routePositions}
+                pathOptions={{
+                  // A halo in the opposite value keeps the route legible over
+                  // any tile, light or inverted-dark.
+                  color: isDark ? "#131611" : "#ffffff",
+                  weight: 7.5,
+                  opacity: dimmed ? 0.2 : 0.9,
+                  lineCap: "round",
+                  lineJoin: "round",
+                }}
+              />
+              <Polyline
+                positions={routePositions}
+                pathOptions={{
+                  color: routeColor,
+                  opacity: dimmed ? 0.28 : 1,
+                  lineCap: "round",
+                  lineJoin: "round",
+                  weight: selesai ? 3 : 4,
+                  dashArray: selesai ? undefined : berjalan ? "1 9" : "9 7",
+                  className: berjalan ? "route-animated" : undefined,
+                }}
+              />
               <Marker
                 position={a.driverCoord}
+                opacity={dimmed ? 0.45 : 1}
                 icon={makeDriverIcon(
                   getInitials(a.driver.name),
+                  routeColor,
                   selectedDriverId === a.driver.id,
                 )}
-                eventHandlers={{
-                  click: () => onSelectDriver?.(a.driver.id),
-                }}
+                eventHandlers={{ click: () => onSelectDriver?.(a.driver.id) }}
               >
                 <Popup>
-                  <div className="text-xs space-y-1 min-w-[170px]">
-                    <p className="font-bold text-sm">{a.driver.name}</p>
-                    <p className="text-slate-500">
+                  <div className="min-w-[180px] space-y-1 text-xs">
+                    <p className="text-sm font-bold">{a.driver.name}</p>
+                    <p className="text-ink-muted">
                       {a.driver.armada} • {a.driver.plat}
                     </p>
-                    <p className="text-slate-500">Status: {a.driver.status}</p>
-                    <p className="text-slate-500">
-                      Tujuan: {a.target?.pangkalan ?? "-"}
+                    <p className="text-ink-muted">Status: {a.driver.status}</p>
+                    <p className="text-ink-muted">
+                      {selesai
+                        ? "Semua pemberhentian selesai"
+                        : `Tujuan berikutnya: ${a.target?.pangkalan ?? "—"}`}
+                    </p>
+                    <p className="text-ink-muted">
+                      Sisa {a.assignment.stops.length} pemberhentian
                     </p>
                   </div>
                 </Popup>
@@ -308,27 +307,66 @@ export function DistribusiMap({
         })}
       </MapContainer>
 
-      <div className="absolute top-4 left-4 z-[400] flex items-center gap-2 pointer-events-none">
-        <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-white/95 px-3 py-1.5 rounded-full shadow-sm">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          {activeDrivers} Driver Aktif
+      {/* Top-right, clear of Leaflet's zoom controls in the top-left corner. */}
+      <div className="pointer-events-none absolute right-3 top-3 z-[400] flex items-center gap-2">
+        <span className="flex items-center gap-1.5 rounded-sm border border-line bg-panel/95 px-2.5 py-1 text-2xs font-semibold text-ink">
+          <span
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              activeDrivers > 0 ? "bg-signal now-pulse" : "bg-draft",
+            )}
+            aria-hidden
+          />
+          {activeDrivers} armada berjalan
         </span>
-        <span className="text-xs font-bold text-on-surface-variant bg-white/95 px-3 py-1.5 rounded-full shadow-sm uppercase tracking-tight">
-          {rows.length} Pangkalan
+        <span className="rounded-sm border border-line bg-panel/95 px-2.5 py-1 text-2xs font-semibold text-ink-muted">
+          <span className="data">{rows.length}</span> pangkalan
         </span>
       </div>
 
+      {/* Colour tells the trucks apart; the line style tells you where each one
+          is in its round. */}
+      <div className="pointer-events-none absolute bottom-3 right-3 z-[400] rounded-md border border-line bg-panel/95 px-3 py-2">
+        <p className="label mb-1.5 text-[0.625rem] text-ink-muted">Garis rute</p>
+        <ul className="space-y-1">
+          {[
+            { label: "Belum berangkat", dash: "6 5", width: 3 },
+            { label: "Sedang berjalan", dash: "1 6", width: 3 },
+            { label: "Rute selesai", dash: undefined, width: 2.5 },
+          ].map((item) => (
+            <li key={item.label} className="flex items-center gap-2">
+              <svg width="26" height="6" aria-hidden className="shrink-0">
+                <line
+                  x1="1"
+                  y1="3"
+                  x2="25"
+                  y2="3"
+                  stroke="currentColor"
+                  className="text-ink-muted"
+                  strokeWidth={item.width}
+                  strokeDasharray={item.dash}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className="text-[0.625rem] text-ink-muted">{item.label}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
       {selected && (
-        <div className="absolute bottom-4 left-4 z-[400] bg-white/95 rounded-lg px-3.5 py-2.5 shadow-sm border border-slate-200 min-w-[220px]">
-          <p className="text-[11px] font-black text-on-surface-variant uppercase tracking-wider">
-            Driver Terpilih
-          </p>
-          <p className="text-sm font-bold text-on-surface mt-0.5">
+        <div className="absolute bottom-3 left-3 z-[400] min-w-[14rem] rounded-md border border-line bg-panel/95 px-3.5 py-2.5 shadow-pop">
+          <p className="label text-2xs text-ink-muted">Armada terpilih</p>
+          <p className="mt-0.5 flex items-center gap-2 text-sm font-semibold text-ink">
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+              style={{ background: fleetColor(selected.driver.slot, isDark) }}
+              aria-hidden
+            />
             {selected.driver.name}
           </p>
-          <p className="text-xs text-on-surface-variant">
-            {selected.driver.status} • Tujuan:{" "}
-            {selected.target?.pangkalan ?? "-"}
+          <p className="text-xs text-ink-muted">
+            {selected.driver.status} · menuju {selected.target?.pangkalan ?? "—"}
           </p>
         </div>
       )}

@@ -1,18 +1,21 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { useDeskMutation } from "@/hooks/useDeskMutation";
 import {
+  clearReadNotifications,
+  deleteNotification,
   getNotifications,
-  markAsRead,
-  markAllAsRead,
   getReminderSettings,
+  markAllAsRead,
+  markAsRead,
+  markAsUnread,
   saveReminderSettings,
 } from "../api/notificationApi";
 import type { NotificationType, ReminderSettings } from "../types";
 
-type FilterType = "Semua" | NotificationType;
+type FilterType = "Semua" | "Belum dibaca" | NotificationType;
 
 export function useNotification() {
-  const queryClient = useQueryClient();
   const [activeFilter, setActiveFilter] = useState<FilterType>("Semua");
 
   const notifications = useQuery({
@@ -25,43 +28,67 @@ export function useNotification() {
     queryFn: getReminderSettings,
   });
 
-  const markAsReadMutation = useMutation({
+  const markAsReadMutation = useDeskMutation({
     mutationFn: markAsRead,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
-    },
+    errorTitle: "Gagal menandai notifikasi",
   });
 
-  const markAllAsReadMutation = useMutation({
+  const markAsUnreadMutation = useDeskMutation({
+    mutationFn: markAsUnread,
+    errorTitle: "Gagal menandai notifikasi",
+  });
+
+  const markAllAsReadMutation = useDeskMutation({
     mutationFn: markAllAsRead,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
-    },
+    errorTitle: "Gagal menandai notifikasi",
+    success: (count) =>
+      count === 0
+        ? { title: "Tidak ada notifikasi yang belum dibaca", tone: "info" }
+        : { title: `${count} notifikasi ditandai sudah dibaca` },
   });
 
-  const saveSettingsMutation = useMutation({
+  const deleteMutation = useDeskMutation({
+    mutationFn: deleteNotification,
+    errorTitle: "Gagal menghapus notifikasi",
+    success: "Notifikasi dihapus",
+  });
+
+  const clearReadMutation = useDeskMutation({
+    mutationFn: clearReadNotifications,
+    errorTitle: "Gagal membersihkan notifikasi",
+    success: (count) =>
+      count === 0
+        ? { title: "Tidak ada notifikasi terbaca untuk dibersihkan", tone: "info" }
+        : { title: `${count} notifikasi terbaca dihapus` },
+  });
+
+  const saveSettingsMutation = useDeskMutation({
     mutationFn: (settings: ReminderSettings) => saveReminderSettings(settings),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["reminder-settings"] });
-    },
+    errorTitle: "Gagal menyimpan aturan pengingat",
+    success: "Aturan pengingat disimpan",
   });
 
-  const filtered = (notifications.data ?? []).filter(
-    (n) => activeFilter === "Semua" || n.type === activeFilter,
-  );
-
-  const unreadCount = (notifications.data ?? []).filter(
-    (n) => !n.isRead,
-  ).length;
+  const all = notifications.data ?? [];
+  const filtered = all.filter((n) => {
+    if (activeFilter === "Semua") return true;
+    if (activeFilter === "Belum dibaca") return !n.isRead;
+    return n.type === activeFilter;
+  });
 
   return {
     notifications: filtered,
+    allNotifications: all,
     isLoading: notifications.isLoading,
+    isError: notifications.isError,
+    error: notifications.error as Error | null,
     activeFilter,
     setActiveFilter,
-    unreadCount,
+    unreadCount: all.filter((n) => !n.isRead).length,
     markAsReadMutation,
+    markAsUnreadMutation,
     markAllAsReadMutation,
+    deleteMutation,
+    clearReadMutation,
     reminderSettings: reminderSettings.data,
     isLoadingSettings: reminderSettings.isLoading,
     saveSettingsMutation,

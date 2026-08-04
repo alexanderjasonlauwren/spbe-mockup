@@ -1,84 +1,59 @@
 import {
-  BarChart,
   Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
 } from "recharts";
+import { useTheme } from "@/hooks/useTheme";
+import { axisProps, chartTheme, compactTabung, seriesColor } from "@/lib/chart";
+import { ChartTooltip } from "@/components/common/ChartTooltip";
 import type { MonthlyChartPoint } from "../types";
 
-interface MonthlyBarChartProps {
-  data: MonthlyChartPoint[];
-}
+/**
+ * Realisation against target, week by week. Both series are the same measure
+ * on one scale, so they share an axis — target sits behind as the recessive
+ * reference and realisation carries the colour.
+ */
+export function MonthlyBarChart({ data }: { data: MonthlyChartPoint[] }) {
+  const { isDark } = useTheme();
+  const t = chartTheme(isDark);
 
-interface TooltipPayload {
-  value: number;
-  name: string;
-  color: string;
-}
-
-function CustomTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: TooltipPayload[];
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-slate-100 rounded-lg p-3 shadow-lg text-xs">
-      <p className="font-bold text-on-surface mb-1">{label}</p>
-      {payload.map((p) => (
-        <p key={p.name} style={{ color: p.color }} className="font-medium">
-          {p.name}: {p.value.toLocaleString("id-ID")} tabung
-        </p>
-      ))}
-    </div>
-  );
-}
-
-export function MonthlyBarChart({ data }: MonthlyBarChartProps) {
-  return (
-    <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-        <CartesianGrid
-          strokeDasharray="3 3"
-          stroke="#f2f4f7"
-          vertical={false}
+    <ResponsiveContainer width="100%" height={260}>
+      <BarChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }} barGap={2}>
+        <CartesianGrid stroke={t.grid} vertical={false} />
+        <XAxis dataKey="week" {...axisProps(isDark)} />
+        <YAxis {...axisProps(isDark)} tickFormatter={compactTabung} width={58} />
+        <Tooltip
+          cursor={{ fill: t.grid, fillOpacity: 0.45 }}
+          content={<ChartTooltip unit="tabung" />}
         />
-        <XAxis
-          dataKey="week"
-          tick={{ fontSize: 10, fontWeight: 700, fill: "#424752" }}
-          axisLine={false}
-          tickLine={false}
-        />
-        <YAxis
-          tick={{ fontSize: 10, fill: "#424752" }}
-          axisLine={false}
-          tickLine={false}
-          tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
-        />
-        <Tooltip content={<CustomTooltip />} />
         <Legend
-          iconSize={8}
-          wrapperStyle={{ fontSize: "11px", paddingTop: "12px" }}
+          iconType="square"
+          iconSize={9}
+          wrapperStyle={{
+            fontSize: "11px",
+            paddingTop: "10px",
+            color: t.muted,
+          }}
         />
         <Bar
           dataKey="target"
           name="Target"
-          fill="#90CAF9"
-          radius={[4, 4, 0, 0]}
+          fill={t.reference}
+          radius={[3, 3, 0, 0]}
+          maxBarSize={26}
         />
         <Bar
           dataKey="realisasi"
           name="Realisasi"
-          fill="#1565C0"
-          radius={[4, 4, 0, 0]}
+          fill={seriesColor(0, isDark)}
+          radius={[3, 3, 0, 0]}
+          maxBarSize={26}
         />
       </BarChart>
     </ResponsiveContainer>

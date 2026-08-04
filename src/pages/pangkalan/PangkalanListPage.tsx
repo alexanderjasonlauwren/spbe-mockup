@@ -1,549 +1,307 @@
 import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { Download, Pencil, Plus, Store, Trash2 } from "lucide-react";
+import {
+  exportPangkalan,
+  getKecamatanOptions,
+  getPangkalanList,
+  removePangkalan,
+  type PangkalanView,
+} from "@/features/pangkalan/api/pangkalanApi";
+import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { PageHeader } from "@/components/common/PageHeader";
-import { StatsCard } from "@/components/common/StatsCard";
-import {
-  SortableTableHead,
-  type SortDirection,
-} from "@/components/common/SortableTableHead";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Panel, PanelHeader, Meter } from "@/components/common/Panel";
+import { DataTable, type Column } from "@/components/common/DataTable";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { StatusBadge } from "@/components/common/StatusBadge";
+import { getStatusVariant, spineFor } from "@/lib/status";
+import { Field, SearchInput, SelectInput } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { CanAccess } from "@/features/rbac/components/CanAccess";
-import { PERMISSIONS } from "@/features/rbac/permissions";
-import { useNavigate } from "react-router-dom";
-import {
-  MapPin,
-  Package,
-  TrendingUp,
-  Building,
-  CheckCircle2,
-  AlertCircle,
-  Search,
-  Plus,
-  Phone,
-} from "lucide-react";
+import { formatNumber, formatPercentId, formatRupiahShort } from "@/lib/format";
+import type { PangkalanStatus } from "@/mocks/types";
 
-interface Pangkalan {
-  id: string;
-  nama: string;
-  alamat: string;
-  kota: string;
-  noHP: string;
-  noNPWP: string;
-  targetBulanan: number;
-  distribusiBulanIni: number;
-  pembayaranStatus: "lunas" | "pending" | "tunggakan";
-  status: "aktif" | "nonaktif";
-  bergabungSejak: string;
-  cabang: string;
-}
-
-const mockPangkalan: Pangkalan[] = [
-  {
-    id: "1",
-    nama: "UD Maju Jaya",
-    alamat: "Jl. Raya Bogor No. 12",
-    kota: "Jakarta Timur",
-    noHP: "0812-3333-4444",
-    noNPWP: "12.345.678.9-001.000",
-    targetBulanan: 1800,
-    distribusiBulanIni: 1640,
-    pembayaranStatus: "lunas",
-    status: "aktif",
-    bergabungSejak: "Jan 2022",
-    cabang: "Pusat - Jakarta",
-  },
-  {
-    id: "2",
-    nama: "Toko Berkah",
-    alamat: "Jl. Sudirman No. 45",
-    kota: "Jakarta Pusat",
-    noHP: "0813-5555-6666",
-    noNPWP: "23.456.789.0-002.000",
-    targetBulanan: 1200,
-    distribusiBulanIni: 1100,
-    pembayaranStatus: "pending",
-    status: "aktif",
-    bergabungSejak: "Mar 2022",
-    cabang: "Pusat - Jakarta",
-  },
-  {
-    id: "3",
-    nama: "CV Sejahtera",
-    alamat: "Jl. Gatot Subroto No. 7",
-    kota: "Jakarta Selatan",
-    noHP: "0811-7777-8888",
-    noNPWP: "34.567.890.1-003.000",
-    targetBulanan: 1500,
-    distribusiBulanIni: 1420,
-    pembayaranStatus: "lunas",
-    status: "aktif",
-    bergabungSejak: "Nov 2021",
-    cabang: "Pusat - Jakarta",
-  },
-  {
-    id: "4",
-    nama: "Kios Makmur",
-    alamat: "Jl. Pahlawan No. 23",
-    kota: "Depok",
-    noHP: "0814-9999-0000",
-    noNPWP: "45.678.901.2-004.000",
-    targetBulanan: 900,
-    distribusiBulanIni: 760,
-    pembayaranStatus: "tunggakan",
-    status: "aktif",
-    bergabungSejak: "Jun 2023",
-    cabang: "Cabang Depok",
-  },
-  {
-    id: "5",
-    nama: "UD Harapan",
-    alamat: "Jl. Merdeka No. 88",
-    kota: "Jakarta Barat",
-    noHP: "0815-1111-2222",
-    noNPWP: "56.789.012.3-005.000",
-    targetBulanan: 1100,
-    distribusiBulanIni: 980,
-    pembayaranStatus: "lunas",
-    status: "aktif",
-    bergabungSejak: "Aug 2022",
-    cabang: "Pusat - Jakarta",
-  },
-  {
-    id: "6",
-    nama: "Toko Sumber Rejeki",
-    alamat: "Jl. Ahmad Yani No. 15",
-    kota: "Bogor",
-    noHP: "0816-3333-4444",
-    noNPWP: "67.890.123.4-006.000",
-    targetBulanan: 800,
-    distribusiBulanIni: 0,
-    pembayaranStatus: "lunas",
-    status: "nonaktif",
-    bergabungSejak: "Oct 2023",
-    cabang: "Cabang Bogor",
-  },
+const STATUSES: (PangkalanStatus | "Semua")[] = [
+  "Semua",
+  "Aktif",
+  "Nonaktif",
+  "Ditangguhkan",
 ];
-
-const bayarStatusConfig = {
-  lunas: {
-    label: "Lunas",
-    className:
-      "bg-green-100 text-green-700 border-green-300 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/30",
-    icon: CheckCircle2,
-  },
-  pending: {
-    label: "Pending",
-    className:
-      "bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-500/10 dark:text-yellow-400 dark:border-yellow-500/30",
-    icon: AlertCircle,
-  },
-  tunggakan: {
-    label: "Tunggakan",
-    className:
-      "bg-red-100 text-red-700 border-red-300 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/30",
-    icon: AlertCircle,
-  },
-};
 
 export function PangkalanListPage() {
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [bayarFilter, setBayarFilter] = useState("all");
-  const [sortKey, setSortKey] = useState<
-    | "nama"
-    | "cabang"
-    | "targetBulanan"
-    | "distribusiBulanIni"
-    | "pembayaranStatus"
-    | "status"
-  >("nama");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<PangkalanStatus | "Semua">("Semua");
+  const [kecamatan, setKecamatan] = useState("Semua");
+  const [pendingDelete, setPendingDelete] = useState<PangkalanView | null>(null);
 
-  const filtered = mockPangkalan.filter((p) => {
-    const matchesSearch =
-      p.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.kota.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-    const matchesBayar =
-      bayarFilter === "all" || p.pembayaranStatus === bayarFilter;
-    return matchesSearch && matchesStatus && matchesBayar;
+  const list = useQuery({
+    queryKey: ["pangkalan-list", search, status, kecamatan],
+    queryFn: () => getPangkalanList({ search, status, kecamatan }),
+  });
+  const kecamatanOptions = useQuery({
+    queryKey: ["kecamatan-options"],
+    queryFn: getKecamatanOptions,
   });
 
-  const handleSort = (
-    nextSortKey:
-      | "nama"
-      | "cabang"
-      | "targetBulanan"
-      | "distribusiBulanIni"
-      | "pembayaranStatus"
-      | "status",
-  ) => {
-    if (sortKey === nextSortKey) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-      return;
-    }
-
-    setSortKey(nextSortKey);
-    setSortDirection("asc");
-  };
-
-  const sortedFiltered = [...filtered].sort((left, right) => {
-    let compareValue = 0;
-
-    if (sortKey === "nama") {
-      compareValue = left.nama.localeCompare(right.nama, "id-ID");
-    }
-
-    if (sortKey === "cabang") {
-      compareValue = left.cabang.localeCompare(right.cabang, "id-ID");
-    }
-
-    if (sortKey === "targetBulanan") {
-      compareValue = left.targetBulanan - right.targetBulanan;
-    }
-
-    if (sortKey === "distribusiBulanIni") {
-      compareValue = left.distribusiBulanIni - right.distribusiBulanIni;
-    }
-
-    if (sortKey === "pembayaranStatus") {
-      compareValue = left.pembayaranStatus.localeCompare(
-        right.pembayaranStatus,
-        "id-ID",
-      );
-    }
-
-    if (sortKey === "status") {
-      compareValue = left.status.localeCompare(right.status, "id-ID");
-    }
-
-    return sortDirection === "asc" ? compareValue : -compareValue;
+  const deleteMutation = useDeskMutation({
+    mutationFn: (id: string) => removePangkalan(id),
+    errorTitle: "Hapus pangkalan gagal",
+    success: "Pangkalan dihapus",
+    onDone: () => setPendingDelete(null),
   });
 
-  const totalPangkalan = mockPangkalan.length;
-  const aktif = mockPangkalan.filter((p) => p.status === "aktif").length;
-  const totalTarget = mockPangkalan.reduce((s, p) => s + p.targetBulanan, 0);
-  const totalDistribusi = mockPangkalan.reduce(
-    (s, p) => s + p.distribusiBulanIni,
-    0,
-  );
-  const tunggakan = mockPangkalan.filter(
-    (p) => p.pembayaranStatus === "tunggakan",
-  ).length;
+  const exportMutation = useDeskMutation({
+    mutationFn: () => exportPangkalan(),
+    errorTitle: "Unduh gagal",
+    success: (count) => ({
+      title: "Berkas CSV diunduh",
+      description: `${count} pangkalan diekspor.`,
+    }),
+  });
+
+  const rows = list.data ?? [];
+  const aktif = rows.filter((p) => p.status === "Aktif").length;
+  const tertunggak = rows.filter((p) => p.tagihanTertunda > 0);
+
+  const columns: Column<PangkalanView>[] = [
+    {
+      key: "nama",
+      header: "Pangkalan",
+      render: (row) => (
+        <>
+          <Link
+            to={`/pangkalan/${row.id}`}
+            className="block font-medium text-ink hover:underline hover:decoration-signal hover:decoration-2 hover:underline-offset-4"
+          >
+            {row.nama}
+          </Link>
+          <span className="data block text-2xs text-ink-muted">{row.kode}</span>
+        </>
+      ),
+      sortValue: (row) => row.nama,
+    },
+    {
+      key: "wilayah",
+      header: "Wilayah",
+      render: (row) => (
+        <>
+          <span className="block text-xs text-ink">Kec. {row.kecamatan}</span>
+          <span className="block text-2xs text-ink-muted">{row.kota}</span>
+        </>
+      ),
+      sortValue: (row) => row.kecamatan,
+    },
+    {
+      key: "pj",
+      header: "Penanggung jawab",
+      render: (row) => (
+        <>
+          <span className="block text-xs text-ink">{row.penanggungJawab || "—"}</span>
+          <span className="data block text-2xs text-ink-muted">{row.telepon}</span>
+        </>
+      ),
+      sortValue: (row) => row.penanggungJawab,
+    },
+    {
+      key: "kuota",
+      header: "Kuota bulan ini",
+      width: "14rem",
+      render: (row) => {
+        const pct =
+          row.kuotaBulanan === 0 ? 0 : (row.terpakaiBulanIni / row.kuotaBulanan) * 100;
+        return (
+          <div className="min-w-[9rem]">
+            <div className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">
+              <span className="data text-ink">
+                {formatNumber(row.terpakaiBulanIni)}
+                <span className="text-ink-muted"> / {formatNumber(row.kuotaBulanan)}</span>
+              </span>
+              <span className="data text-ink-muted">{formatPercentId(pct)}</span>
+            </div>
+            <Meter
+              value={row.terpakaiBulanIni}
+              max={row.kuotaBulanan}
+              tone={pct >= 95 ? "rust" : pct >= 70 ? "signal" : "pine"}
+              label={`Kuota ${row.nama}`}
+            />
+          </div>
+        );
+      },
+      sortValue: (row) =>
+        row.kuotaBulanan === 0 ? 0 : row.terpakaiBulanIni / row.kuotaBulanan,
+    },
+    {
+      key: "tagihan",
+      header: "Tagihan tertunda",
+      align: "right",
+      render: (row) =>
+        row.tagihanTertunda === 0 ? (
+          <span className="text-xs text-ink-muted">—</span>
+        ) : (
+          <>
+            <span className="data block font-semibold text-signal-ink">
+              {formatNumber(row.tagihanTertunda)}
+            </span>
+            <span className="data block text-2xs text-ink-muted">
+              {formatRupiahShort(row.nilaiTertunda)}
+            </span>
+          </>
+        ),
+      sortValue: (row) => row.nilaiTertunda,
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "8rem",
+      render: (row) => (
+        <StatusBadge variant={getStatusVariant(row.status)} label={row.status} />
+      ),
+      sortValue: (row) => row.status,
+    },
+    {
+      key: "aksi",
+      header: "",
+      align: "right",
+      width: "1%",
+      render: (row) => (
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Ubah ${row.nama}`}
+            onClick={() => navigate(`/pangkalan/${row.id}/edit`)}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Hapus ${row.nama}`}
+            onClick={() => setPendingDelete(row)}
+            className="hover:bg-rust-soft hover:text-rust-ink"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
-        title="Manajemen Pangkalan"
-        description="Kelola data mitra distribusi LPG (pangkalan) dan pantau penyaluran."
+        eyebrow="Data induk"
+        title="Pangkalan"
+        description="Outlet yang dilayani agen, beserta kuota bulanan dan tagihan yang masih terbuka."
         actions={
-          <CanAccess permission={PERMISSIONS.PRODUCTS_CREATE}>
+          <>
             <Button
-              className="gap-2 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white shadow-lg shadow-indigo-500/30"
-              onClick={() => navigate("/products/new")}
+              variant="outline"
+              onClick={() => exportMutation.mutate(undefined as never)}
+              disabled={exportMutation.isPending}
             >
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Tambah Pangkalan</span>
+              <Download className="h-3.5 w-3.5" />
+              Unduh CSV
             </Button>
-          </CanAccess>
+            <Button asChild>
+              <Link to="/pangkalan/new">
+                <Plus className="h-3.5 w-3.5" />
+                Daftarkan pangkalan
+              </Link>
+            </Button>
+          </>
+        }
+        meta={
+          <span className="text-xs text-ink-muted">
+            <span className="data">{aktif}</span> aktif dari{" "}
+            <span className="data">{rows.length}</span> terdaftar
+            {tertunggak.length > 0 && (
+              <>
+                {" · "}
+                <span className="text-signal-ink">
+                  <span className="data">{tertunggak.length}</span> punya tagihan
+                  tertunda
+                </span>
+              </>
+            )}
+          </span>
         }
       />
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard
-          title="Total Pangkalan"
-          value={`${totalPangkalan} Pangkalan`}
-          change={`${aktif} aktif`}
-          changeType="positive"
-          icon={MapPin}
-          iconColor="text-indigo-600 dark:text-indigo-400"
-          iconBgColor="bg-indigo-50 dark:bg-indigo-500/10"
-        />
-        <StatsCard
-          title="Target Bulanan"
-          value={`${totalTarget.toLocaleString("id-ID")} Tabung`}
-          change="Total semua pangkalan"
-          changeType="neutral"
-          icon={Package}
-          iconColor="text-cyan-600 dark:text-cyan-400"
-          iconBgColor="bg-cyan-50 dark:bg-cyan-500/10"
-        />
-        <StatsCard
-          title="Terdistribusi Bulan Ini"
-          value={`${totalDistribusi.toLocaleString("id-ID")} Tabung`}
-          change={`${Math.round((totalDistribusi / totalTarget) * 100)}% dari target`}
-          changeType="positive"
-          icon={TrendingUp}
-          iconColor="text-green-600 dark:text-green-400"
-          iconBgColor="bg-green-50 dark:bg-green-500/10"
-        />
-        <StatsCard
-          title="Tunggakan Pembayaran"
-          value={`${tunggakan} Pangkalan`}
-          change="Perlu tindak lanjut"
-          changeType={tunggakan > 0 ? "negative" : "positive"}
-          icon={Building}
-          iconColor="text-red-600 dark:text-red-400"
-          iconBgColor="bg-red-50 dark:bg-red-500/10"
-        />
+      <div className="grid grid-cols-1 gap-3 rounded-md border border-line bg-panel p-4 sm:grid-cols-3">
+        <Field label="Cari">
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Nama, kode, atau penanggung jawab"
+          />
+        </Field>
+        <Field label="Status">
+          <SelectInput
+            value={status}
+            onChange={(e) => setStatus(e.target.value as PangkalanStatus | "Semua")}
+          >
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Kecamatan">
+          <SelectInput value={kecamatan} onChange={(e) => setKecamatan(e.target.value)}>
+            <option value="Semua">Semua kecamatan</option>
+            {(kecamatanOptions.data ?? []).map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
       </div>
 
-      {/* Table */}
-      <Card className="border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 shadow-xl">
-        <CardHeader className="p-0 border-b border-gray-100 dark:border-dark-700 bg-gray-50 dark:bg-dark-850">
-          <div className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <CardTitle className="text-lg font-bold text-gray-900 dark:text-white">
-                Daftar Pangkalan
-              </CardTitle>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                {filtered.length} dari {totalPangkalan} ditampilkan
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Cari nama atau kota..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 w-full sm:w-52 bg-white dark:bg-dark-900 border-gray-300 dark:border-dark-600 text-sm"
-                />
-              </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-32 bg-white dark:bg-dark-900 border-gray-300 dark:border-dark-600 text-sm">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-dark-800">
-                  <SelectItem value="all">Semua</SelectItem>
-                  <SelectItem value="aktif">Aktif</SelectItem>
-                  <SelectItem value="nonaktif">Non-aktif</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={bayarFilter} onValueChange={setBayarFilter}>
-                <SelectTrigger className="w-full sm:w-36 bg-white dark:bg-dark-900 border-gray-300 dark:border-dark-600 text-sm">
-                  <SelectValue placeholder="Pembayaran" />
-                </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-dark-800">
-                  <SelectItem value="all">Semua Bayar</SelectItem>
-                  <SelectItem value="lunas">Lunas</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="tunggakan">Tunggakan</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-50 dark:bg-dark-850 hover:bg-gray-50 dark:hover:bg-dark-850 border-b border-gray-200 dark:border-dark-700">
-                  <SortableTableHead
-                    label="Pangkalan"
-                    sortKey="nama"
-                    activeSortKey={sortKey}
-                    sortDirection={sortDirection}
-                    onSort={handleSort}
-                  />
-                  <SortableTableHead
-                    label="Cabang"
-                    sortKey="cabang"
-                    activeSortKey={sortKey}
-                    sortDirection={sortDirection}
-                    onSort={handleSort}
-                  />
-                  <SortableTableHead
-                    label="Target Bulanan"
-                    sortKey="targetBulanan"
-                    activeSortKey={sortKey}
-                    sortDirection={sortDirection}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortableTableHead
-                    label="Distribusi Bulan Ini"
-                    sortKey="distribusiBulanIni"
-                    activeSortKey={sortKey}
-                    sortDirection={sortDirection}
-                    onSort={handleSort}
-                    className="min-w-[160px]"
-                  />
-                  <SortableTableHead
-                    label="Pembayaran"
-                    sortKey="pembayaranStatus"
-                    activeSortKey={sortKey}
-                    sortDirection={sortDirection}
-                    onSort={handleSort}
-                  />
-                  <SortableTableHead
-                    label="Status"
-                    sortKey="status"
-                    activeSortKey={sortKey}
-                    sortDirection={sortDirection}
-                    onSort={handleSort}
-                  />
-                  <TableHead className="px-4 py-3 text-xs font-semibold uppercase text-gray-700 dark:text-gray-300 text-center">
-                    Aksi
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedFiltered.map((p) => {
-                  const bayarConf = bayarStatusConfig[p.pembayaranStatus];
-                  const BayarIcon = bayarConf.icon;
-                  const distribusiPct = Math.round(
-                    (p.distribusiBulanIni / p.targetBulanan) * 100,
-                  );
+      <Panel>
+        <PanelHeader title="Daftar pangkalan" hint={`${rows.length} baris`} />
+        <DataTable
+          columns={columns}
+          data={rows}
+          isLoading={list.isLoading}
+          rowKey={(row) => row.id}
+          spineFor={(row) => spineFor(row.status)}
+          pageSize={12}
+          defaultSortKey="nama"
+          emptyIcon={Store}
+          emptyMessage="Tidak ada pangkalan yang cocok"
+          emptyDescription="Ubah filter, atau daftarkan outlet baru untuk mulai melayaninya."
+          emptyAction={
+            <Button asChild size="sm">
+              <Link to="/pangkalan/new">Daftarkan pangkalan</Link>
+            </Button>
+          }
+          dense
+        />
+      </Panel>
 
-                  return (
-                    <TableRow
-                      key={p.id}
-                      className="border-b border-gray-100 dark:border-dark-700 hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 transition-colors"
-                    >
-                      <TableCell className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center shrink-0">
-                            <MapPin className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                              {p.nama}
-                            </p>
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <Phone className="h-3 w-3 text-gray-400" />
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
-                                {p.noHP}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <p className="text-sm text-gray-900 dark:text-white">
-                          {p.kota}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {p.cabang}
-                        </p>
-                      </TableCell>
-                      <TableCell className="px-4 py-3 text-right">
-                        <p className="font-bold text-gray-900 dark:text-white">
-                          {p.targetBulanan.toLocaleString("id-ID")}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          tabung/bln
-                        </p>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-xs">
-                            <span className="font-medium text-gray-900 dark:text-white">
-                              {p.distribusiBulanIni.toLocaleString("id-ID")}
-                            </span>
-                            <span
-                              className={cn(
-                                "font-semibold",
-                                distribusiPct >= 90
-                                  ? "text-green-600 dark:text-green-400"
-                                  : distribusiPct >= 70
-                                    ? "text-yellow-600 dark:text-yellow-400"
-                                    : "text-red-600 dark:text-red-400",
-                              )}
-                            >
-                              {distribusiPct}%
-                            </span>
-                          </div>
-                          <div className="w-full bg-gray-200 dark:bg-dark-700 rounded-full h-1.5">
-                            <div
-                              className={cn(
-                                "h-1.5 rounded-full",
-                                distribusiPct >= 90
-                                  ? "bg-green-500"
-                                  : distribusiPct >= 70
-                                    ? "bg-yellow-500"
-                                    : "bg-red-500",
-                              )}
-                              style={{
-                                width: `${Math.min(distribusiPct, 100)}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "flex items-center gap-1 w-fit text-xs font-medium",
-                            bayarConf.className,
-                          )}
-                        >
-                          <BayarIcon className="h-3 w-3" />
-                          {bayarConf.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="px-4 py-3">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-xs font-medium",
-                            p.status === "aktif"
-                              ? "bg-green-100 text-green-700 border-green-300 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/30"
-                              : "bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-500/10 dark:text-gray-400 dark:border-gray-500/30",
-                          )}
-                        >
-                          {p.status === "aktif" ? "Aktif" : "Non-aktif"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-xs h-7 border-gray-300 dark:border-dark-600"
-                          >
-                            Detail
-                          </Button>
-                          <CanAccess permission={PERMISSIONS.PRODUCTS_EDIT}>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-xs h-7 border-indigo-300 dark:border-indigo-500/30 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-50"
-                            >
-                              Edit
-                            </Button>
-                          </CanAccess>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+      <ConfirmDialog
+        isOpen={!!pendingDelete}
+        title={`Hapus ${pendingDelete?.nama}?`}
+        message="Pangkalan hilang dari daftar dan tidak dapat dipilih pada rencana distribusi berikutnya."
+        details={
+          pendingDelete && (
+            <p className={cn(pendingDelete.tagihanTertunda > 0 && "text-rust-ink")}>
+              {pendingDelete.tagihanTertunda > 0
+                ? `Masih ada ${pendingDelete.tagihanTertunda} tagihan senilai ${formatRupiahShort(pendingDelete.nilaiTertunda)} yang belum diverifikasi. Riwayat pengiriman tetap tersimpan.`
+                : "Riwayat pengiriman dan pembayaran tetap tersimpan untuk keperluan laporan."}
+            </p>
+          )
+        }
+        confirmLabel="Hapus pangkalan"
+        isPending={deleteMutation.isPending}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => pendingDelete && deleteMutation.mutate(pendingDelete.id)}
+      />
     </div>
   );
 }

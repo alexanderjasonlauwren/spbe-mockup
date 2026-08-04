@@ -1,84 +1,50 @@
 import { Link } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Home, ArrowLeft, Search } from "lucide-react";
+import { NAV_GROUPS } from "@/layouts/nav";
 
 export function NotFoundPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full text-center">
-        {/* 404 Illustration */}
-        <div className="mb-8">
-          <div className="inline-flex items-center justify-center w-32 h-32 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mb-6 shadow-xl">
-            <span className="text-6xl font-bold text-white">404</span>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Page Not Found
-          </h1>
-          <p className="text-gray-600">
-            Oops! The page you're looking for doesn't exist or has been moved.
-          </p>
-        </div>
+    <div className="mx-auto max-w-2xl py-10">
+      <p className="label text-2xs text-ink-muted">Kesalahan 404</p>
+      <h1 className="mt-2 text-2xl font-bold tracking-[-0.02em] text-ink">
+        Halaman ini tidak ada
+      </h1>
+      <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+        Alamat yang Anda buka tidak terdaftar di konsol. Mungkin tautannya sudah
+        berubah, atau ada salah ketik pada alamat.
+      </p>
 
-        {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Button
-            asChild
-            size="lg"
-            className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-          >
-            <Link to="/dashboard">
-              <Home className="h-4 w-4" />
-              Go to Dashboard
-            </Link>
-          </Button>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <Button asChild>
+          <Link to="/dashboard">Ke papan berangkat</Link>
+        </Button>
+        <Button variant="outline" onClick={() => window.history.back()}>
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Kembali
+        </Button>
+      </div>
 
-          <Button
-            asChild
-            variant="outline"
-            size="lg"
-            className="gap-2"
-            onClick={() => window.history.back()}
-          >
-            <button>
-              <ArrowLeft className="h-4 w-4" />
-              Go Back
-            </button>
-          </Button>
-        </div>
-
-        {/* Suggestions */}
-        <div className="mt-12 p-6 bg-white rounded-lg border border-gray-200 text-left">
-          <div className="flex items-start gap-3">
-            <Search className="h-5 w-5 text-gray-400 mt-0.5" />
-            <div>
-              <h3 className="font-semibold text-gray-900 mb-2">
-                Looking for something?
-              </h3>
-              <ul className="space-y-2 text-sm text-gray-600">
-                <li>
-                  <Link
-                    to="/dashboard"
-                    className="text-blue-600 hover:underline"
-                  >
-                    Dashboard
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/products"
-                    className="text-blue-600 hover:underline"
-                  >
-                    Products
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/orders" className="text-blue-600 hover:underline">
-                    Orders
-                  </Link>
-                </li>
+      <div className="mt-10 border-t border-line pt-6">
+        <p className="label mb-4 text-2xs text-ink-muted">Halaman yang tersedia</p>
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label}>
+              <p className="mb-2 text-xs font-semibold text-ink">{group.label}</p>
+              <ul className="space-y-1.5">
+                {group.items.map((item) => (
+                  <li key={item.href}>
+                    <Link
+                      to={item.href}
+                      className="text-xs text-ink-muted transition-colors hover:text-ink hover:underline hover:decoration-signal hover:decoration-2 hover:underline-offset-4"
+                    >
+                      {item.name}
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </div>
-          </div>
+          ))}
         </div>
       </div>
     </div>

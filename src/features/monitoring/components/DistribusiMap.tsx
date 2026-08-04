@@ -69,6 +69,28 @@ function makePangkalanIcon(color: string) {
   });
 }
 
+/**
+ * Leaflet caches its container size, so collapsing the sidebar leaves the map
+ * mis-sized and the tiles offset until something else forces a redraw.
+ */
+function ResizeWatcher() {
+  const map = useMap();
+  useEffect(() => {
+    const el = map.getContainer();
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => map.invalidateSize({ animate: false }));
+    });
+    observer.observe(el);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [map]);
+  return null;
+}
+
 function FitBounds({ points }: { points: Coord[] }) {
   const map = useMap();
   const hasFitted = useRef(false);
@@ -214,6 +236,7 @@ export function DistribusiMap({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <FitBounds points={fitPoints} />
+        <ResizeWatcher />
 
         {points.map((p) => (
           <Marker

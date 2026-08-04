@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -37,11 +38,11 @@ export function PangkalanListPage() {
   const [pendingDelete, setPendingDelete] = useState<PangkalanView | null>(null);
 
   const list = useQuery({
-    queryKey: ["pangkalan-list", search, status, kecamatan],
+    queryKey: [...scopeKey(), "pangkalan-list", search, status, kecamatan],
     queryFn: () => getPangkalanList({ search, status, kecamatan }),
   });
   const kecamatanOptions = useQuery({
-    queryKey: ["kecamatan-options"],
+    queryKey: [...scopeKey(), "kecamatan-options"],
     queryFn: getKecamatanOptions,
   });
 

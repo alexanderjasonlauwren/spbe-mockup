@@ -1,4 +1,5 @@
-import { getDb, latency } from "@/mocks/db";
+import { scopedDb } from "@/mocks/scope";
+import { latency } from "@/mocks/db";
 import { addDays, isoDate, startOfToday } from "@/mocks/seed";
 import {
   distributedOn,
@@ -22,12 +23,15 @@ const toMinutes = (hhmm: string) =>
 
 export async function getKpiSummary(): Promise<KpiSummary> {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   const today = todayIso();
   const yesterday = isoDate(addDays(startOfToday(), -1));
   const quota = monthlyQuota();
 
   const pending = db.payments.filter((p) => p.status === "Menunggu Verifikasi");
+  const outstanding = db.invoices.filter(
+    (i) => i.status !== "Batal" && i.total - i.terbayar - i.kredit > 0,
+  );
   const dailyTarget = targetOn(today) || db.settings.targetHarian;
 
   return {
@@ -38,7 +42,14 @@ export async function getKpiSummary(): Promise<KpiSummary> {
     activePangkalan: db.pangkalan.filter((p) => p.status === "Aktif").length,
     totalPangkalan: db.pangkalan.length,
     pendingPayments: pending.length,
-    pendingPaymentValue: pending.reduce((s, p) => s + p.nominal, 0),
+    pendingPaymentValue: pending.reduce((s, p) => s + p.jumlah, 0),
+    piutangOutstanding: outstanding.reduce(
+      (s, i) => s + (i.total - i.terbayar - i.kredit),
+      0,
+    ),
+    piutangJatuhTempo: outstanding
+      .filter((i) => i.status === "Jatuh Tempo")
+      .reduce((s, i) => s + (i.total - i.terbayar - i.kredit), 0),
     previousDayDistributed: distributedOn(yesterday),
     openOrders: db.orders.filter((o) => o.status === "Baru").length,
     lateDeliveries: db.deliveries.filter(
@@ -59,7 +70,7 @@ export async function getPangkalanShares(): Promise<PangkalanShare[]> {
 
 export async function getRecentActivities(): Promise<RecentActivity[]> {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   const stageLabel: Record<string, RecentActivity["status"]> = {
     Selesai: "Selesai",
     Proses: "Dalam Pengiriman",
@@ -93,7 +104,7 @@ export async function getRecentActivities(): Promise<RecentActivity[]> {
  */
 export async function getDispatchRail(): Promise<DispatchRail> {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   const today = todayIso();
   const now = new Date();
 
@@ -118,8 +129,6 @@ export async function getDispatchRail(): Promise<DispatchRail> {
         status: driver.status,
         stops: mine.map((d) => {
           const start = toMinutes(d.jamRencana);
-          // Travel plus unloading is budgeted at 90 minutes per stop, which is
-          // also what makes a block wide enough to carry a readable label.
           return {
             id: d.id,
             kode: d.kode,
@@ -128,7 +137,8 @@ export async function getDispatchRail(): Promise<DispatchRail> {
             kecamatan:
               db.pangkalan.find((p) => p.id === d.pangkalanId)?.kecamatan ?? "—",
             startMinute: start,
-            endMinute: start + 90,
+            // Travel plus unloading, from Konfigurasi Sistem.
+            endMinute: start + db.settings.operasi.durasiSinggahMenit,
             target: d.target,
             realisasi: d.realisasi,
             stage: d.status,
@@ -155,5 +165,5 @@ export async function getDispatchRail(): Promise<DispatchRail> {
 /** Recent entries from the audit trail, for the "who did what" panel. */
 export async function getRecentAudit(limit = 6) {
   await latency("read");
-  return getDb().audit.slice(0, limit);
+  return scopedDb().audit.slice(0, limit);
 }

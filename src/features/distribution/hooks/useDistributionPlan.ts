@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
@@ -19,7 +20,7 @@ import type { PlanRow } from "../types";
 export function useDistributionPlan() {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
-  const planList = useQuery({ queryKey: ["plan-list"], queryFn: getPlanList });
+  const planList = useQuery({ queryKey: [...scopeKey(), "plan-list"], queryFn: getPlanList });
 
   // Open on the plan that needs attention: today's, or the newest draft.
   useEffect(() => {
@@ -29,24 +30,24 @@ export function useDistributionPlan() {
   }, [planList.data, selectedPlanId]);
 
   const planDetail = useQuery({
-    queryKey: ["plan-detail", selectedPlanId],
+    queryKey: [...scopeKey(), "plan-detail", selectedPlanId],
     queryFn: () => getPlanDetail(selectedPlanId!),
     enabled: !!selectedPlanId,
   });
 
   const pangkalanOptions = useQuery({
-    queryKey: ["pangkalan-options"],
+    queryKey: [...scopeKey(), "pangkalan-options"],
     queryFn: getPangkalanOptions,
   });
 
   const driverOptions = useQuery({
-    queryKey: ["driver-options", selectedPlanId],
+    queryKey: [...scopeKey(), "driver-options", selectedPlanId],
     queryFn: () => getDriverOptions(selectedPlanId!),
     enabled: !!selectedPlanId,
   });
 
   const saOptions = useQuery({
-    queryKey: ["active-sa-options"],
+    queryKey: [...scopeKey(), "active-sa-options"],
     queryFn: getActiveSaOptions,
   });
 

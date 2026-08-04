@@ -31,6 +31,11 @@ export interface PlanRow {
   statusBayar: "Lunas" | "Belum Lunas";
   /** Cylinders this pangkalan may still take this month. */
   sisaKuotaPangkalan: number;
+  /** Outstanding receivable, so credit risk is visible while planning. */
+  piutang: number;
+  piutangJatuhTempo: number;
+  /** Set when this stop would be refused on confirmation. */
+  alasanBlokir?: string;
 }
 
 export interface PlanOption {

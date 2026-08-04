@@ -7,6 +7,9 @@ export interface KpiSummary {
   totalPangkalan: number;
   pendingPayments: number;
   pendingPaymentValue: number;
+  /** Money owed by pangkalan that has not been collected. */
+  piutangOutstanding: number;
+  piutangJatuhTempo: number;
   /** Yesterday's realised tonnage, for the day-on-day comparison. */
   previousDayDistributed: number;
   openOrders: number;

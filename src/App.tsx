@@ -8,6 +8,8 @@ import { DistributionPage } from "./pages/distribution/DistributionPage";
 import { MonitoringPage } from "./pages/monitoring/MonitoringPage";
 import { OcrPage } from "./pages/ocr/OcrPage";
 import { PaymentPage } from "./pages/payments/PaymentPage";
+import { ReceivablesPage } from "./pages/receivables/ReceivablesPage";
+import { LedgerPage } from "./pages/ledger/LedgerPage";
 import { ReportsPage } from "./pages/reports/ReportsPage";
 import { TransactionListPage } from "./pages/transactions/TransactionListPage";
 import { PangkalanListPage } from "./pages/pangkalan/PangkalanListPage";
@@ -18,6 +20,7 @@ import { DriverDetailPage } from "./pages/drivers/DriverDetailPage";
 import { ProductListPage } from "./pages/products/ProductListPage";
 import { ProductFormPage } from "./pages/products/ProductFormPage";
 import { UserListPage } from "./pages/users/UserListPage";
+import { SystemConfigPage } from "./pages/system/SystemConfigPage";
 import { NotificationPage } from "./pages/notifications/NotificationPage";
 import { SettingsPage } from "./pages/settings/SettingsPage";
 import { NotFoundPage } from "./pages/errors/NotFoundPage";
@@ -50,7 +53,9 @@ const router = createBrowserRouter([
 
       // Keuangan — what the day is worth.
       { path: "ocr", element: <OcrPage /> },
+      { path: "receivables", element: <ReceivablesPage /> },
       { path: "payments", element: <PaymentPage /> },
+      { path: "ledger", element: <LedgerPage /> },
       { path: "reports", element: <ReportsPage /> },
       { path: "transactions", element: <TransactionListPage /> },
 
@@ -65,6 +70,7 @@ const router = createBrowserRouter([
       { path: "products/new", element: <ProductFormPage /> },
       { path: "products/:id/edit", element: <ProductFormPage /> },
       { path: "users", element: <UserListPage /> },
+      { path: "system", element: <SystemConfigPage /> },
 
       { path: "notifications", element: <NotificationPage /> },
       { path: "settings", element: <SettingsPage /> },

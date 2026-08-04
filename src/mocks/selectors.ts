@@ -6,7 +6,7 @@
  * way for every page that shows it.
  */
 
-import { getDb } from "./db";
+import { scopedDb } from "./scope";
 import { addDays, isoDate, startOfToday } from "./seed";
 import type {
   DeliveryEntity,
@@ -16,8 +16,9 @@ import type {
   DriverEntity,
 } from "./types";
 
+/** Always the scoped view — these selectors feed the dashboard and reports. */
 export function db(): Database {
-  return getDb();
+  return scopedDb();
 }
 
 export function todayIso(): string {
@@ -26,7 +27,7 @@ export function todayIso(): string {
 
 export function pangkalanById(id: ID | null): PangkalanEntity | undefined {
   if (!id) return undefined;
-  return getDb().pangkalan.find((p) => p.id === id);
+  return scopedDb().pangkalan.find((p) => p.id === id);
 }
 
 export function pangkalanName(id: ID | null): string {
@@ -35,7 +36,7 @@ export function pangkalanName(id: ID | null): string {
 
 export function driverById(id: ID | null): DriverEntity | undefined {
   if (!id) return undefined;
-  return getDb().drivers.find((d) => d.id === id);
+  return scopedDb().drivers.find((d) => d.id === id);
 }
 
 export function driverName(id: ID | null): string {
@@ -43,16 +44,16 @@ export function driverName(id: ID | null): string {
 }
 
 export function deliveriesOn(date: string): DeliveryEntity[] {
-  return getDb().deliveries.filter((d) => d.tanggal === date);
+  return scopedDb().deliveries.filter((d) => d.tanggal === date);
 }
 
 export function deliveriesBetween(from: string, to: string): DeliveryEntity[] {
-  return getDb().deliveries.filter((d) => d.tanggal >= from && d.tanggal <= to);
+  return scopedDb().deliveries.filter((d) => d.tanggal >= from && d.tanggal <= to);
 }
 
 /** The SA backing today's operations — the one quota is currently drawn from. */
 export function activeSa() {
-  const d = getDb();
+  const d = scopedDb();
   const today = todayIso();
   return (
     d.scheduleAgreements.find(
@@ -67,7 +68,7 @@ export function activeSa() {
 
 /** Quota totals for the current calendar month across all live SAs. */
 export function monthlyQuota() {
-  const d = getDb();
+  const d = scopedDb();
   const today = todayIso();
   const live = d.scheduleAgreements.filter(
     (s) =>
@@ -90,7 +91,7 @@ export function targetOn(date: string): number {
 
 /** Week-by-week realisation against target for the current month. */
 export function monthlyProgress() {
-  const d = getDb();
+  const d = scopedDb();
   const now = startOfToday();
   const first = new Date(now.getFullYear(), now.getMonth(), 1);
   const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -113,7 +114,7 @@ export function monthlyProgress() {
 
 /** Share of this month's realised tonnage per kecamatan. */
 export function shareByKecamatan(limit = 4) {
-  const d = getDb();
+  const d = scopedDb();
   const now = startOfToday();
   const first = isoDate(new Date(now.getFullYear(), now.getMonth(), 1));
 

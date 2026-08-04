@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
@@ -19,7 +20,7 @@ export function useMonitoring() {
   const [statusFilter, setStatusFilter] = useState<string>("Semua");
 
   const snapshot = useQuery({
-    queryKey: ["monitoring-snapshot", dateRange],
+    queryKey: [...scopeKey(), "monitoring-snapshot", dateRange],
     queryFn: () => getMonitoringSnapshot(dateRange),
     // The board is the one screen people leave open, so it refreshes itself.
     refetchInterval: 30_000,

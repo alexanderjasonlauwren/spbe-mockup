@@ -1,4 +1,5 @@
-import { getDb, latency } from "@/mocks/db";
+import { scopedDb } from "@/mocks/scope";
+import { latency } from "@/mocks/db";
 import { deleteDriver, saveDriver } from "@/mocks/rules";
 import { exportCsv, timestampSuffix } from "@/lib/export";
 import { addDays, isoDate, startOfToday } from "@/mocks/seed";
@@ -20,7 +21,7 @@ export interface DriverView extends DriverEntity {
 }
 
 function toView(d: DriverEntity): DriverView {
-  const db = getDb();
+  const db = scopedDb();
   const today = todayIso();
   const from = isoDate(addDays(startOfToday(), -29));
 
@@ -53,7 +54,7 @@ export async function getDrivers(filters?: {
   status?: DriverStatusEntity | "Semua";
 }): Promise<DriverView[]> {
   await latency("read");
-  return getDb()
+  return scopedDb()
     .drivers.map(toView)
     .filter((d) => {
       if (filters?.status && filters.status !== "Semua" && d.status !== filters.status)
@@ -73,7 +74,7 @@ export async function getDrivers(filters?: {
 
 export async function getDriverDetail(id: string): Promise<DriverView> {
   await latency("read");
-  const d = getDb().drivers.find((x) => x.id === id);
+  const d = scopedDb().drivers.find((x) => x.id === id);
   if (!d) throw new Error("Driver tidak ditemukan.");
   return toView(d);
 }
@@ -81,7 +82,7 @@ export async function getDriverDetail(id: string): Promise<DriverView> {
 /** Today's stop list for one truck. */
 export async function getDriverSchedule(id: string) {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   return db.deliveries
     .filter((d) => d.driverId === id && d.tanggal === todayIso())
     .sort((a, b) => a.jamRencana.localeCompare(b.jamRencana))

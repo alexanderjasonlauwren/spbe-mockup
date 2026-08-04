@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -23,6 +24,7 @@ import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { relativeTime } from "@/lib/format";
 import { sectionFor, titleFor } from "./nav";
 import { CommandPalette } from "./CommandPalette";
+import { BranchSwitcher } from "@/features/tenancy/BranchSwitcher";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -42,7 +44,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const notifications = useQuery({
-    queryKey: ["notifications"],
+    queryKey: [...scopeKey(), "notifications"],
     queryFn: getNotifications,
     refetchInterval: 60_000,
   });
@@ -85,7 +87,9 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   return (
     <>
-      <header className="fixed left-0 right-0 top-0 z-[1001] flex h-16 items-center justify-between gap-4 border-b border-line bg-panel/85 px-4 backdrop-blur-md lg:left-64 lg:px-7">
+      {/* Sticky inside the content column, so there is no left offset to keep
+          in sync with the sidebar. */}
+      <header className="sticky top-0 z-[1001] flex h-16 shrink-0 items-center justify-between gap-4 border-b border-line bg-panel/85 px-4 backdrop-blur-md lg:px-7">
         <div className="flex min-w-0 items-center gap-3">
           <button
             onClick={onMenuClick}
@@ -107,6 +111,8 @@ export function Header({ onMenuClick }: HeaderProps) {
         </div>
 
         <div className="flex items-center gap-1.5">
+          <BranchSwitcher />
+
           <button
             onClick={() => setPaletteOpen(true)}
             className="hidden items-center gap-2 rounded-md border border-line px-3 py-1.5 text-xs text-ink-muted transition-colors hover:border-line-strong hover:text-ink sm:flex"

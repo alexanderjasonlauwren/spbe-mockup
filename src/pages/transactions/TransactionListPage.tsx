@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -49,15 +50,15 @@ export function TransactionListPage() {
   }));
 
   const rows = useQuery({
-    queryKey: ["transactions", filters],
+    queryKey: [...scopeKey(), "transactions", filters],
     queryFn: () => getTransactions(filters),
   });
   const summary = useQuery({
-    queryKey: ["transaction-summary", filters],
+    queryKey: [...scopeKey(), "transaction-summary", filters],
     queryFn: () => getTransactionSummary(filters),
   });
   const options = useQuery({
-    queryKey: ["transaction-filter-options"],
+    queryKey: [...scopeKey(), "transaction-filter-options"],
     queryFn: getTransactionFilterOptions,
   });
 

@@ -10,7 +10,6 @@ import {
   TextareaInput,
 } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
-import { SPBE_LIST } from "@/utils/constants";
 import { uploadSASchema, type UploadSAFormValues } from "../schema";
 
 interface UploadSAFormProps {
@@ -32,7 +31,7 @@ export function UploadSAForm({ onSubmit, isPending, spbeOptions }: UploadSAFormP
     defaultValues: { nomorSA: "", spbe: "", periodeMulai: "", periodeBerakhir: "" },
   });
 
-  const options = [...new Set([...(spbeOptions ?? []), ...SPBE_LIST])];
+  const options = spbeOptions ?? [];
 
   const submit = handleSubmit((values) => {
     onSubmit({ ...values, namaDokumen: file?.name });
@@ -54,7 +53,9 @@ export function UploadSAForm({ onSubmit, isPending, spbeOptions }: UploadSAFormP
 
       <Field label="SPBE penerbit" htmlFor="spbe" error={errors.spbe?.message} required>
         <SelectInput id="spbe" invalid={!!errors.spbe} {...register("spbe")}>
-          <option value="">Pilih SPBE</option>
+          <option value="">
+            {options.length === 0 ? "Belum ada mitra SPBE terdaftar" : "Pilih SPBE"}
+          </option>
           {options.map((s) => (
             <option key={s} value={s}>
               {s}

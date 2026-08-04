@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -44,7 +45,7 @@ export function ProductFormPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
   const detail = useQuery({
-    queryKey: ["product-detail", id],
+    queryKey: [...scopeKey(), "product-detail", id],
     queryFn: () => getProductDetail(id!),
     enabled: isEdit,
   });

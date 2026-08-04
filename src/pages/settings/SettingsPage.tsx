@@ -1,4 +1,6 @@
+import { scopeKey } from "@/mocks/scope";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Database,
@@ -6,17 +8,17 @@ import {
   Moon,
   Play,
   RotateCcw,
-  Send,
   Sun,
 } from "lucide-react";
 import {
   exportData,
   getSettings,
   resetData,
-  sendTestReminder,
   updateSettings,
 } from "@/features/settings/api/settingsApi";
 import { advanceOperations } from "@/mocks/rules";
+import { useAuthStore } from "@/features/auth/store/authStore";
+import { ROLE_LABEL, ROLE_SUMMARY } from "@/features/users/api/userApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/hooks/useToast";
@@ -28,19 +30,19 @@ import {
   SelectInput,
   TextInput,
   TextareaInput,
-  Toggle,
 } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
 import { formatRupiah } from "@/lib/format";
 import type { SettingsEntity } from "@/mocks/types";
 
 export function SettingsPage() {
   const { theme, setTheme } = useTheme();
+  const user = useAuthStore((state) => state.user);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const settings = useQuery({ queryKey: ["settings"], queryFn: getSettings });
+  const settings = useQuery({ queryKey: [...scopeKey(), "settings"], queryFn: getSettings });
   const [form, setForm] = useState<SettingsEntity | null>(null);
   const [resetting, setResetting] = useState(false);
 
@@ -55,15 +57,6 @@ export function SettingsPage() {
     mutationFn: (patch: Partial<SettingsEntity>) => updateSettings(patch),
     errorTitle: "Pengaturan tidak tersimpan",
     success: "Pengaturan disimpan",
-  });
-
-  const testMutation = useDeskMutation({
-    mutationFn: (nomor: string) => sendTestReminder(nomor),
-    errorTitle: "Pesan uji gagal dikirim",
-    success: (r) => ({
-      title: "Pesan uji terkirim",
-      description: `Dikirim dari ${r.nomor}. Pada integrasi nyata, pesan masuk ke WhatsApp pangkalan.`,
-    }),
   });
 
   const exportMutation = useDeskMutation({
@@ -116,7 +109,7 @@ export function SettingsPage() {
     <div className="space-y-5">
       <PageHeader
         title="Pengaturan"
-        description="Profil agen, harga acuan, jam operasional, dan integrasi pengingat."
+        description="Akun Anda, profil agen, harga acuan, dan jam operasional. Data acuan dan aturan notifikasi diatur di halamannya sendiri."
         actions={
           dirty && (
             <>
@@ -136,6 +129,51 @@ export function SettingsPage() {
           )
         }
       />
+
+      {/* The account menu links here for "Profil saya", so it leads the page. */}
+      <Panel>
+        <PanelHeader title="Akun saya" hint="Identitas Anda di konsol ini" />
+        <PanelBody className="flex flex-wrap items-start gap-5">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-ink text-sm font-bold text-ink-on">
+            {getInitials(user?.name ?? "SD")}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-lg font-semibold tracking-[-0.01em] text-ink">
+              {user?.name ?? "—"}
+            </p>
+            <p className="data text-xs text-ink-muted">{user?.email ?? "—"}</p>
+            <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-xs sm:grid-cols-3">
+              <div>
+                <dt className="text-ink-muted">Peran</dt>
+                <dd className="font-medium text-ink">
+                  {user ? ROLE_LABEL[user.role] : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-ink-muted">Cabang</dt>
+                <dd className="font-medium text-ink">{user?.branch ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-ink-muted">Telepon</dt>
+                <dd className="data text-ink">{user?.phone ?? "—"}</dd>
+              </div>
+            </dl>
+            <p className="mt-3 max-w-xl text-xs leading-relaxed text-ink-muted">
+              {user ? ROLE_SUMMARY[user.role] : ""}
+            </p>
+            <p className="mt-3 text-xs text-ink-muted">
+              Peran dan cabang diatur oleh admin di{" "}
+              <Link
+                to="/users"
+                className="font-semibold text-ink underline decoration-signal decoration-2 underline-offset-4"
+              >
+                Pengguna &amp; Akses
+              </Link>
+              .
+            </p>
+          </div>
+        </PanelBody>
+      </Panel>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Panel>
@@ -291,64 +329,34 @@ export function SettingsPage() {
           </PanelBody>
         </Panel>
 
-        <Panel>
-          <PanelHeader
-            title="Pengingat WhatsApp"
-            hint="Pemberitahuan otomatis ke pangkalan sebelum pengiriman"
-          />
-          <PanelBody className="space-y-4">
-            <div className="border-b border-line">
-              <Toggle
-                label="Aktifkan pengingat"
-                description="Pesan dikirim sehari sebelum jadwal pengiriman."
-                checked={form.whatsapp.aktif}
-                onChange={(aktif) => set("whatsapp", { ...form.whatsapp, aktif })}
-              />
-            </div>
-
-            <Field label="Nomor pengirim" htmlFor="wa-nomor">
-              <TextInput
-                id="wa-nomor"
-                mono
-                value={form.whatsapp.nomorPengirim}
-                disabled={!form.whatsapp.aktif}
-                onChange={(e) =>
-                  set("whatsapp", { ...form.whatsapp, nomorPengirim: e.target.value })
-                }
-              />
-            </Field>
-
-            <Field
-              label="Templat pesan"
-              htmlFor="wa-templat"
-              hint="Gunakan {pangkalan}, {jumlah}, {tanggal}, dan {jam} sebagai penanda isian."
-            >
-              <TextareaInput
-                id="wa-templat"
-                rows={3}
-                value={form.whatsapp.templatePengingat}
-                disabled={!form.whatsapp.aktif}
-                onChange={(e) =>
-                  set("whatsapp", {
-                    ...form.whatsapp,
-                    templatePengingat: e.target.value,
-                  })
-                }
-              />
-            </Field>
-
-            <Button
-              variant="outline"
-              className="w-full"
-              disabled={!form.whatsapp.aktif || testMutation.isPending}
-              onClick={() => testMutation.mutate(form.whatsapp.nomorPengirim)}
-            >
-              <Send className="h-3.5 w-3.5" />
-              Kirim pesan uji
-            </Button>
-          </PanelBody>
-        </Panel>
       </div>
+
+      <Panel>
+        <PanelHeader
+          title="Konfigurasi lain"
+          hint="Data acuan dan aturan yang diatur di halaman tersendiri"
+        />
+        <PanelBody className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Link
+            to="/system"
+            className="rounded-md border border-line bg-panel-sunk p-4 transition-colors hover:border-line-strong"
+          >
+            <p className="text-sm font-semibold text-ink">Konfigurasi Sistem</p>
+            <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+              Mitra SPBE, rekening penerimaan, penomoran dokumen, dan hari kerja.
+            </p>
+          </Link>
+          <Link
+            to="/notifications"
+            className="rounded-md border border-line bg-panel-sunk p-4 transition-colors hover:border-line-strong"
+          >
+            <p className="text-sm font-semibold text-ink">Aturan notifikasi</p>
+            <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+              Kapan peringatan dibuat, siapa penerimanya, dan kanal pengirimannya.
+            </p>
+          </Link>
+        </PanelBody>
+      </Panel>
 
       <Panel>
         <PanelHeader

@@ -203,6 +203,29 @@
 
 @layer components {
   /**
+   * The shell is a two-column grid on desktop, and collapsing animates
+   * `grid-template-columns` — one property on one element.
+   *
+   * The previous version animated width on the sidebar, padding on the content
+   * and left on the header separately: three layout animations that drifted
+   * apart and reflowed the whole page, tables and charts included, every frame.
+   */
+  .app-shell {
+    display: block;
+  }
+
+  @media (min-width: 1024px) {
+    .app-shell {
+      display: grid;
+      grid-template-columns: 16rem minmax(0, 1fr);
+      transition: grid-template-columns 220ms cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .app-shell[data-sidebar="collapsed"] {
+      grid-template-columns: 4rem minmax(0, 1fr);
+    }
+  }
+
+  /**
    * Docket spine — the structural device. A 3px left edge on panels and rows,
    * coloured by state, so a table reads like files in a dispatch cabinet and
    * needs no separate status column.

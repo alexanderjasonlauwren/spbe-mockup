@@ -14,6 +14,10 @@ export interface User {
   permissions: string[];
   avatar?: string;
   branch?: string;
+  /** Branches this user may read. Empty = every branch (tenant-wide scope). */
+  branchIds?: string[];
+  /** Mirrors iam.user_roles.scope_type on the backend. */
+  scopeType?: "global" | "tenant" | "branch" | "pangkalan";
   phone?: string;
 }
 

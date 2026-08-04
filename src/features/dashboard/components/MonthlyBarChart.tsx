@@ -23,7 +23,7 @@ export function MonthlyBarChart({ data }: { data: MonthlyChartPoint[] }) {
   const t = chartTheme(isDark);
 
   return (
-    <ResponsiveContainer width="100%" height={260}>
+    <ResponsiveContainer debounce={120} width="100%" height={260}>
       <BarChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }} barGap={2}>
         <CartesianGrid stroke={t.grid} vertical={false} />
         <XAxis dataKey="week" {...axisProps(isDark)} />

@@ -1,4 +1,5 @@
-import { getDb, latency } from "@/mocks/db";
+import { scopedDb } from "@/mocks/scope";
+import { latency } from "@/mocks/db";
 import { exportCsv, printDocument, timestampSuffix } from "@/lib/export";
 import { addDays, isoDate, startOfToday } from "@/mocks/seed";
 
@@ -55,16 +56,18 @@ export interface DailyPoint {
 
 export async function getReportSummary(range: ReportRange): Promise<ReportSummary> {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   const window = resolveRange(range);
 
   const drops = db.deliveries.filter(
     (d) => d.tanggal >= window.from && d.tanggal <= window.to,
   );
-  const payments = db.payments.filter((p) => {
-    const day = p.tanggalBayar.slice(0, 10);
-    return day >= window.from && day <= window.to;
-  });
+  const payments = db.payments.filter(
+    (p) => p.tanggal >= window.from && p.tanggal <= window.to,
+  );
+  const invoices = db.invoices.filter(
+    (i) => i.tanggal >= window.from && i.tanggal <= window.to,
+  );
 
   const realisasi = drops.reduce((s, d) => s + d.realisasi, 0);
   const target = drops.reduce((s, d) => s + d.target, 0);
@@ -83,13 +86,11 @@ export async function getReportSummary(range: ReportRange): Promise<ReportSummar
     pencapaian: target === 0 ? 0 : (realisasi / target) * 100,
     pendapatan: payments
       .filter((p) => p.status === "Terverifikasi")
-      .reduce((s, p) => s + p.nominal, 0),
-    piutang: payments
-      .filter((p) => p.status === "Menunggu Verifikasi")
-      .reduce((s, p) => s + p.nominal, 0),
+      .reduce((s, p) => s + p.jumlah, 0),
+    piutang: invoices.reduce((s, i) => s + (i.total - i.terbayar - i.kredit), 0),
     ditolak: payments
       .filter((p) => p.status === "Ditolak")
-      .reduce((s, p) => s + p.nominal, 0),
+      .reduce((s, p) => s + p.jumlah, 0),
     suratJalan: drops.length,
     suratJalanSelesai: drops.filter((d) => d.status === "Selesai").length,
     suratJalanTertunda: drops.filter((d) => d.status === "Tertunda").length,
@@ -100,7 +101,7 @@ export async function getReportSummary(range: ReportRange): Promise<ReportSummar
 
 export async function getDailySeries(range: ReportRange): Promise<DailyPoint[]> {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   const window = resolveRange(range);
   const points = new Map<string, DailyPoint>();
 
@@ -125,8 +126,8 @@ export async function getDailySeries(range: ReportRange): Promise<DailyPoint[]> 
   }
   for (const p of db.payments) {
     if (p.status !== "Terverifikasi") continue;
-    const point = points.get(p.tanggalBayar.slice(0, 10));
-    if (point) point.pendapatan += p.nominal;
+    const point = points.get(p.tanggal);
+    if (point) point.pendapatan += p.jumlah;
   }
 
   return [...points.values()];
@@ -134,7 +135,7 @@ export async function getDailySeries(range: ReportRange): Promise<DailyPoint[]> 
 
 export async function getTopPangkalan(range: ReportRange, limit = 8) {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   const window = resolveRange(range);
   const totals = new Map<string, { tabung: number; suratJalan: number }>();
 
@@ -164,7 +165,7 @@ export async function getTopPangkalan(range: ReportRange, limit = 8) {
 
 export async function getDriverPerformance(range: ReportRange) {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   const window = resolveRange(range);
 
   return db.drivers
@@ -216,7 +217,7 @@ export async function exportReport(range: ReportRange) {
 /** The printable monthly recap the agency files. */
 export async function printReport(range: ReportRange) {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   const summary = await getReportSummary(range);
   const top = await getTopPangkalan(range, 10);
   const fmt = (n: number) => n.toLocaleString("id-ID");

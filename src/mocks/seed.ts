@@ -6,7 +6,13 @@
  * progress, drafts queued ahead.
  */
 
+import { seedAccounts } from "./ledger";
 import type {
+  BranchEntity,
+  TenantEntity,
+  CreditNoteEntity,
+  InvoiceEntity,
+  JournalEntity,
   Database,
   DeliveryEntity,
   DriverEntity,
@@ -15,15 +21,21 @@ import type {
   PaymentEntity,
   PlanEntity,
   PlanRowEntity,
+  BankAccountEntity,
+  BankNameEntity,
+  NotificationSettings,
+  NumberingEntity,
+  OperationsEntity,
   OrderEntity,
   ProductEntity,
+  SpbeEntity,
   ReceiptEntity,
   SAEntity,
   SettingsEntity,
   UserEntity,
 } from "./types";
 
-export const DB_VERSION = 1;
+export const DB_VERSION = 3;
 
 /* ── deterministic RNG ─────────────────────────────────────────────────── */
 
@@ -162,8 +174,46 @@ const BANKS = ["BCA", "BNI", "Mandiri", "BRI", "BSI"] as const;
 
 const HARGA_PER_TABUNG = 12_000;
 
-/** The agency yard. Routes start here and armada wait here between runs. */
+/** The agency yard per branch. Routes start here between runs. */
 export const DEPOT = { lat: -6.2607, lng: 106.9756, nama: "Pool Bekasi" };
+
+export const TENANT: TenantEntity = {
+  id: "tnt-001",
+  kode: "sinar-distribusi",
+  nama: "PT Sinar Distribusi Nusantara",
+  aktif: true,
+};
+
+/** Three branches, so consolidated views have something to consolidate. */
+export const BRANCHES: BranchEntity[] = [
+  {
+    id: "brc-001", tenantId: TENANT.id, kode: "BKS", nama: "Cabang Bekasi",
+    kota: "Kota Bekasi", provinsi: "Jawa Barat",
+    alamat: "Jl. Raya Industri No. 42, Bekasi Selatan",
+    penanggungJawab: "Alex Lawrence", telepon: "021-8899-4210",
+    lat: -6.2607, lng: 106.9756, utama: true, aktif: true,
+  },
+  {
+    id: "brc-002", tenantId: TENANT.id, kode: "CKR", nama: "Cabang Cikarang",
+    kota: "Kab. Bekasi", provinsi: "Jawa Barat",
+    alamat: "Jl. Jababeka Raya Blok C No. 8, Cikarang",
+    penanggungJawab: "Siti Nurhaliza", telepon: "021-8934-7720",
+    lat: -6.2797, lng: 107.1425, utama: false, aktif: true,
+  },
+  {
+    id: "brc-003", tenantId: TENANT.id, kode: "KRW", nama: "Cabang Karawang",
+    kota: "Kab. Karawang", provinsi: "Jawa Barat",
+    alamat: "Jl. Ahmad Yani No. 117, Karawang Barat",
+    penanggungJawab: "Joko Prasetyo", telepon: "0267-641-880",
+    lat: -6.3227, lng: 107.3376, utama: false, aktif: true,
+  },
+];
+
+/** Round-robin assignment, so every branch has a working day of its own. */
+function branchFor(index: number): { tenantId: string; branchId: string } {
+  const b = BRANCHES[index % BRANCHES.length];
+  return { tenantId: TENANT.id, branchId: b.id };
+}
 
 /* ── generators ────────────────────────────────────────────────────────── */
 
@@ -172,6 +222,7 @@ function seedPangkalan(): PangkalanEntity[] {
     const kecamatan = KECAMATAN[i % KECAMATAN.length];
     const statusRoll = rand();
     return {
+      ...branchFor(i),
       id: `pkl-${String(i + 1).padStart(3, "0")}`,
       kode: `PKL-${String(i + 1).padStart(4, "0")}`,
       nama,
@@ -189,6 +240,10 @@ function seedPangkalan(): PangkalanEntity[] {
             ? "Nonaktif"
             : "Aktif",
       kuotaBulanan: randInt(6, 24) * 100,
+      // A mix of cash-on-delivery and short terms, as an agency actually runs.
+      termin: pick([0, 7, 7, 14, 14, 30]),
+      batasKredit: pick([0, 5_000_000, 10_000_000, 15_000_000, 25_000_000]),
+      blokirOtomatis: rand() > 0.25,
       terdaftarPada: isoDate(addDays(startOfToday(), -randInt(120, 900))),
     };
   });
@@ -198,6 +253,7 @@ function seedDrivers(): DriverEntity[] {
   return Array.from({ length: 8 }, (_, i) => {
     const unit = ARMADA[i % ARMADA.length];
     return {
+      ...branchFor(i),
       id: `drv-${String(i + 1).padStart(3, "0")}`,
       nama: ORANG[i],
       telepon: `08${randInt(11, 99)}${randInt(1000000, 9999999)}`,
@@ -231,6 +287,7 @@ function seedScheduleAgreements(): SAEntity[] {
     const berakhir = new Date(y, m + p.offset + 1, 0);
     const totalKuota = randInt(12, 60) * 10_000;
     return {
+      ...branchFor(i),
       id: `sa-${String(i + 1).padStart(3, "0")}`,
       nomorSA: `SA-${mulai.getFullYear()}-${pad(mulai.getMonth() + 1)}-${pad(randInt(1, 99))}`,
       spbe: SPBE[i % SPBE.length],
@@ -262,12 +319,22 @@ function seedOperations(
   const deliveries: DeliveryEntity[] = [];
 
   const activeSa = sas.find((s) => s.status === "Aktif") ?? sas[2];
-  const aktifPangkalan = pangkalan.filter((p) => p.status === "Aktif");
-  const aktifDrivers = drivers.filter((d) => d.status !== "Cuti");
   const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
 
   let planSeq = 0;
   let deliverySeq = 0;
+
+  // Each branch runs its own day, so a plan and everything under it belong to
+  // exactly one branch — the same shape as core.plans.branch_id.
+  for (const branch of BRANCHES) {
+  const scope = { tenantId: TENANT.id, branchId: branch.id };
+  const aktifPangkalan = pangkalan.filter(
+    (p) => p.status === "Aktif" && p.branchId === branch.id,
+  );
+  const aktifDrivers = drivers.filter(
+    (d) => d.status !== "Cuti" && d.branchId === branch.id,
+  );
+  if (aktifPangkalan.length === 0 || aktifDrivers.length === 0) continue;
 
   for (let offset = -14; offset <= 2; offset++) {
     const date = addDays(today, offset);
@@ -280,6 +347,7 @@ function seedOperations(
       offset < 0 ? "Selesai" : offset === 0 ? "Terkonfirmasi" : "Draft";
 
     plans.push({
+      ...scope,
       id: planId,
       kode: `RD-${isoDate(date).replace(/-/g, "")}`,
       tanggal: isoDate(date),
@@ -344,6 +412,7 @@ function seedOperations(
       }
 
       deliveries.push({
+        ...scope,
         id: `dlv-${String(deliverySeq).padStart(4, "0")}`,
         kode: `SJ-${isoDate(date).replace(/-/g, "")}-${String(idx + 1).padStart(2, "0")}`,
         planId,
@@ -367,6 +436,8 @@ function seedOperations(
     });
   }
 
+  }
+
   // Today's drivers reflect what they are actually doing right now.
   const todayIso = isoDate(today);
   for (const driver of drivers) {
@@ -384,45 +455,186 @@ function seedOperations(
   return { plans, planRows, deliveries };
 }
 
-function seedPayments(
+/**
+ * Builds the receivables ledger from completed deliveries.
+ *
+ * Deliberately messy: some invoices settled in full, some part-paid, some
+ * overdue, a couple of credit notes. A clean ledger would make the aging report
+ * look like decoration rather than a tool.
+ */
+function seedReceivables(
   deliveries: DeliveryEntity[],
   pangkalan: PangkalanEntity[],
-): PaymentEntity[] {
-  const settled = deliveries.filter((d) => d.status === "Selesai");
-  return settled.slice(-28).map((d, i) => {
-    const roll = rand();
-    const status: PaymentEntity["status"] =
-      i >= settled.slice(-28).length - 6
-        ? "Menunggu Verifikasi"
-        : roll > 0.9
-          ? "Ditolak"
-          : "Terverifikasi";
+  products: ProductEntity[],
+  settings: SettingsEntity,
+) {
+  const invoices: InvoiceEntity[] = [];
+  const payments: PaymentEntity[] = [];
+  const creditNotes: CreditNoteEntity[] = [];
+  const accounts = seedAccounts();
+  const journals: JournalEntity[] = [];
+
+  const acc = (role: string) => accounts.find((a) => a.role === role)!.id;
+  const harga = settings.hargaPerTabung;
+  const hargaBeli = products[0]?.hargaBeli ?? Math.round(harga * 0.85);
+  const today = startOfToday();
+
+  let jSeq = 0;
+  const post = (
+    tanggal: string,
+    keterangan: string,
+    sumber: JournalEntity["sumber"],
+    lines: JournalEntity["lines"],
+    scope: { tenantId: string; branchId: string } = {
+      tenantId: TENANT.id,
+      branchId: BRANCHES[0].id,
+    },
+  ) => {
+    jSeq += 1;
+    journals.push({
+      ...scope,
+      id: `jrn-${String(jSeq).padStart(4, "0")}`,
+      nomor: `JV-${tanggal.replace(/-/g, "")}-${String(jSeq).padStart(4, "0")}`,
+      tanggal,
+      keterangan,
+      sumber,
+      lines,
+      status: "Diposting",
+      dibuatOleh: "Sistem",
+      dibuatPada: new Date().toISOString(),
+    });
+  };
+
+  const settled = deliveries
+    .filter((d) => d.status === "Selesai" && d.realisasi > 0)
+    .sort((a, b) => a.tanggal.localeCompare(b.tanggal));
+
+  settled.forEach((d, i) => {
     const pkl = pangkalan.find((p) => p.id === d.pangkalanId);
-    return {
-      id: `pay-${String(i + 1).padStart(4, "0")}`,
-      kode: `INV-${d.tanggal.replace(/-/g, "")}-${String(i + 1).padStart(3, "0")}`,
+    // Everything raised from a delivery lives in that delivery's branch.
+    const scope = { tenantId: d.tenantId, branchId: d.branchId };
+    const subtotal = d.realisasi * harga;
+    const jatuhTempo = isoDate(addDays(new Date(d.tanggal), pkl?.termin ?? 7));
+
+    const inv: InvoiceEntity = {
+      ...scope,
+      id: `inv-${String(i + 1).padStart(4, "0")}`,
+      nomor: `INV-${d.tanggal.replace(/-/g, "")}-${String(i + 1).padStart(3, "0")}`,
       pangkalanId: d.pangkalanId,
       deliveryId: d.id,
+      tanggal: d.tanggal,
+      jatuhTempo,
       jumlahTabung: d.realisasi,
-      nominal: d.realisasi * HARGA_PER_TABUNG,
-      bank: pick(BANKS),
-      noRekening: `${randInt(1000, 9999)}-${randInt(1000, 9999)}-${randInt(1000, 9999)}`,
-      tanggalBayar: atTime(new Date(d.tanggal), `${randInt(8, 16)}:${pick(["05", "18", "32", "47"])}`),
-      status,
-      keterangan:
-        status === "Ditolak"
-          ? "Nominal transfer tidak sesuai surat jalan."
-          : rand() > 0.6
-            ? "Transfer via mobile banking."
-            : undefined,
-      diverifikasiOleh: status === "Menunggu Verifikasi" ? undefined : "Alex Lawrence",
-      diverifikasiPada:
-        status === "Menunggu Verifikasi"
-          ? undefined
-          : atTime(new Date(d.tanggal), "17:40"),
-      buktiTransfer: `bukti-${pkl?.kode ?? "PKL"}-${i + 1}.jpg`,
+      hargaSatuan: harga,
+      subtotal,
+      pajak: 0,
+      total: subtotal,
+      terbayar: 0,
+      kredit: 0,
+      status: "Terbit",
+      catatan: `Tagihan otomatis dari ${d.kode}.`,
+      dibuatOleh: "Sistem",
     };
+    invoices.push(inv);
+
+    const hpp = d.realisasi * hargaBeli;
+    post(inv.tanggal, `${inv.nomor} — penjualan ke ${pkl?.nama ?? "pangkalan"}`,
+      { tipe: "invoice", id: inv.id },
+      [
+        { akunId: acc("piutang"), debit: inv.total, kredit: 0 },
+        { akunId: acc("pendapatan"), debit: 0, kredit: inv.subtotal },
+        { akunId: acc("hpp"), debit: hpp, kredit: 0 },
+        { akunId: acc("persediaan"), debit: 0, kredit: hpp },
+      ], scope);
+
+    // Older invoices are mostly settled; recent ones are still open.
+    const umur = Math.round((today.getTime() - new Date(d.tanggal).getTime()) / 86_400_000);
+    const roll = rand();
+    let bayar = 0;
+    if (umur > 9) bayar = roll > 0.12 ? inv.total : inv.total * 0.4;
+    else if (umur > 4) bayar = roll > 0.45 ? inv.total : roll > 0.2 ? inv.total * 0.5 : 0;
+    else bayar = roll > 0.75 ? inv.total : 0;
+    bayar = Math.round(bayar);
+
+    if (bayar > 0) {
+      const tanggalBayar = isoDate(addDays(new Date(d.tanggal), randInt(1, Math.max(2, (pkl?.termin ?? 7) + 3))));
+      const p: PaymentEntity = {
+        ...scope,
+        id: `pay-${String(payments.length + 1).padStart(4, "0")}`,
+        nomor: `BKM-${tanggalBayar.replace(/-/g, "")}-${String(payments.length + 1).padStart(3, "0")}`,
+        pangkalanId: d.pangkalanId,
+        tanggal: tanggalBayar,
+        jumlah: bayar,
+        bank: pick(BANKS),
+        noRekening: `${randInt(1000, 9999)}-${randInt(1000, 9999)}-${randInt(1000, 9999)}`,
+        status: umur > 2 ? "Terverifikasi" : "Menunggu Verifikasi",
+        alokasi: [{ invoiceId: inv.id, jumlah: bayar }],
+        buktiTransfer: `bukti-${pkl?.kode ?? "PKL"}-${payments.length + 1}.jpg`,
+        keterangan: rand() > 0.7 ? "Transfer via mobile banking." : undefined,
+        diverifikasiOleh: umur > 2 ? "Alex Lawrence" : undefined,
+        diverifikasiPada: umur > 2 ? atTime(new Date(tanggalBayar), "16:40") : undefined,
+      };
+      payments.push(p);
+
+      // Only verified cash reduces the receivable and reaches the ledger, so
+      // the AR sub-ledger reconciles to the control account.
+      if (p.status === "Terverifikasi") {
+        inv.terbayar = bayar;
+        post(p.tanggal, `${p.nomor} — penerimaan dari ${pkl?.nama ?? "pangkalan"}`,
+          { tipe: "payment", id: p.id },
+          [
+            { akunId: acc("bank"), debit: bayar, kredit: 0 },
+            { akunId: acc("piutang"), debit: 0, kredit: bayar },
+          ], scope);
+      }
+    }
+
+    // A couple of returns, so the credit-note path has history.
+    if (rand() > 0.94 && inv.total - inv.terbayar > harga * 5) {
+      const jumlah = Math.round(harga * randInt(2, 5));
+      const note: CreditNoteEntity = {
+        ...scope,
+        id: `cn-${String(creditNotes.length + 1).padStart(3, "0")}`,
+        nomor: `NK-${d.tanggal.replace(/-/g, "")}-${String(creditNotes.length + 1).padStart(3, "0")}`,
+        pangkalanId: d.pangkalanId,
+        invoiceId: inv.id,
+        tanggal: isoDate(addDays(new Date(d.tanggal), 1)),
+        jumlah,
+        alasan: pick([
+          "Tabung dikembalikan karena segel rusak.",
+          "Koreksi jumlah pada surat jalan.",
+          "Potongan atas keterlambatan pengiriman.",
+        ]),
+        status: "Terpakai",
+        dibuatOleh: "Alex Lawrence",
+      };
+      creditNotes.push(note);
+      inv.kredit = jumlah;
+      post(note.tanggal, `${note.nomor} — ${note.alasan}`,
+        { tipe: "creditNote", id: note.id },
+        [
+          { akunId: acc("returPenjualan"), debit: jumlah, kredit: 0 },
+          { akunId: acc("piutang"), debit: 0, kredit: jumlah },
+        ], scope);
+    }
+
+    const sisa = inv.total - inv.terbayar - inv.kredit;
+    const todayIso = isoDate(today);
+    if (sisa <= 0) inv.status = "Lunas";
+    else if (inv.jatuhTempo < todayIso) inv.status = "Jatuh Tempo";
+    else if (inv.terbayar > 0 || inv.kredit > 0) inv.status = "Sebagian";
+    else inv.status = "Terbit";
   });
+
+  // Opening equity, so the balance sheet does not start lopsided.
+  const modal = 250_000_000;
+  post(isoDate(addDays(today, -400)), "Setoran modal awal", { tipe: "manual", id: "opening" }, [
+    { akunId: acc("bank"), debit: modal * 0.4, kredit: 0 },
+    { akunId: acc("persediaan"), debit: modal * 0.6, kredit: 0 },
+    { akunId: accounts.find((a) => a.kode === "3-1000")!.id, debit: 0, kredit: modal },
+  ]);
+
+  return { invoices, payments, creditNotes, accounts, journals };
 }
 
 function seedReceipts(pangkalan: PangkalanEntity[]): ReceiptEntity[] {
@@ -431,6 +643,7 @@ function seedReceipts(pangkalan: PangkalanEntity[]): ReceiptEntity[] {
     const jumlah = randInt(4, 16) * 10;
     const confident = rand();
     return {
+      ...branchFor(i),
       id: `ocr-${String(i + 1).padStart(3, "0")}`,
       namaBerkas: `kwitansi-${isoDate(addDays(startOfToday(), -randInt(0, 5)))}-${i + 1}.jpg`,
       pangkalanId: confident > 0.25 ? pkl.id : null,
@@ -462,6 +675,7 @@ function seedOrders(pangkalan: PangkalanEntity[]): OrderEntity[] {
               ? "Ditolak"
               : "Selesai";
     return {
+      ...branchFor(i),
       id: `ord-${String(i + 1).padStart(3, "0")}`,
       kode: `PO-${isoDate(masuk).replace(/-/g, "")}-${String(i + 1).padStart(3, "0")}`,
       pangkalanId: pkl.id,
@@ -501,7 +715,10 @@ function seedUsers(): UserEntity[] {
         : `${ORANG[(i * 5 + 2) % ORANG.length].toLowerCase().split(" ")[0]}${i}@sidistrib.id`,
     role,
     telepon: `08${randInt(11, 99)}${randInt(1000000, 9999999)}`,
-    cabang: pick(["Bekasi Pusat", "Tambun", "Cikarang"]),
+    // Admin and manager see every branch; the rest are pinned to one.
+    branchIds: i <= 1 ? [] : [BRANCHES[i % BRANCHES.length].id],
+    scopeType: i <= 1 ? ("tenant" as const) : ("branch" as const),
+    cabang: i <= 1 ? "Semua cabang" : BRANCHES[i % BRANCHES.length].nama,
     status: i === 6 ? "Nonaktif" : i === 7 ? "Diundang" : "Aktif",
     terakhirMasuk:
       i === 7 ? undefined : atTime(addDays(startOfToday(), -randInt(0, 9)), "08:32"),
@@ -531,6 +748,105 @@ function seedProducts(): ProductEntity[] {
   }));
 }
 
+/** Defaults for every configurable block, also used when migrating old data. */
+export const DEFAULT_NUMBERING: NumberingEntity = {
+  suratJalan: "SJ",
+  invoice: "INV",
+  rencana: "RD",
+  pesanan: "PO",
+  sertakanTanggal: true,
+};
+
+export const DEFAULT_OPERATIONS: OperationsEntity = {
+  // Six-day week: the agency does not dispatch on Sunday.
+  hariKerja: [1, 2, 3, 4, 5, 6],
+  durasiSinggahMenit: 90,
+  leadTimeHari: 14,
+};
+
+export const DEFAULT_NOTIFICATIONS: NotificationSettings = {
+  rules: {
+    saExpiry: {
+      aktif: true,
+      ambang: 7,
+      penerima: ["admin", "manager"],
+      kanal: ["app"],
+    },
+    quotaLow: {
+      aktif: true,
+      ambang: 95,
+      penerima: ["admin", "manager"],
+      kanal: ["app"],
+    },
+    stockLow: {
+      aktif: true,
+      ambang: 100,
+      penerima: ["admin", "staff"],
+      kanal: ["app"],
+    },
+    paymentPending: {
+      aktif: true,
+      ambang: 2,
+      penerima: ["finance", "admin"],
+      kanal: ["app", "email"],
+    },
+    deliveryDelay: {
+      aktif: false,
+      ambang: 60,
+      penerima: ["admin", "staff"],
+      kanal: ["app", "whatsapp"],
+    },
+    planUnconfirmed: {
+      aktif: true,
+      ambang: 17,
+      penerima: ["admin", "staff"],
+      kanal: ["app"],
+    },
+    orderPending: {
+      aktif: true,
+      ambang: 5,
+      penerima: ["manager", "staff"],
+      kanal: ["app"],
+    },
+  },
+  whatsapp: {
+    aktif: true,
+    nomorPengirim: "0811-9000-142",
+    templatePengingat:
+      "Halo {pangkalan}, pengiriman {jumlah} tabung dijadwalkan {tanggal} pukul {jam}. Mohon siapkan penerimaan.",
+  },
+  email: { aktif: true, pengirim: "ops@sidistrib.id" },
+};
+
+function seedSpbe(): SpbeEntity[] {
+  return SPBE.map((nama, i) => ({
+    id: `spbe-${String(i + 1).padStart(3, "0")}`,
+    kode: `SPBE-${String(i + 1).padStart(3, "0")}`,
+    nama,
+    alamat: `Jl. ${pick(["Industri Raya", "Bypass", "Cikarang Utama", "Raya Tambun"])} No. ${randInt(1, 90)}`,
+    penanggungJawab: ORANG[(i * 7 + 3) % ORANG.length],
+    telepon: `021-${randInt(700, 899)}-${randInt(1000, 9999)}`,
+    aktif: true,
+  }));
+}
+
+function seedBankAccounts(): BankAccountEntity[] {
+  const rows: Array<[BankNameEntity, string]> = [
+    ["BCA", "Bekasi Timur"],
+    ["Mandiri", "Bekasi Cyber Park"],
+    ["BRI", "Tambun"],
+  ];
+  return rows.map(([bank, cabang], i) => ({
+    id: `bank-${String(i + 1).padStart(3, "0")}`,
+    bank,
+    nomorRekening: `${randInt(100, 999)}-${randInt(100000, 999999)}-${randInt(10, 99)}`,
+    atasNama: "PT Sinar Distribusi Nusantara",
+    cabang,
+    utama: i === 0,
+    aktif: true,
+  }));
+}
+
 function seedSettings(): SettingsEntity {
   return {
     namaPerusahaan: "PT Sinar Distribusi Nusantara",
@@ -543,19 +859,9 @@ function seedSettings(): SettingsEntity {
     jamOperasionalSelesai: "18:00",
     hargaPerTabung: HARGA_PER_TABUNG,
     targetHarian: 1400,
-    reminder: {
-      saExpiry: true,
-      stockLow: true,
-      paymentPending: true,
-      deliveryDelay: false,
-      stockThresholdPct: 20,
-    },
-    whatsapp: {
-      aktif: true,
-      nomorPengirim: "0811-9000-142",
-      templatePengingat:
-        "Halo {pangkalan}, pengiriman {jumlah} tabung dijadwalkan {tanggal} pukul {jam}. Mohon siapkan penerimaan.",
-    },
+    notifikasi: structuredClone(DEFAULT_NOTIFICATIONS),
+    penomoran: { ...DEFAULT_NUMBERING },
+    operasi: { ...DEFAULT_OPERATIONS },
     tema: "sistem",
   };
 }
@@ -565,10 +871,15 @@ function seedNotifications(
   payments: PaymentEntity[],
   deliveries: DeliveryEntity[],
   products: ProductEntity[],
+  settings: SettingsEntity,
 ): NotificationEntity[] {
   const out: NotificationEntity[] = [];
-  const push = (n: Omit<NotificationEntity, "id">) =>
+  // Seeded alerts obey the same switches as live ones, so a rule that starts
+  // switched off does not arrive with history behind it.
+  const push = (n: Omit<NotificationEntity, "id">) => {
+    if (n.rule && !settings.notifikasi.rules[n.rule]?.aktif) return;
     out.push({ id: `ntf-${String(out.length + 1).padStart(3, "0")}`, ...n });
+  };
 
   const limitSa = sas.find((s) => s.status === "Limit");
   if (limitSa) {
@@ -579,6 +890,7 @@ function seedNotifications(
       createdAt: atTime(startOfToday(), "07:10"),
       isRead: false,
       href: "/sa",
+      rule: "quotaLow",
     });
   }
 
@@ -587,10 +899,11 @@ function seedNotifications(
     push({
       type: "Pengingat",
       title: `${pending.length} pembayaran menunggu verifikasi`,
-      message: `Total ${pending.reduce((s, p) => s + p.nominal, 0).toLocaleString("id-ID")} rupiah belum diverifikasi tim keuangan.`,
+      message: `Total ${pending.reduce((s, p) => s + p.jumlah, 0).toLocaleString("id-ID")} rupiah belum diverifikasi tim keuangan.`,
       createdAt: atTime(startOfToday(), "08:00"),
       isRead: false,
       href: "/payments",
+      rule: "paymentPending",
     });
   }
 
@@ -605,6 +918,7 @@ function seedNotifications(
       createdAt: atTime(startOfToday(), "11:20"),
       isRead: false,
       href: "/monitoring",
+      rule: "deliveryDelay",
     });
   }
 
@@ -617,6 +931,7 @@ function seedNotifications(
       createdAt: atTime(addDays(startOfToday(), -1), "16:45"),
       isRead: false,
       href: "/products",
+      rule: "stockLow",
     });
   }
 
@@ -636,6 +951,7 @@ function seedNotifications(
     createdAt: atTime(startOfToday(), "13:30"),
     isRead: false,
     href: "/distribution",
+      rule: "planUnconfirmed",
   });
 
   push({
@@ -661,19 +977,28 @@ export function createSeedDatabase(): Database {
     drivers,
     scheduleAgreements,
   );
-  const payments = seedPayments(deliveries, pangkalan);
-  const receipts = seedReceipts(pangkalan);
   const products = seedProducts();
+  const settings = seedSettings();
+  const { invoices, payments, creditNotes, accounts, journals } = seedReceivables(
+    deliveries,
+    pangkalan,
+    products,
+    settings,
+  );
+  const receipts = seedReceipts(pangkalan);
   const notifications = seedNotifications(
     scheduleAgreements,
     payments,
     deliveries,
     products,
+    settings,
   );
 
   return {
     version: DB_VERSION,
     seededAt: new Date().toISOString(),
+    tenant: TENANT,
+    branches: BRANCHES,
     pangkalan,
     drivers,
     scheduleAgreements,
@@ -687,6 +1012,12 @@ export function createSeedDatabase(): Database {
     users: seedUsers(),
     products,
     orders: seedOrders(pangkalan),
-    settings: seedSettings(),
+    spbe: seedSpbe(),
+    bankAccounts: seedBankAccounts(),
+    accounts,
+    journals,
+    invoices,
+    creditNotes,
+    settings,
   };
 }

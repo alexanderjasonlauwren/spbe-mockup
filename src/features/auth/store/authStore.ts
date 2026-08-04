@@ -1,6 +1,7 @@
+import { scopedDb } from "@/mocks/scope";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { getDb, latency, mutate } from "@/mocks/db";
+import { latency, mutate } from "@/mocks/db";
 import { PERMISSIONS } from "@/features/rbac/permissions";
 import type { User, UserRole } from "@/types/auth";
 
@@ -99,7 +100,7 @@ export const useAuthStore = create<AuthState>()(
           throw new Error("Kata sandi minimal 6 karakter.");
         }
 
-        const account = getDb().users.find(
+        const account = scopedDb().users.find(
           (u) => u.email.toLowerCase() === email.trim().toLowerCase(),
         );
 
@@ -124,6 +125,8 @@ export const useAuthStore = create<AuthState>()(
           role: account.role,
           permissions: ROLE_PERMISSIONS[account.role] ?? [],
           branch: account.cabang,
+          branchIds: account.branchIds ?? [],
+          scopeType: account.scopeType ?? "tenant",
           phone: account.telepon,
         };
 

@@ -1,4 +1,5 @@
-import { getDb, latency } from "@/mocks/db";
+import { scopedDb } from "@/mocks/scope";
+import { latency } from "@/mocks/db";
 import { deletePangkalan, savePangkalan } from "@/mocks/rules";
 import { exportCsv, timestampSuffix } from "@/lib/export";
 import { isoDate, startOfToday } from "@/mocks/seed";
@@ -20,14 +21,17 @@ function monthStart() {
 }
 
 function toView(p: PangkalanEntity): PangkalanView {
-  const db = getDb();
+  const db = scopedDb();
   const from = monthStart();
   const mine = db.deliveries.filter((d) => d.pangkalanId === p.id);
   const terpakai = mine
     .filter((d) => d.tanggal >= from)
     .reduce((s, d) => s + d.realisasi, 0);
-  const tagihan = db.payments.filter(
-    (x) => x.pangkalanId === p.id && x.status === "Menunggu Verifikasi",
+  const tagihan = db.invoices.filter(
+    (x) =>
+      x.pangkalanId === p.id &&
+      x.status !== "Batal" &&
+      x.total - x.terbayar - x.kredit > 0,
   );
 
   return {
@@ -35,7 +39,7 @@ function toView(p: PangkalanEntity): PangkalanView {
     terpakaiBulanIni: terpakai,
     sisaKuota: Math.max(0, p.kuotaBulanan - terpakai),
     tagihanTertunda: tagihan.length,
-    nilaiTertunda: tagihan.reduce((s, x) => s + x.nominal, 0),
+    nilaiTertunda: tagihan.reduce((s, x) => s + (x.total - x.terbayar - x.kredit), 0),
     pengirimanTerakhir: mine
       .filter((d) => d.status === "Selesai")
       .sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0]?.tanggal,
@@ -48,7 +52,7 @@ export async function getPangkalanList(filters?: {
   kecamatan?: string;
 }): Promise<PangkalanView[]> {
   await latency("read");
-  return getDb()
+  return scopedDb()
     .pangkalan.map(toView)
     .filter((p) => {
       if (filters?.status && filters.status !== "Semua" && p.status !== filters.status)
@@ -71,7 +75,7 @@ export async function getPangkalanList(filters?: {
 
 export async function getPangkalanDetail(id: string): Promise<PangkalanView> {
   await latency("read");
-  const p = getDb().pangkalan.find((x) => x.id === id);
+  const p = scopedDb().pangkalan.find((x) => x.id === id);
   if (!p) throw new Error("Pangkalan tidak ditemukan.");
   return toView(p);
 }
@@ -79,7 +83,7 @@ export async function getPangkalanDetail(id: string): Promise<PangkalanView> {
 /** Recent surat jalan for one outlet, shown on its detail page. */
 export async function getPangkalanHistory(id: string, limit = 10) {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   return db.deliveries
     .filter((d) => d.pangkalanId === id)
     .sort((a, b) => b.tanggal.localeCompare(a.tanggal))
@@ -108,7 +112,7 @@ export async function removePangkalan(id: string) {
 
 export async function getKecamatanOptions(): Promise<string[]> {
   await latency("read");
-  return [...new Set(getDb().pangkalan.map((p) => p.kecamatan))].sort();
+  return [...new Set(scopedDb().pangkalan.map((p) => p.kecamatan))].sort();
 }
 
 export async function exportPangkalan() {

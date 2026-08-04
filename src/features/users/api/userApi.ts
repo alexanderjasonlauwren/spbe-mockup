@@ -1,23 +1,28 @@
-import { getDb, latency } from "@/mocks/db";
+import { scopedDb } from "@/mocks/scope";
+import { latency } from "@/mocks/db";
 import { deleteUser, saveUser } from "@/mocks/rules";
 import { exportCsv, timestampSuffix } from "@/lib/export";
 import type { UserEntity, UserStatusEntity } from "@/mocks/types";
+import type { UserRole } from "@/types/auth";
 
 /** What each role may do, shown on the access page so it is not a mystery. */
-export const ROLE_SUMMARY: Record<UserEntity["role"], string> = {
+// Keyed on the full role union so anything holding a UserRole can label it.
+export const ROLE_SUMMARY: Record<UserRole, string> = {
   admin: "Akses penuh, termasuk pengaturan sistem dan manajemen pengguna.",
   manager: "Menyetujui pesanan, mengonfirmasi rencana, dan membaca semua laporan.",
   finance: "Memverifikasi pembayaran, meninjau kwitansi, dan mengunduh laporan keuangan.",
   staff: "Menyusun rencana distribusi dan memperbarui status pengiriman.",
   viewer: "Hanya membaca. Tidak dapat mengubah data apa pun.",
+  driver: "Akses lapangan: melihat rute dan memperbarui status pengiriman miliknya.",
 };
 
-export const ROLE_LABEL: Record<UserEntity["role"], string> = {
+export const ROLE_LABEL: Record<UserRole, string> = {
   admin: "Admin",
   manager: "Manajer",
   finance: "Keuangan",
   staff: "Staf Operasional",
   viewer: "Peninjau",
+  driver: "Driver",
 };
 
 export async function getUsers(filters?: {
@@ -26,7 +31,7 @@ export async function getUsers(filters?: {
   status?: UserStatusEntity | "Semua";
 }): Promise<UserEntity[]> {
   await latency("read");
-  return getDb()
+  return scopedDb()
     .users.filter((u) => {
       if (filters?.role && filters.role !== "Semua" && u.role !== filters.role) return false;
       if (filters?.status && filters.status !== "Semua" && u.status !== filters.status)
@@ -80,7 +85,7 @@ export async function getAuditTrail(filters?: {
   limit?: number;
 }) {
   await latency("read");
-  return getDb()
+  return scopedDb()
     .audit.filter((a) => {
       if (filters?.actor && a.actor !== filters.actor) return false;
       if (filters?.entity && a.entity !== filters.entity) return false;

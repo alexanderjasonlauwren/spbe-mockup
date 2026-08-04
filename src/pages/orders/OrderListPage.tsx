@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -76,13 +77,13 @@ export function OrderListPage() {
   });
 
   const orders = useQuery({
-    queryKey: ["orders", tab, search],
+    queryKey: [...scopeKey(), "orders", tab, search],
     queryFn: () => getOrders({ status: tab, search }),
   });
-  const totals = useQuery({ queryKey: ["order-totals"], queryFn: getOrderTotals });
-  const plans = useQuery({ queryKey: ["schedulable-plans"], queryFn: getSchedulablePlans });
+  const totals = useQuery({ queryKey: [...scopeKey(), "order-totals"], queryFn: getOrderTotals });
+  const plans = useQuery({ queryKey: [...scopeKey(), "schedulable-plans"], queryFn: getSchedulablePlans });
   const pangkalan = useQuery({
-    queryKey: ["pangkalan-options"],
+    queryKey: [...scopeKey(), "pangkalan-options"],
     queryFn: getPangkalanOptions,
   });
 

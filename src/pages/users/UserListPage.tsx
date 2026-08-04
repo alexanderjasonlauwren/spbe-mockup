@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download, History, Pencil, Trash2, UserPlus, Users } from "lucide-react";
@@ -58,11 +59,11 @@ export function UserListPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
   const list = useQuery({
-    queryKey: ["users", search, role],
+    queryKey: [...scopeKey(), "users", search, role],
     queryFn: () => getUsers({ search, role }),
   });
   const audit = useQuery({
-    queryKey: ["audit-trail"],
+    queryKey: [...scopeKey(), "audit-trail"],
     queryFn: () => getAuditTrail({ limit: 40 }),
   });
 

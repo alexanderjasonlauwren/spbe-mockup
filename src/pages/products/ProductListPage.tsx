@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -41,7 +42,7 @@ export function ProductListPage() {
   const [alasan, setAlasan] = useState("");
 
   const list = useQuery({
-    queryKey: ["products", search, filter],
+    queryKey: [...scopeKey(), "products", search, filter],
     queryFn: () =>
       getProducts({
         search,
@@ -49,7 +50,7 @@ export function ProductListPage() {
         onlyActive: filter === "Aktif",
       }),
   });
-  const summary = useQuery({ queryKey: ["stock-summary"], queryFn: getStockSummary });
+  const summary = useQuery({ queryKey: [...scopeKey(), "stock-summary"], queryFn: getStockSummary });
 
   const deleteMutation = useDeskMutation({
     mutationFn: (id: string) => removeProduct(id),

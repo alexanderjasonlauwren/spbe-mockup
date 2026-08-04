@@ -1,4 +1,5 @@
-import { getDb, latency, mutate, nextId, recordAudit } from "@/mocks/db";
+import { latency, mutate, nextId, recordAudit } from "@/mocks/db";
+import { stampScope, scopedDb } from "@/mocks/scope";
 import { rejectReceipt, validateReceipt } from "@/mocks/rules";
 import { isoDate, startOfToday } from "@/mocks/seed";
 import type { BankNameEntity, ReceiptEntity } from "@/mocks/types";
@@ -24,7 +25,7 @@ export interface ReceiptView {
 }
 
 function toView(r: ReceiptEntity): ReceiptView {
-  const db = getDb();
+  const db = scopedDb();
   return {
     id: r.id,
     namaBerkas: r.namaBerkas,
@@ -41,7 +42,7 @@ function toView(r: ReceiptEntity): ReceiptView {
     diunggahPada: r.diunggahPada,
     ditinjauOleh: r.ditinjauOleh,
     ditinjauPada: r.ditinjauPada,
-    kodePembayaran: db.payments.find((p) => p.id === r.paymentId)?.kode,
+    kodePembayaran: db.payments.find((p) => p.id === r.paymentId)?.nomor,
   };
 }
 
@@ -49,7 +50,7 @@ export async function getReceipts(
   status?: ReceiptEntity["status"],
 ): Promise<ReceiptView[]> {
   await latency("read");
-  return getDb()
+  return scopedDb()
     .receipts.filter((r) => !status || r.status === status)
     .map(toView)
     .sort((a, b) => b.diunggahPada.localeCompare(a.diunggahPada));
@@ -63,7 +64,7 @@ export async function getReceipts(
 export async function uploadReceipt(file: File): Promise<ReceiptView> {
   await latency("upload");
 
-  const db = getDb();
+  const db = scopedDb();
   const aktif = db.pangkalan.filter((p) => p.status === "Aktif");
   const confidence = 0.58 + Math.random() * 0.41;
   const recognised = confidence > 0.78;
@@ -71,6 +72,7 @@ export async function uploadReceipt(file: File): Promise<ReceiptView> {
 
   return mutate((database) => {
     const receipt: ReceiptEntity = {
+      ...stampScope({}),
       id: nextId("ocr"),
       namaBerkas: file.name,
       pangkalanId: recognised
@@ -118,7 +120,7 @@ export async function declineReceipt(id: string, alasan: string): Promise<Receip
 
 export async function getOcrSummary() {
   await latency("read");
-  const receipts = getDb().receipts;
+  const receipts = scopedDb().receipts;
   const reviewed = receipts.filter((r) => r.status !== "Menunggu Review");
   return {
     menungguReview: receipts.filter((r) => r.status === "Menunggu Review").length,

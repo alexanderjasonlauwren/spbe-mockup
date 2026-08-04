@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -68,7 +69,7 @@ export function DriverPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
   const list = useQuery({
-    queryKey: ["drivers", search, status],
+    queryKey: [...scopeKey(), "drivers", search, status],
     queryFn: () => getDrivers({ search, status }),
   });
 

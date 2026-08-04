@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
@@ -5,13 +6,14 @@ import {
   clearReadNotifications,
   deleteNotification,
   getNotifications,
-  getReminderSettings,
+  getNotificationSettings,
   markAllAsRead,
   markAsRead,
   markAsUnread,
-  saveReminderSettings,
+  saveNotificationSettings,
+  sendTestNotification,
 } from "../api/notificationApi";
-import type { NotificationType, ReminderSettings } from "../types";
+import type { NotificationSettings, NotificationType } from "../types";
 
 type FilterType = "Semua" | "Belum dibaca" | NotificationType;
 
@@ -19,13 +21,13 @@ export function useNotification() {
   const [activeFilter, setActiveFilter] = useState<FilterType>("Semua");
 
   const notifications = useQuery({
-    queryKey: ["notifications"],
+    queryKey: [...scopeKey(), "notifications"],
     queryFn: getNotifications,
   });
 
-  const reminderSettings = useQuery({
-    queryKey: ["reminder-settings"],
-    queryFn: getReminderSettings,
+  const notificationSettings = useQuery({
+    queryKey: [...scopeKey(), "notification-settings"],
+    queryFn: getNotificationSettings,
   });
 
   const markAsReadMutation = useDeskMutation({
@@ -63,9 +65,18 @@ export function useNotification() {
   });
 
   const saveSettingsMutation = useDeskMutation({
-    mutationFn: (settings: ReminderSettings) => saveReminderSettings(settings),
-    errorTitle: "Gagal menyimpan aturan pengingat",
-    success: "Aturan pengingat disimpan",
+    mutationFn: (settings: NotificationSettings) => saveNotificationSettings(settings),
+    errorTitle: "Gagal menyimpan aturan notifikasi",
+    success: "Aturan notifikasi disimpan",
+  });
+
+  const testMutation = useDeskMutation({
+    mutationFn: (channel: "whatsapp" | "email") => sendTestNotification(channel),
+    errorTitle: "Pesan uji gagal dikirim",
+    success: (r) => ({
+      title: "Pesan uji terkirim",
+      description: `Dikirim ke ${r.tujuan}. Pada integrasi nyata, pesan ini masuk ke perangkat penerima.`,
+    }),
   });
 
   const all = notifications.data ?? [];
@@ -89,8 +100,9 @@ export function useNotification() {
     markAllAsReadMutation,
     deleteMutation,
     clearReadMutation,
-    reminderSettings: reminderSettings.data,
-    isLoadingSettings: reminderSettings.isLoading,
+    notificationSettings: notificationSettings.data,
+    isLoadingSettings: notificationSettings.isLoading,
     saveSettingsMutation,
+    testMutation,
   };
 }

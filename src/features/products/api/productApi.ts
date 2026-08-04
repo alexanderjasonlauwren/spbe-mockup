@@ -1,4 +1,5 @@
-import { getDb, latency } from "@/mocks/db";
+import { scopedDb } from "@/mocks/scope";
+import { latency } from "@/mocks/db";
 import { adjustStock, deleteProduct, saveProduct } from "@/mocks/rules";
 import { exportCsv, timestampSuffix } from "@/lib/export";
 import type { ProductEntity } from "@/mocks/types";
@@ -28,7 +29,7 @@ export async function getProducts(filters?: {
   onlyActive?: boolean;
 }): Promise<ProductView[]> {
   await latency("read");
-  return getDb()
+  return scopedDb()
     .products.map(toView)
     .filter((p) => {
       if (filters?.onlyLowStock && !p.stokRendah) return false;
@@ -44,7 +45,7 @@ export async function getProducts(filters?: {
 
 export async function getProductDetail(id: string): Promise<ProductView> {
   await latency("read");
-  const p = getDb().products.find((x) => x.id === id);
+  const p = scopedDb().products.find((x) => x.id === id);
   if (!p) throw new Error("Produk tidak ditemukan.");
   return toView(p);
 }
@@ -66,7 +67,7 @@ export async function changeStock(id: string, delta: number, alasan: string) {
 
 export async function getStockSummary() {
   await latency("read");
-  const products = getDb().products.map(toView);
+  const products = scopedDb().products.map(toView);
   return {
     total: products.length,
     aktif: products.filter((p) => p.aktif).length,

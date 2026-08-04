@@ -1,4 +1,5 @@
-import { getDb, latency } from "@/mocks/db";
+import { scopedDb } from "@/mocks/scope";
+import { latency } from "@/mocks/db";
 import { updateDeliveryStatus } from "@/mocks/rules";
 import { DEPOT } from "@/mocks/seed";
 import { printDocument } from "@/lib/export";
@@ -14,7 +15,7 @@ export async function getMonitoringSnapshot(dateRange: {
   to: string;
 }): Promise<MonitoringSnapshot> {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
 
   const drops = db.deliveries
     .filter((d) => d.tanggal >= dateRange.from && d.tanggal <= dateRange.to)
@@ -164,7 +165,7 @@ export async function setDeliveryStatus(input: {
 /** Prints the surat jalan carried with the load. */
 export async function printSuratJalan(deliveryId: string): Promise<void> {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   const d = db.deliveries.find((x) => x.id === deliveryId);
   if (!d) throw new Error("Surat jalan tidak ditemukan.");
 

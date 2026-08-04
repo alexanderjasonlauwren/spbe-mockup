@@ -7,8 +7,16 @@
  * monitoring board, and raises invoices that finance later verifies.
  */
 
-import { createSeedDatabase, DB_VERSION, isoDate, startOfToday } from "./seed";
-import type { AuditEntry, Database } from "./types";
+import {
+  createSeedDatabase,
+  DB_VERSION,
+  DEFAULT_NOTIFICATIONS,
+  DEFAULT_NUMBERING,
+  DEFAULT_OPERATIONS,
+  isoDate,
+  startOfToday,
+} from "./seed";
+import type { AuditEntry, Database, ReminderRuleKey } from "./types";
 
 const STORAGE_KEY = "sidistrib:db:v1";
 
@@ -30,10 +38,33 @@ function read(): Database | null {
     if (isoDate(new Date(parsed.seededAt)) !== isoDate(startOfToday())) {
       return null;
     }
-    return parsed;
+    return migrate(parsed);
   } catch {
     return null;
   }
+}
+
+/**
+ * Fills in anything a stored database predates.
+ *
+ * Cheaper for the user than bumping the version: config added after they
+ * started clicking around appears with its defaults instead of wiping the work
+ * they have already done in the session.
+ */
+function migrate(db: Database): Database {
+  db.spbe ??= [];
+  db.bankAccounts ??= [];
+
+  const s = db.settings as Partial<Database["settings"]>;
+  s.penomoran ??= { ...DEFAULT_NUMBERING };
+  s.operasi ??= { ...DEFAULT_OPERATIONS };
+  s.notifikasi ??= structuredClone(DEFAULT_NOTIFICATIONS);
+
+  // A rule added after this database was stored still needs its default.
+  for (const key of Object.keys(DEFAULT_NOTIFICATIONS.rules) as ReminderRuleKey[]) {
+    s.notifikasi.rules[key] ??= { ...DEFAULT_NOTIFICATIONS.rules[key] };
+  }
+  return db;
 }
 
 function write(next: Database) {
@@ -142,6 +173,12 @@ export function recordAudit(
   return row;
 }
 
+/**
+ * Raises a notification, unless the rule behind it is switched off.
+ *
+ * Every alert names the rule that produced it, so the switches on the
+ * Notifikasi page actually gate what arrives rather than just being stored.
+ */
 export function notify(
   database: Database,
   n: {
@@ -149,12 +186,23 @@ export function notify(
     title: string;
     message: string;
     href?: string;
+    /** Omit for system messages that are not governed by a rule. */
+    rule?: ReminderRuleKey;
   },
 ) {
+  if (n.rule) {
+    const rule = database.settings.notifikasi?.rules?.[n.rule];
+    if (rule && !rule.aktif) return;
+  }
+
   database.notifications.unshift({
     id: nextId("ntf"),
     createdAt: new Date().toISOString(),
     isRead: false,
-    ...n,
+    type: n.type,
+    title: n.title,
+    message: n.message,
+    href: n.href,
+    rule: n.rule,
   });
 }

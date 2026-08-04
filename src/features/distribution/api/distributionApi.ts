@@ -1,4 +1,5 @@
-import { getDb, latency } from "@/mocks/db";
+import { scopedDb } from "@/mocks/scope";
+import { latency } from "@/mocks/db";
 import {
   cancelPlan,
   confirmPlan as confirmPlanRule,
@@ -7,6 +8,7 @@ import {
   scheduleOrders,
 } from "@/mocks/rules";
 import { printDocument } from "@/lib/export";
+import { pangkalanExposure } from "@/mocks/ar";
 import { isoDate, startOfToday } from "@/mocks/seed";
 import type { PlanEntity } from "@/mocks/types";
 import type {
@@ -17,7 +19,7 @@ import type {
 } from "../types";
 
 function toPlanView(plan: PlanEntity): DistributionPlan {
-  const db = getDb();
+  const db = scopedDb();
   const rows = db.planRows.filter((r) => r.planId === plan.id);
   const sa = db.scheduleAgreements.find((s) => s.id === plan.saId);
 
@@ -41,7 +43,7 @@ function toPlanView(plan: PlanEntity): DistributionPlan {
 
 export async function getPlanList(): Promise<DistributionPlan[]> {
   await latency("read");
-  return getDb()
+  return scopedDb()
     .plans.slice()
     .sort((a, b) => b.tanggal.localeCompare(a.tanggal))
     .map(toPlanView);
@@ -49,7 +51,7 @@ export async function getPlanList(): Promise<DistributionPlan[]> {
 
 export async function getPlanDetail(planId: string): Promise<PlanRow[]> {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   const monthStart = isoDate(
     new Date(startOfToday().getFullYear(), startOfToday().getMonth(), 1),
   );
@@ -63,10 +65,9 @@ export async function getPlanDetail(planId: string): Promise<PlanRow[]> {
       const takenThisMonth = db.deliveries
         .filter((d) => d.pangkalanId === r.pangkalanId && d.tanggal >= monthStart)
         .reduce((s, d) => s + d.target, 0);
-      const invoice = db.payments.find(
-        (p) =>
-          p.pangkalanId === r.pangkalanId && p.status === "Menunggu Verifikasi",
-      );
+      // Credit standing, not "is there an unverified transfer" — this column
+      // is what tells the planner a stop is about to be refused.
+      const exp = pangkalanExposure(db, r.pangkalanId);
 
       return {
         id: r.id,
@@ -77,8 +78,11 @@ export async function getPlanDetail(planId: string): Promise<PlanRow[]> {
         driverId: r.driverId,
         driver: driver?.nama ?? "Belum ditetapkan",
         jamPengiriman: r.jamPengiriman,
-        statusBayar: invoice ? "Belum Lunas" : "Lunas",
+        statusBayar: exp.terblokir ? "Belum Lunas" : "Lunas",
         sisaKuotaPangkalan: Math.max(0, (pkl?.kuotaBulanan ?? 0) - takenThisMonth),
+        piutang: exp.outstanding,
+        piutangJatuhTempo: exp.jatuhTempo,
+        alasanBlokir: exp.alasan,
       } satisfies PlanRow;
     });
 }
@@ -121,7 +125,7 @@ export async function addApprovedOrders(planId: string, orderIds: string[]) {
 
 export async function getPangkalanOptions(): Promise<PlanOption[]> {
   await latency("read");
-  return getDb()
+  return scopedDb()
     .pangkalan.filter((p) => p.status === "Aktif")
     .sort((a, b) => a.nama.localeCompare(b.nama))
     .map((p) => ({
@@ -133,7 +137,7 @@ export async function getPangkalanOptions(): Promise<PlanOption[]> {
 
 export async function getDriverOptions(planId: string): Promise<DriverOption[]> {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   const rows = db.planRows.filter((r) => r.planId === planId);
 
   return db.drivers.map((d) => ({
@@ -152,7 +156,7 @@ export async function getDriverOptions(planId: string): Promise<DriverOption[]> 
 export async function getActiveSaOptions(): Promise<PlanOption[]> {
   await latency("read");
   const today = isoDate(startOfToday());
-  return getDb()
+  return scopedDb()
     .scheduleAgreements.filter(
       (s) => s.status !== "Draft" && s.periodeBerakhir >= today,
     )
@@ -167,7 +171,7 @@ export async function getActiveSaOptions(): Promise<PlanOption[]> {
 /** Prints the route sheet handed to drivers at the depot. */
 export async function printRouteSheet(planId: string): Promise<void> {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   const plan = db.plans.find((p) => p.id === planId);
   if (!plan) throw new Error("Rencana distribusi tidak ditemukan.");
 

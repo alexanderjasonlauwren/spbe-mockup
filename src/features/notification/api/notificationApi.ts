@@ -1,9 +1,10 @@
-import { getDb, latency, mutate, recordAudit } from "@/mocks/db";
-import type { Notification, ReminderSettings } from "../types";
+import { scopedDb } from "@/mocks/scope";
+import { latency, mutate, recordAudit } from "@/mocks/db";
+import type { Notification, NotificationSettings } from "../types";
 
 export async function getNotifications(): Promise<Notification[]> {
   await latency("read");
-  return getDb()
+  return scopedDb()
     .notifications.slice()
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .map((n) => ({
@@ -14,12 +15,13 @@ export async function getNotifications(): Promise<Notification[]> {
       timestamp: n.createdAt,
       isRead: n.isRead,
       href: n.href,
+      rule: n.rule,
     }));
 }
 
 export async function getUnreadCount(): Promise<number> {
   await latency("read");
-  return getDb().notifications.filter((n) => !n.isRead).length;
+  return scopedDb().notifications.filter((n) => !n.isRead).length;
 }
 
 export async function markAsRead(id: string): Promise<void> {
@@ -63,23 +65,44 @@ export async function clearReadNotifications(): Promise<number> {
   });
 }
 
-export async function getReminderSettings(): Promise<ReminderSettings> {
+export async function getNotificationSettings(): Promise<NotificationSettings> {
   await latency("read");
-  return { ...getDb().settings.reminder };
+  return structuredClone(scopedDb().settings.notifikasi);
 }
 
-export async function saveReminderSettings(
-  settings: ReminderSettings,
-): Promise<ReminderSettings> {
+export async function saveNotificationSettings(
+  settings: NotificationSettings,
+): Promise<NotificationSettings> {
   await latency("write");
   return mutate((db) => {
-    db.settings.reminder = { ...settings };
+    db.settings.notifikasi = structuredClone(settings);
+    const aktif = Object.values(settings.rules).filter((r) => r.aktif).length;
     recordAudit(db, {
-      action: "settings.reminder",
+      action: "settings.notifications",
       entity: "Settings",
-      entityId: "reminder",
-      summary: "Memperbarui aturan pengingat otomatis.",
+      entityId: "notifikasi",
+      summary: `Memperbarui aturan notifikasi — ${aktif} dari ${
+        Object.keys(settings.rules).length
+      } aturan aktif.`,
     });
-    return { ...db.settings.reminder };
+    return structuredClone(db.settings.notifikasi);
   });
+}
+
+/** Sends a sample so the wording and sender can be checked before going live. */
+export async function sendTestNotification(channel: "whatsapp" | "email") {
+  await latency("write");
+  const { whatsapp, email } = scopedDb().settings.notifikasi;
+  if (channel === "whatsapp") {
+    if (!whatsapp.aktif) throw new Error("Kanal WhatsApp sedang nonaktif.");
+    if (!/^[0-9+\-\s]{8,}$/.test(whatsapp.nomorPengirim)) {
+      throw new Error("Nomor pengirim WhatsApp tidak valid.");
+    }
+    return { channel, tujuan: whatsapp.nomorPengirim };
+  }
+  if (!email.aktif) throw new Error("Kanal email sedang nonaktif.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.pengirim)) {
+    throw new Error("Alamat pengirim email tidak valid.");
+  }
+  return { channel, tujuan: email.pengirim };
 }

@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -51,19 +52,19 @@ export function ReportsPage() {
   const t = chartTheme(isDark);
 
   const summary = useQuery({
-    queryKey: ["report-summary", range],
+    queryKey: [...scopeKey(), "report-summary", range],
     queryFn: () => getReportSummary(range),
   });
   const series = useQuery({
-    queryKey: ["report-series", range],
+    queryKey: [...scopeKey(), "report-series", range],
     queryFn: () => getDailySeries(range),
   });
   const top = useQuery({
-    queryKey: ["report-top", range],
+    queryKey: [...scopeKey(), "report-top", range],
     queryFn: () => getTopPangkalan(range, 8),
   });
   const drivers = useQuery({
-    queryKey: ["report-drivers", range],
+    queryKey: [...scopeKey(), "report-drivers", range],
     queryFn: () => getDriverPerformance(range),
   });
 
@@ -278,7 +279,7 @@ export function ReportsPage() {
             {series.isLoading ? (
               <Skeleton className="h-[240px] w-full" />
             ) : (
-              <ResponsiveContainer width="100%" height={240}>
+              <ResponsiveContainer debounce={120} width="100%" height={240}>
                 <BarChart data={chartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                   <CartesianGrid stroke={t.grid} vertical={false} />
                   <XAxis dataKey="label" {...axisProps(isDark)} interval="preserveStartEnd" />
@@ -315,7 +316,7 @@ export function ReportsPage() {
             {series.isLoading ? (
               <Skeleton className="h-[240px] w-full" />
             ) : (
-              <ResponsiveContainer width="100%" height={240}>
+              <ResponsiveContainer debounce={120} width="100%" height={240}>
                 <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
                   <defs>
                     <linearGradient id="pendapatan" x1="0" y1="0" x2="0" y2="1">

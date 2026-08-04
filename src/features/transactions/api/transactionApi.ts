@@ -1,7 +1,8 @@
-import { getDb, latency } from "@/mocks/db";
+import { scopedDb } from "@/mocks/scope";
+import { latency } from "@/mocks/db";
 import { isoDate, startOfToday } from "@/mocks/seed";
 import { exportCsv, exportExcel, timestampSuffix, type ExcelColumn } from "@/lib/export";
-import type { DeliveryStatus, PaymentStatusEntity } from "@/mocks/types";
+import type { DeliveryStatus, InvoiceStatus } from "@/mocks/types";
 
 /**
  * One line of the finance ledger.
@@ -32,7 +33,7 @@ export interface TransactionRow {
   bank: string;
   noRekening: string;
   statusKirim: DeliveryStatus | "—";
-  statusBayar: PaymentStatusEntity | "Belum ditagih";
+  statusBayar: InvoiceStatus | "Belum ditagih";
   diverifikasiOleh: string;
   tanggalBayar: string;
   keterangan: string;
@@ -70,15 +71,16 @@ export function defaultRange() {
 }
 
 function buildRows(): TransactionRow[] {
-  const db = getDb();
+  const db = scopedDb();
   const harga = db.settings.hargaPerTabung;
 
   const pangkalanById = new Map(db.pangkalan.map((p) => [p.id, p]));
   const driverById = new Map(db.drivers.map((d) => [d.id, d]));
   const planById = new Map(db.plans.map((p) => [p.id, p]));
   const saById = new Map(db.scheduleAgreements.map((s) => [s.id, s]));
-  const paymentByDelivery = new Map(
-    db.payments.filter((p) => p.deliveryId).map((p) => [p.deliveryId!, p]),
+  // The ledger row is the delivery joined to the invoice raised against it.
+  const invoiceByDelivery = new Map(
+    db.invoices.filter((i) => i.deliveryId).map((i) => [i.deliveryId!, i]),
   );
 
   const fromDeliveries: TransactionRow[] = db.deliveries.map((d) => {
@@ -86,13 +88,13 @@ function buildRows(): TransactionRow[] {
     const drv = driverById.get(d.driverId);
     const plan = planById.get(d.planId);
     const sa = plan ? saById.get(plan.saId) : undefined;
-    const pay = paymentByDelivery.get(d.id);
+    const inv = invoiceByDelivery.get(d.id);
 
     return {
       id: d.id,
       tanggal: d.tanggal,
       suratJalan: d.kode,
-      invoice: pay?.kode ?? "—",
+      invoice: inv?.nomor ?? "—",
       rencana: plan?.kode ?? "—",
       nomorSA: sa?.nomorSA ?? "—",
       pangkalanId: d.pangkalanId,
@@ -106,28 +108,28 @@ function buildRows(): TransactionRow[] {
       target: d.target,
       realisasi: d.realisasi,
       selisih: d.realisasi - d.target,
-      nominal: pay?.nominal ?? d.realisasi * harga,
-      bank: pay?.bank ?? "—",
-      noRekening: pay?.noRekening ?? "—",
+      nominal: inv?.total ?? d.realisasi * harga,
+      bank: "—",
+      noRekening: "—",
       statusKirim: d.status,
-      statusBayar: pay?.status ?? "Belum ditagih",
-      diverifikasiOleh: pay?.diverifikasiOleh ?? "—",
-      tanggalBayar: pay?.tanggalBayar ?? "",
-      keterangan: pay?.keterangan ?? d.catatan ?? "",
+      statusBayar: inv?.status ?? "Belum ditagih",
+      diverifikasiOleh: inv?.dibuatOleh ?? "—",
+      tanggalBayar: inv?.jatuhTempo ?? "",
+      keterangan: inv?.catatan ?? d.catatan ?? "",
     };
   });
 
   // Receipts validated through OCR raise an invoice with no surat jalan behind
   // it. They are still money received, so the ledger has to carry them.
-  const standalone: TransactionRow[] = db.payments
-    .filter((p) => !p.deliveryId)
+  const standalone: TransactionRow[] = db.invoices
+    .filter((i) => !i.deliveryId)
     .map((p) => {
       const pkl = pangkalanById.get(p.pangkalanId);
       return {
         id: p.id,
-        tanggal: p.tanggalBayar.slice(0, 10),
+        tanggal: p.tanggal,
         suratJalan: "—",
-        invoice: p.kode,
+        invoice: p.nomor,
         rencana: "—",
         nomorSA: "—",
         pangkalanId: p.pangkalanId,
@@ -141,14 +143,14 @@ function buildRows(): TransactionRow[] {
         target: 0,
         realisasi: p.jumlahTabung,
         selisih: 0,
-        nominal: p.nominal,
-        bank: p.bank,
-        noRekening: p.noRekening,
+        nominal: p.total,
+        bank: "—",
+        noRekening: "—",
         statusKirim: "—" as const,
         statusBayar: p.status,
-        diverifikasiOleh: p.diverifikasiOleh ?? "—",
-        tanggalBayar: p.tanggalBayar,
-        keterangan: p.keterangan ?? "",
+        diverifikasiOleh: p.dibuatOleh,
+        tanggalBayar: p.jatuhTempo,
+        keterangan: p.catatan ?? "",
       };
     });
 
@@ -205,9 +207,9 @@ export async function getTransactionSummary(
     jumlah: rows.length,
     tabung: rows.reduce((s, r) => s + r.realisasi, 0),
     nilai: rows.reduce((s, r) => s + r.nominal, 0),
-    terverifikasi: sumWhere("Terverifikasi"),
-    menunggu: sumWhere("Menunggu Verifikasi"),
-    ditolak: sumWhere("Ditolak"),
+    terverifikasi: sumWhere("Lunas"),
+    menunggu: sumWhere("Terbit") + sumWhere("Sebagian"),
+    ditolak: sumWhere("Jatuh Tempo"),
     belumDitagih: sumWhere("Belum ditagih"),
     pangkalan: new Set(rows.map((r) => r.pangkalanId)).size,
   };
@@ -216,7 +218,7 @@ export async function getTransactionSummary(
 /** Options for the filter bar, taken from the data actually present. */
 export async function getTransactionFilterOptions() {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   return {
     pangkalan: db.pangkalan
       .map((p) => ({ id: p.id, label: p.nama }))

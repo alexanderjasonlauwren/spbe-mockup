@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
@@ -15,12 +16,12 @@ export function useScheduleAgreement() {
   const [filters, setFilters] = useState<SAFilterParams>({});
 
   const saList = useQuery({
-    queryKey: ["sa-list", filters],
+    queryKey: [...scopeKey(), "sa-list", filters],
     queryFn: () => getSAList(filters),
   });
 
   const spbeOptions = useQuery({
-    queryKey: ["spbe-options"],
+    queryKey: [...scopeKey(), "spbe-options"],
     queryFn: getSpbeOptions,
   });
 

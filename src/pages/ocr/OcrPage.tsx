@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -79,12 +80,12 @@ export function OcrPage() {
   });
 
   const receipts = useQuery({
-    queryKey: ["receipts", tab],
+    queryKey: [...scopeKey(), "receipts", tab],
     queryFn: () => getReceipts(tab === "Semua" ? undefined : tab),
   });
-  const summary = useQuery({ queryKey: ["ocr-summary"], queryFn: getOcrSummary });
+  const summary = useQuery({ queryKey: [...scopeKey(), "ocr-summary"], queryFn: getOcrSummary });
   const pangkalan = useQuery({
-    queryKey: ["pangkalan-options"],
+    queryKey: [...scopeKey(), "pangkalan-options"],
     queryFn: getPangkalanOptions,
   });
 

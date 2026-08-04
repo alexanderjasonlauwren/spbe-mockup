@@ -1,4 +1,5 @@
-import { getDb, latency, mutate, nextId, recordAudit } from "@/mocks/db";
+import { scopedDb } from "@/mocks/scope";
+import { latency, mutate, nextId, recordAudit } from "@/mocks/db";
 import { decideOrder, scheduleOrders } from "@/mocks/rules";
 import { exportCsv, timestampSuffix } from "@/lib/export";
 import { isoDate, startOfToday } from "@/mocks/seed";
@@ -14,7 +15,7 @@ export interface OrderView extends OrderEntity {
 }
 
 function toView(o: OrderEntity): OrderView {
-  const db = getDb();
+  const db = scopedDb();
   const pkl = db.pangkalan.find((p) => p.id === o.pangkalanId);
   const from = isoDate(new Date(startOfToday().getFullYear(), startOfToday().getMonth(), 1));
   const terpakai = db.deliveries
@@ -35,7 +36,7 @@ export async function getOrders(filters?: {
   search?: string;
 }): Promise<OrderView[]> {
   await latency("read");
-  return getDb()
+  return scopedDb()
     .orders.map(toView)
     .filter((o) => {
       if (filters?.status && filters.status !== "Semua" && o.status !== filters.status)
@@ -53,7 +54,7 @@ export async function getOrders(filters?: {
 
 export async function getOrderTotals() {
   await latency("read");
-  const all = getDb().orders;
+  const all = scopedDb().orders;
   const count = (s: OrderStatus) => all.filter((o) => o.status === s).length;
   return {
     baru: count("Baru"),
@@ -112,9 +113,18 @@ export async function createOrder(input: {
 
   return mutate((db) => {
     const seq = db.orders.length + 1;
+    const pkl = db.pangkalan.find((p) => p.id === input.pangkalanId);
     const order: OrderEntity = {
+      tenantId: pkl?.tenantId ?? db.tenant.id,
+      branchId: pkl?.branchId ?? db.branches[0]?.id ?? "",
       id: nextId("ord"),
-      kode: `PO-${isoDate(startOfToday()).replace(/-/g, "")}-${String(seq).padStart(3, "0")}`,
+      kode: [
+        db.settings.penomoran.pesanan,
+        ...(db.settings.penomoran.sertakanTanggal
+          ? [isoDate(startOfToday()).replace(/-/g, "")]
+          : []),
+        String(seq).padStart(3, "0"),
+      ].join("-"),
       pangkalanId: input.pangkalanId,
       jumlahTabung: input.jumlahTabung,
       tanggalMasuk: new Date().toISOString(),
@@ -136,7 +146,7 @@ export async function createOrder(input: {
 /** Draft plans an approved order can be added to. */
 export async function getSchedulablePlans() {
   await latency("read");
-  return getDb()
+  return scopedDb()
     .plans.filter((p) => p.status === "Draft" && p.tanggal >= isoDate(startOfToday()))
     .sort((a, b) => a.tanggal.localeCompare(b.tanggal))
     .map((p) => ({ id: p.id, kode: p.kode, tanggal: p.tanggal }));

@@ -84,6 +84,12 @@ export function PlanDetailPanel({
     (d) => (loadByDriver.get(d.id) ?? 0) > d.kapasitas,
   );
   const unassigned = draft.filter((r) => !r.driverId);
+  const kreditDiblokir = draft.filter((r) => r.alasanBlokir);
+  const adaHambatan =
+    overQuota ||
+    overloaded.length > 0 ||
+    unassigned.length > 0 ||
+    kreditDiblokir.length > 0;
 
   const patchRow = (id: string, patch: Partial<PlanRow>) => {
     setDraft((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -109,6 +115,8 @@ export function PlanDetailPanel({
         jamPengiriman: `${String(hour).padStart(2, "0")}:00`,
         statusBayar: "Lunas",
         sisaKuotaPangkalan: 0,
+        piutang: 0,
+        piutangJatuhTempo: 0,
       },
     ]);
     setDirty(true);
@@ -163,11 +171,15 @@ export function PlanDetailPanel({
                 <Button
                   size="sm"
                   onClick={onConfirm}
-                  disabled={isConfirming || draft.length === 0 || dirty}
+                  disabled={
+                    isConfirming || draft.length === 0 || dirty || adaHambatan
+                  }
                   title={
                     dirty
                       ? "Simpan draf terlebih dahulu"
-                      : "Terbitkan surat jalan dan tarik kuota"
+                      : adaHambatan
+                        ? "Selesaikan hambatan di atas sebelum konfirmasi"
+                        : "Terbitkan surat jalan dan tarik kuota"
                   }
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
@@ -207,7 +219,7 @@ export function PlanDetailPanel({
       </div>
 
       {/* Blockers, stated as what to do about them. */}
-      {editable && (overQuota || overloaded.length > 0 || unassigned.length > 0) && (
+      {editable && adaHambatan && (
         <ul className="divide-y divide-line border-b border-line">
           {overQuota && (
             <Blocker>
@@ -235,6 +247,19 @@ export function PlanDetailPanel({
               konfirmasi.
             </Blocker>
           )}
+          {kreditDiblokir.map((r) => (
+              <Blocker key={`kredit-${r.id}`}>
+                {r.pangkalan} diblokir karena kredit. {r.alasanBlokir} Selesaikan
+                tagihan di{" "}
+                <Link
+                  to="/receivables"
+                  className="font-semibold text-ink underline decoration-signal decoration-2 underline-offset-2"
+                >
+                  Piutang
+                </Link>
+                , atau naikkan plafon pada data pangkalan.
+            </Blocker>
+          ))}
         </ul>
       )}
 
@@ -280,7 +305,7 @@ export function PlanDetailPanel({
                   Driver / armada
                 </th>
                 <th className="label px-3 py-2.5 text-2xs text-ink-muted" style={{ width: "8rem" }}>
-                  Pembayaran
+                  Kredit
                 </th>
                 {editable && <th style={{ width: "1%" }} />}
               </tr>
@@ -389,9 +414,14 @@ export function PlanDetailPanel({
 
                     <td className="px-3 py-2.5">
                       <StatusBadge
-                        variant={getStatusVariant(row.statusBayar)}
-                        label={row.statusBayar}
+                        variant={row.alasanBlokir ? "danger" : "success"}
+                        label={row.alasanBlokir ? "Diblokir" : "Lancar"}
                       />
+                      {row.piutang > 0 && (
+                        <span className="data mt-1 block text-2xs text-ink-muted">
+                          piutang {formatNumber(Math.round(row.piutang / 1000))} rb
+                        </span>
+                      )}
                     </td>
 
                     {editable && (

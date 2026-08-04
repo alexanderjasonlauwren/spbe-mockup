@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -36,12 +37,12 @@ export function PangkalanDetailPage() {
   const navigate = useNavigate();
 
   const detail = useQuery({
-    queryKey: ["pangkalan-detail", id],
+    queryKey: [...scopeKey(), "pangkalan-detail", id],
     queryFn: () => getPangkalanDetail(id),
   });
 
   const history = useQuery({
-    queryKey: ["pangkalan-history", id],
+    queryKey: [...scopeKey(), "pangkalan-history", id],
     queryFn: () => getPangkalanHistory(id, 12),
   });
 

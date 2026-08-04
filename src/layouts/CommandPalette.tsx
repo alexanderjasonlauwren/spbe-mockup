@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -34,7 +35,7 @@ export function CommandPalette({
   const listRef = useRef<HTMLDivElement>(null);
 
   const records = useQuery({
-    queryKey: ["palette-records"],
+    queryKey: [...scopeKey(), "palette-records"],
     queryFn: async () => {
       const db = getDb();
       return {

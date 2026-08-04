@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -10,7 +11,13 @@ import {
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelBody, PanelHeader, Skeleton } from "@/components/common/Panel";
-import { Field, SelectInput, TextInput, TextareaInput } from "@/components/common/Field";
+import {
+  Field,
+  SelectInput,
+  TextInput,
+  TextareaInput,
+  Toggle,
+} from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
 import type { PangkalanStatus } from "@/mocks/types";
 
@@ -24,6 +31,9 @@ interface FormState {
   kota: string;
   status: PangkalanStatus;
   kuotaBulanan: number;
+  termin: number;
+  batasKredit: number;
+  blokirOtomatis: boolean;
   lat: number;
   lng: number;
 }
@@ -38,6 +48,9 @@ const EMPTY: FormState = {
   kota: "Kota Bekasi",
   status: "Aktif",
   kuotaBulanan: 600,
+  termin: 7,
+  batasKredit: 0,
+  blokirOtomatis: true,
   lat: -6.24,
   lng: 107.0,
 };
@@ -51,13 +64,13 @@ export function PangkalanFormPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
   const detail = useQuery({
-    queryKey: ["pangkalan-detail", id],
+    queryKey: [...scopeKey(), "pangkalan-detail", id],
     queryFn: () => getPangkalanDetail(id!),
     enabled: isEdit,
   });
 
   const kecamatanOptions = useQuery({
-    queryKey: ["kecamatan-options"],
+    queryKey: [...scopeKey(), "kecamatan-options"],
     queryFn: getKecamatanOptions,
   });
 
@@ -74,6 +87,9 @@ export function PangkalanFormPage() {
       kota: p.kota,
       status: p.status,
       kuotaBulanan: p.kuotaBulanan,
+      termin: p.termin ?? 7,
+      batasKredit: p.batasKredit ?? 0,
+      blokirOtomatis: p.blokirOtomatis ?? true,
       lat: p.lat,
       lng: p.lng,
     });
@@ -210,8 +226,8 @@ export function PangkalanFormPage() {
           </Panel>
 
           <Panel>
-            <PanelHeader title="Kuota" />
-            <PanelBody>
+            <PanelHeader title="Kuota & kredit" />
+            <PanelBody className="space-y-4">
               <Field
                 label="Kuota bulanan"
                 htmlFor="kuota"
@@ -230,6 +246,47 @@ export function PangkalanFormPage() {
                   onChange={(e) => set("kuotaBulanan", Number(e.target.value))}
                 />
               </Field>
+
+              <Field
+                label="Termin pembayaran"
+                htmlFor="termin"
+                hint="Hari sampai tagihan jatuh tempo. Nol berarti bayar di tempat."
+              >
+                <TextInput
+                  id="termin"
+                  type="number"
+                  min={0}
+                  max={90}
+                  mono
+                  value={form.termin}
+                  onChange={(e) => set("termin", Number(e.target.value))}
+                />
+              </Field>
+
+              <Field
+                label="Plafon kredit"
+                htmlFor="plafon"
+                hint="Batas piutang berjalan dalam rupiah. Nol berarti tanpa batas."
+              >
+                <TextInput
+                  id="plafon"
+                  type="number"
+                  min={0}
+                  step={1_000_000}
+                  mono
+                  value={form.batasKredit}
+                  onChange={(e) => set("batasKredit", Number(e.target.value))}
+                />
+              </Field>
+
+              <div className="border-t border-line">
+                <Toggle
+                  label="Blokir otomatis"
+                  description="Tolak konfirmasi rencana bila outlet menunggak atau melewati plafon."
+                  checked={form.blokirOtomatis}
+                  onChange={(v) => set("blokirOtomatis", v)}
+                />
+              </div>
             </PanelBody>
           </Panel>
 

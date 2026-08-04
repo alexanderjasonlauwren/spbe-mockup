@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, IdCard, Phone, Route, Truck } from "lucide-react";
@@ -67,12 +68,12 @@ export function DriverDetailPage() {
   const navigate = useNavigate();
 
   const detail = useQuery({
-    queryKey: ["driver-detail", id],
+    queryKey: [...scopeKey(), "driver-detail", id],
     queryFn: () => getDriverDetail(id),
   });
 
   const schedule = useQuery({
-    queryKey: ["driver-schedule", id],
+    queryKey: [...scopeKey(), "driver-schedule", id],
     queryFn: () => getDriverSchedule(id),
     refetchInterval: 30_000,
   });

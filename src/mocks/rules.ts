@@ -6,8 +6,20 @@
  * them; components never do.
  */
 
-import { ApiError, mutate, nextId, notify, recordAudit } from "./db";
+import { ApiError, currentActor, mutate, nextId, notify, recordAudit } from "./db";
+import { accountByRole, postJournal } from "./ledger";
+import {
+  addDaysIso,
+  issueCreditNote as issueCreditNoteAr,
+  applyAllocation,
+  issueInvoiceForDelivery,
+  pangkalanExposure,
+  recordPayment as recordPaymentAr,
+  refreshOverdue,
+  verifyPaymentRecord,
+} from "./ar";
 import { isoDate, startOfToday } from "./seed";
+import { stampScope } from "./scope";
 import type {
   Database,
   DeliveryEntity,
@@ -17,6 +29,7 @@ import type {
   PaymentEntity,
   PlanEntity,
   PlanRowEntity,
+  InvoiceEntity,
   ProductEntity,
   ReceiptEntity,
   SAEntity,
@@ -24,6 +37,27 @@ import type {
 } from "./types";
 
 const fmt = (n: number) => n.toLocaleString("id-ID");
+
+/**
+ * Builds a document number from the configured prefix.
+ *
+ * Numbering is visible on every row and printout, so it belongs in
+ * Konfigurasi Sistem rather than scattered through this file.
+ */
+function docNumber(
+  db: Database,
+  jenis: keyof Omit<Database["settings"]["penomoran"], "sertakanTanggal">,
+  tanggal: string,
+  seq?: number,
+  pad = 3,
+): string {
+  const { penomoran } = db.settings;
+  const prefix = penomoran[jenis];
+  const parts = [prefix];
+  if (penomoran.sertakanTanggal) parts.push(tanggal.replace(/-/g, ""));
+  if (seq != null) parts.push(String(seq).padStart(pad, "0"));
+  return parts.join("-");
+}
 
 function requirePlan(db: Database, planId: ID): PlanEntity {
   const plan = db.plans.find((p) => p.id === planId);
@@ -70,6 +104,7 @@ export function createScheduleAgreement(input: {
     }
 
     const sa: SAEntity = {
+      ...stampScope({}),
       id: nextId("sa"),
       nomorSA: input.nomorSA,
       spbe: input.spbe,
@@ -151,8 +186,9 @@ export function createPlan(input: { tanggal: string; saId: ID; catatan?: string 
     }
 
     const plan: PlanEntity = {
+      ...stampScope({}),
       id: nextId("plan"),
-      kode: `RD-${input.tanggal.replace(/-/g, "")}`,
+      kode: docNumber(db, "rencana", input.tanggal),
       tanggal: input.tanggal,
       saId: input.saId,
       status: "Draft",
@@ -224,6 +260,20 @@ export function confirmPlan(planId: ID): { deliveries: number; total: number } {
       );
     }
 
+    // Credit control belongs here — refusing to load a truck for an outlet that
+    // is over its limit is the only moment the block actually saves money.
+    const diblokir = rows
+      .map((r) => ({ row: r, exp: pangkalanExposure(db, r.pangkalanId) }))
+      .filter((x) => x.exp.terblokir);
+    if (diblokir.length > 0) {
+      const names = diblokir
+        .map((x) => db.pangkalan.find((p) => p.id === x.row.pangkalanId)?.nama)
+        .filter(Boolean);
+      throw new ApiError(
+        `${names.join(", ")} diblokir karena kredit. ${diblokir[0].exp.alasan} Selesaikan tagihan atau naikkan plafon di data pangkalan.`,
+      );
+    }
+
     const total = rows.reduce((s, r) => s + r.jumlahTabung, 0);
     const sa = requireSa(db, plan.saId);
     const sisa = sa.totalKuota - sa.terpakai;
@@ -266,8 +316,11 @@ export function confirmPlan(planId: ID): { deliveries: number; total: number } {
       .sort((a, b) => a.jamPengiriman.localeCompare(b.jamPengiriman))
       .forEach((row, idx) => {
         db.deliveries.push({
+          // Follows its plan, not the active scope.
+          tenantId: plan.tenantId,
+          branchId: plan.branchId,
           id: nextId("dlv"),
-          kode: `SJ-${plan.tanggal.replace(/-/g, "")}-${String(idx + 1).padStart(2, "0")}`,
+          kode: docNumber(db, "suratJalan", plan.tanggal, idx + 1, 2),
           planId: plan.id,
           planRowId: row.id,
           pangkalanId: row.pangkalanId,
@@ -293,6 +346,7 @@ export function confirmPlan(planId: ID): { deliveries: number; total: number } {
         title: "Kuota SA hampir habis",
         message: `${sa.nomorSA} tersisa ${fmt(sa.totalKuota - sa.terpakai)} tabung setelah konfirmasi ini.`,
         href: "/sa",
+      rule: "quotaLow",
       });
     }
 
@@ -450,23 +504,9 @@ export function updateDeliveryStatus(
   });
 }
 
-/** A completed drop raises the invoice finance will later verify. */
+/** A completed drop raises the invoice finance will later collect. */
 function raiseInvoice(db: Database, d: DeliveryEntity) {
-  if (db.payments.some((p) => p.deliveryId === d.id)) return;
-  const seq = db.payments.length + 1;
-  db.payments.unshift({
-    id: nextId("pay"),
-    kode: `INV-${d.tanggal.replace(/-/g, "")}-${String(seq).padStart(3, "0")}`,
-    pangkalanId: d.pangkalanId,
-    deliveryId: d.id,
-    jumlahTabung: d.realisasi,
-    nominal: d.realisasi * db.settings.hargaPerTabung,
-    bank: "BCA",
-    noRekening: "—",
-    tanggalBayar: new Date().toISOString(),
-    status: "Menunggu Verifikasi",
-    keterangan: `Tagihan otomatis dari ${d.kode}.`,
-  });
+  issueInvoiceForDelivery(db, d.id, currentActor());
 }
 
 /* ── payments ──────────────────────────────────────────────────────────── */
@@ -477,38 +517,84 @@ export function decidePayment(
   keterangan?: string,
 ): PaymentEntity {
   return mutate((db) => {
-    const p = db.payments.find((x) => x.id === paymentId);
-    if (!p) throw new ApiError("Pembayaran tidak ditemukan.", 404);
-    if (p.status !== "Menunggu Verifikasi") {
-      throw new ApiError(`${p.kode} sudah diputuskan sebelumnya.`);
-    }
-    if (action === "reject" && !keterangan?.trim()) {
-      throw new ApiError("Alasan penolakan wajib diisi.");
-    }
+    const actor = currentActor();
+    const p = verifyPaymentRecord(db, paymentId, action, keterangan, actor);
+    const pkl = db.pangkalan.find((x) => x.id === p.pangkalanId);
 
-    p.status = action === "verify" ? "Terverifikasi" : "Ditolak";
-    if (keterangan?.trim()) p.keterangan = keterangan.trim();
-    p.diverifikasiPada = new Date().toISOString();
-
-    const entry = recordAudit(db, {
+    recordAudit(db, {
       action: `payment.${action}`,
       entity: "Payment",
       entityId: p.id,
-      summary: `${action === "verify" ? "Memverifikasi" : "Menolak"} ${p.kode} senilai Rp ${fmt(p.nominal)}.`,
+      summary: `${action === "verify" ? "Memverifikasi" : "Menolak"} ${p.nomor} senilai Rp ${fmt(p.jumlah)}.`,
     });
-    p.diverifikasiOleh = entry.actor;
 
-    const pkl = db.pangkalan.find((x) => x.id === p.pangkalanId);
     if (action === "reject") {
       notify(db, {
         type: "Alert",
-        title: "Pembayaran ditolak",
-        message: `${p.kode} dari ${pkl?.nama ?? "pangkalan"} ditolak: ${p.keterangan}`,
+        title: "Penerimaan ditolak",
+        message: `${p.nomor} dari ${pkl?.nama ?? "pangkalan"} ditolak: ${p.keterangan}`,
         href: "/payments",
+        rule: "paymentPending",
       });
     }
     return p;
   });
+}
+
+/** Records cash received, optionally applying it to invoices in one step. */
+export function createPayment(input: {
+  pangkalanId: ID;
+  jumlah: number;
+  tanggal: string;
+  bank: PaymentEntity["bank"];
+  noRekening: string;
+  rekeningTujuanId?: ID;
+  buktiTransfer?: string;
+  keterangan?: string;
+  alokasi?: { invoiceId: ID; jumlah: number }[];
+}) {
+  return mutate((db) => {
+    const actor = currentActor();
+    const p = recordPaymentAr(db, input, actor);
+    recordAudit(db, {
+      action: "payment.create",
+      entity: "Payment",
+      entityId: p.id,
+      summary: `Mencatat penerimaan ${p.nomor} senilai Rp ${fmt(p.jumlah)}.`,
+    });
+    return p;
+  });
+}
+
+export function allocatePayment(
+  paymentId: ID,
+  alokasi: { invoiceId: ID; jumlah: number }[],
+) {
+  return mutate((db) => applyAllocation(db, paymentId, alokasi, currentActor()));
+}
+
+export function createCreditNote(input: {
+  pangkalanId: ID;
+  invoiceId: ID | null;
+  jumlah: number;
+  alasan: string;
+}) {
+  return mutate((db) => {
+    const actor = currentActor();
+    const note = issueCreditNoteAr(db, input, actor);
+    recordAudit(db, {
+      action: "creditNote.create",
+      entity: "CreditNote",
+      entityId: note.id,
+      summary: `Menerbitkan nota kredit ${note.nomor} senilai Rp ${fmt(note.jumlah)} — ${note.alasan}`,
+    });
+    return note;
+  });
+}
+
+/** Recomputes overdue status; called when the finance pages load. */
+export function syncReceivables() {
+  return mutate((db) => refreshOverdue(db));
 }
 
 /* ── OCR receipts ──────────────────────────────────────────────────────── */
@@ -533,29 +619,48 @@ export function validateReceipt(
     r.status = "Tervalidasi";
     r.ditinjauPada = new Date().toISOString();
 
-    const seq = db.payments.length + 1;
-    const payment: PaymentEntity = {
-      id: nextId("pay"),
-      kode: `INV-${r.tanggalKwitansi.replace(/-/g, "")}-${String(seq).padStart(3, "0")}`,
+    // A validated scan is a billable event, so it raises a proper invoice.
+    const pkl = db.pangkalan.find((p) => p.id === r.pangkalanId);
+    const seq = db.invoices.length + 1;
+    const invoice: InvoiceEntity = {
+      tenantId: pkl?.tenantId ?? db.tenant.id,
+      branchId: pkl?.branchId ?? db.branches[0]?.id ?? "",
+      id: nextId("inv"),
+      nomor: docNumber(db, "invoice", r.tanggalKwitansi, seq),
       pangkalanId: r.pangkalanId,
       deliveryId: null,
+      tanggal: r.tanggalKwitansi,
+      jatuhTempo: addDaysIso(r.tanggalKwitansi, pkl?.termin ?? 0),
       jumlahTabung: r.jumlahTabung,
-      nominal: r.nominal,
-      bank: r.bank ?? "BCA",
-      noRekening: "—",
-      tanggalBayar: new Date(r.tanggalKwitansi).toISOString(),
-      status: "Menunggu Verifikasi",
-      buktiTransfer: r.namaBerkas,
-      keterangan: `Hasil pindai ${r.nomorKwitansi}.`,
+      hargaSatuan: r.jumlahTabung > 0 ? Math.round(r.nominal / r.jumlahTabung) : 0,
+      subtotal: r.nominal,
+      pajak: 0,
+      total: r.nominal,
+      terbayar: 0,
+      kredit: 0,
+      status: "Terbit",
+      catatan: `Hasil pindai ${r.nomorKwitansi}.`,
+      dibuatOleh: currentActor(),
     };
-    db.payments.unshift(payment);
-    r.paymentId = payment.id;
+    db.invoices.unshift(invoice);
+    postJournal(db, {
+      scope: { tenantId: invoice.tenantId, branchId: invoice.branchId },
+      tanggal: invoice.tanggal,
+      keterangan: `${invoice.nomor} — hasil pindai kwitansi`,
+      sumber: { tipe: "invoice", id: invoice.id },
+      aktor: currentActor(),
+      lines: [
+        { akunId: accountByRole(db, "piutang").id, debit: invoice.total, kredit: 0 },
+        { akunId: accountByRole(db, "pendapatan").id, debit: 0, kredit: invoice.total },
+      ],
+    });
+    r.paymentId = invoice.id;
 
     const entry = recordAudit(db, {
       action: "receipt.validate",
       entity: "Receipt",
       entityId: r.id,
-      summary: `Memvalidasi ${r.nomorKwitansi} dan menerbitkan ${payment.kode}.`,
+      summary: `Memvalidasi ${r.nomorKwitansi} dan menerbitkan ${invoice.nomor}.`,
     });
     r.ditinjauOleh = entry.actor;
     return r;
@@ -603,6 +708,7 @@ export function savePangkalan(
 
     const seq = db.pangkalan.length + 1;
     const created: PangkalanEntity = {
+      ...stampScope({}),
       id: nextId("pkl"),
       kode: input.kode?.trim() || `PKL-${String(seq).padStart(4, "0")}`,
       nama: input.nama.trim(),
@@ -615,6 +721,9 @@ export function savePangkalan(
       telepon: input.telepon ?? "",
       status: input.status ?? "Aktif",
       kuotaBulanan: input.kuotaBulanan ?? 600,
+      termin: input.termin ?? 7,
+      batasKredit: input.batasKredit ?? 0,
+      blokirOtomatis: input.blokirOtomatis ?? true,
       terdaftarPada: isoDate(startOfToday()),
     };
     if (db.pangkalan.some((p) => p.kode === created.kode)) {
@@ -674,6 +783,7 @@ export function saveDriver(input: Partial<DriverEntity> & { id?: ID }): DriverEn
     }
 
     const created: DriverEntity = {
+      ...stampScope({}),
       id: nextId("drv"),
       nama: input.nama.trim(),
       telepon: input.telepon ?? "",
@@ -743,7 +853,9 @@ export function saveUser(input: Partial<UserEntity> & { id?: ID }): UserEntity {
       email: input.email.trim(),
       role: input.role ?? "staff",
       telepon: input.telepon ?? "",
-      cabang: input.cabang ?? "Bekasi Pusat",
+      cabang: input.cabang ?? "Semua cabang",
+      branchIds: input.branchIds ?? [],
+      scopeType: input.scopeType ?? "tenant",
       status: "Diundang",
       dibuatPada: isoDate(startOfToday()),
     };
@@ -859,6 +971,7 @@ export function adjustStock(id: ID, delta: number, alasan: string) {
         title: "Stok di bawah minimum",
         message: `${p.nama} tersisa ${fmt(p.stok)}, di bawah ambang ${fmt(p.stokMinimum)}.`,
         href: "/products",
+      rule: "stockLow",
       });
     }
     return p;

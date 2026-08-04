@@ -1,3 +1,4 @@
+import { scopeKey } from "@/mocks/scope";
 import { useQuery } from "@tanstack/react-query";
 import {
   getDispatchRail,
@@ -9,21 +10,21 @@ import {
 } from "../api/dashboardApi";
 
 export function useDashboard() {
-  const kpi = useQuery({ queryKey: ["kpi"], queryFn: getKpiSummary });
-  const rail = useQuery({ queryKey: ["dispatch-rail"], queryFn: getDispatchRail });
+  const kpi = useQuery({ queryKey: [...scopeKey(), "kpi"], queryFn: getKpiSummary });
+  const rail = useQuery({ queryKey: [...scopeKey(), "dispatch-rail"], queryFn: getDispatchRail });
   const monthlyChart = useQuery({
-    queryKey: ["monthly-chart"],
+    queryKey: [...scopeKey(), "monthly-chart"],
     queryFn: getMonthlyChart,
   });
   const pangkalanShares = useQuery({
-    queryKey: ["pangkalan-shares"],
+    queryKey: [...scopeKey(), "pangkalan-shares"],
     queryFn: getPangkalanShares,
   });
   const recentActivities = useQuery({
-    queryKey: ["recent-activities"],
+    queryKey: [...scopeKey(), "recent-activities"],
     queryFn: getRecentActivities,
   });
-  const audit = useQuery({ queryKey: ["recent-audit"], queryFn: () => getRecentAudit(6) });
+  const audit = useQuery({ queryKey: [...scopeKey(), "recent-audit"], queryFn: () => getRecentAudit(6) });
 
   return {
     kpi: kpi.data,

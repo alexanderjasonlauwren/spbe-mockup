@@ -1,4 +1,5 @@
-import { getDb, latency } from "@/mocks/db";
+import { scopedDb } from "@/mocks/scope";
+import { latency } from "@/mocks/db";
 import {
   activateScheduleAgreement,
   createScheduleAgreement,
@@ -42,7 +43,7 @@ export async function getSAList(
   filters?: SAFilterParams,
 ): Promise<ScheduleAgreement[]> {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
 
   return db.scheduleAgreements
     .map((sa) =>
@@ -74,7 +75,7 @@ export async function getSAList(
 
 export async function getSADetail(id: string): Promise<ScheduleAgreement> {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   const sa = db.scheduleAgreements.find((s) => s.id === id);
   if (!sa) throw new Error("Schedule Agreement tidak ditemukan.");
   return toView(sa, db.plans.filter((p) => p.saId === sa.id).length);
@@ -106,16 +107,23 @@ export async function deleteSA(id: string): Promise<void> {
   deleteScheduleAgreement(id);
 }
 
-/** SPBE partners available when registering a new agreement. */
+/**
+ * SPBE partners available when registering a new agreement. Comes from the
+ * master list in Konfigurasi Sistem, falling back to whatever historical
+ * agreements reference so nothing disappears from an existing database.
+ */
 export async function getSpbeOptions(): Promise<string[]> {
   await latency("read");
-  return [...new Set(getDb().scheduleAgreements.map((s) => s.spbe))].sort();
+  const db = scopedDb();
+  const master = db.spbe.filter((s) => s.aktif).map((s) => s.nama);
+  const historical = db.scheduleAgreements.map((s) => s.spbe);
+  return [...new Set([...master, ...historical])].sort();
 }
 
 /** Produces the printable quota summary sheet for an agreement. */
 export async function printSA(id: string): Promise<void> {
   await latency("read");
-  const db = getDb();
+  const db = scopedDb();
   const sa = db.scheduleAgreements.find((s) => s.id === id);
   if (!sa) throw new Error("Schedule Agreement tidak ditemukan.");
 

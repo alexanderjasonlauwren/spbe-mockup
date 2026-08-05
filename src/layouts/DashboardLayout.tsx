@@ -39,9 +39,13 @@ export function DashboardLayout() {
         Lompat ke konten
       </a>
 
+      {/* Above the header (z-1001, which clears Leaflet's 1000-deep panes).
+          At z-40 the scrim and drawer slid UNDER the header, which hid the
+          drawer's own wordmark and put its close button behind the header —
+          untappable, with the hamburger sitting on top of it. */}
       {sidebarOpen && (
         <div
-          className="animate-in-fade fixed inset-0 z-40 bg-ink/50 backdrop-blur-[2px] lg:hidden"
+          className="animate-in-fade fixed inset-0 z-[1100] bg-ink/50 backdrop-blur-[2px] lg:hidden"
           onClick={() => setSidebarOpen(false)}
           aria-hidden
         />
@@ -55,7 +59,7 @@ export function DashboardLayout() {
       {/* Mobile drawer stays an overlay. */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-desk lg:hidden",
+          "fixed inset-y-0 left-0 z-[1101] transform transition-transform duration-300 ease-desk lg:hidden",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >

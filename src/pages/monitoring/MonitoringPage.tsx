@@ -48,6 +48,8 @@ export function MonitoringPage() {
   } = useMonitoring();
 
   // Completing a stop records what was actually unloaded, so it asks.
+  // Previewing a round from a fleet card, without committing the filter.
+  const [hoveredDriver, setHoveredDriver] = useState<string | null>(null);
   const [completing, setCompleting] = useState<MonitoringRow | null>(null);
   const [realisasi, setRealisasi] = useState(0);
   const [holding, setHolding] = useState<MonitoringRow | null>(null);
@@ -118,6 +120,7 @@ export function MonitoringPage() {
           isLoading={isLoading}
           selectedId={driverFilter}
           onSelect={setDriverFilter}
+          onHover={setHoveredDriver}
         />
       </section>
 
@@ -126,7 +129,7 @@ export function MonitoringPage() {
           title="Peta distribusi"
           hint={
             driverFilter
-              ? "Menampilkan satu armada. Pilih ulang kartu untuk melihat semuanya."
+              ? "Menampilkan satu armada. Klik peta atau kartu armada untuk melihat semuanya."
               : "Titik pangkalan dan posisi armada yang sedang berjalan"
           }
           actions={
@@ -156,6 +159,7 @@ export function MonitoringPage() {
             assignments={assignments}
             selectedDriverId={driverFilter ?? undefined}
             onSelectDriver={setDriverFilter}
+            hoveredDriverId={hoveredDriver}
           />
         </div>
       </Panel>

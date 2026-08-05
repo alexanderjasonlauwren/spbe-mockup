@@ -69,6 +69,54 @@ function makePangkalanIcon(color: string) {
   });
 }
 
+type StopState = "done" | "next" | "pending";
+
+/**
+ * A stop on the selected round, carrying its position in the sequence.
+ *
+ * Undifferentiated squares tell you where the outlets are; they do not tell you
+ * the job, which is the order they get visited in and which one is being driven
+ * to right now. Done stops recede, the next one is the loudest mark on the map.
+ */
+function makeStopIcon(
+  order: number,
+  state: StopState,
+  color: string,
+  numbered: boolean,
+) {
+  // Served stops recede to a small dot: they are context, and over a week-long
+  // window there can be thirty of them. The next stop is the loudest mark on
+  // the map, because it is the only one anyone can act on.
+  const size = state === "next" ? 26 : state === "done" ? 13 : 20;
+  const label = state === "done" ? "" : numbered ? String(order) : "";
+
+  const face =
+    state === "done"
+      ? `background:${color};border:2px solid #ffffff;opacity:.5`
+      : state === "next"
+        ? `background:${color};color:#ffffff;border:2px solid #ffffff`
+        : `background:#ffffff;color:#3d4238;border:2px solid ${color}`;
+  const halo =
+    state === "next"
+      ? `box-shadow:0 2px 10px rgba(0,0,0,.3), 0 0 0 5px ${color}40;`
+      : `box-shadow:0 2px 6px rgba(0,0,0,.22);`;
+
+  return L.divIcon({
+    className: "",
+    html: `<div style="
+      ${face};${halo}
+      width:${size}px;height:${size}px;border-radius:50%;
+      display:flex;align-items:center;justify-content:center;
+      font-family:'IBM Plex Mono',ui-monospace,monospace;
+      font-size:${state === "next" ? 11 : 10}px;font-weight:700;
+      line-height:1;
+    ">${label}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2],
+  });
+}
+
 /**
  * Leaflet caches its container size, so collapsing the sidebar leaves the map
  * mis-sized and the tiles offset until something else forces a redraw.
@@ -91,14 +139,57 @@ function ResizeWatcher() {
   return null;
 }
 
-function FitBounds({ points }: { points: Coord[] }) {
+/**
+ * Frames whatever the user is currently looking at.
+ *
+ * This used to fit once and never again, so selecting a truck left the camera
+ * showing the whole city while the round you asked about occupied a fraction of
+ * the canvas. Framing the selection is what makes the map feel like it is about
+ * that driver, and it communicates the selection far more strongly than any
+ * amount of highlighting.
+ *
+ * Keyed on `focusKey` rather than the coordinates: the arrays are rebuilt each
+ * render, so comparing them would re-fly on every tick and fight the user's own
+ * panning.
+ */
+function MapCamera({
+  points,
+  focusKey,
+}: {
+  points: Coord[];
+  focusKey: string;
+}) {
   const map = useMap();
-  const hasFitted = useRef(false);
+  const lastKey = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!points.length || hasFitted.current) return;
-    hasFitted.current = true;
-    map.fitBounds(points, { padding: [36, 36] });
-  }, [map, points]);
+    if (points.length === 0 || lastKey.current === focusKey) return;
+    const first = lastKey.current === null;
+    lastKey.current = focusKey;
+
+    const bounds = L.latLngBounds(points).pad(0.12);
+    // The first frame should just be there; later ones are a response to a
+    // click and read better as movement.
+    if (first || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      map.fitBounds(bounds, { padding: [36, 36] });
+    } else {
+      map.flyToBounds(bounds, { padding: [36, 36], duration: 0.6 });
+    }
+  }, [map, points, focusKey]);
+
+  return null;
+}
+
+/** Clicking the map background clears the selection. */
+function MapBackgroundClick({ onClear }: { onClear: () => void }) {
+  const map = useMap();
+  useEffect(() => {
+    const handler = () => onClear();
+    map.on("click", handler);
+    return () => {
+      map.off("click", handler);
+    };
+  }, [map, onClear]);
   return null;
 }
 
@@ -113,7 +204,9 @@ interface DistribusiMapProps {
   rows: MonitoringRow[];
   assignments: MonitoringAssignment[];
   selectedDriverId?: string;
-  onSelectDriver?: (id: string) => void;
+  onSelectDriver?: (id: string | null) => void;
+  /** Hovering a fleet card previews its round without committing a selection. */
+  hoveredDriverId?: string | null;
 }
 
 export function DistribusiMap({
@@ -123,11 +216,18 @@ export function DistribusiMap({
   assignments,
   selectedDriverId,
   onSelectDriver,
+  hoveredDriverId,
 }: DistribusiMapProps) {
   const { isDark } = useTheme();
   const [routesByAssignmentId, setRoutesByAssignmentId] = useState<RouteMap>(
     {},
   );
+  /** Road-snapped path already driven. Only fetched for the focused round. */
+  const [travelledPath, setTravelledPath] = useState<Coord[]>([]);
+
+  // Hover previews, selection commits — but both frame the same round, so the
+  // rest of the component only needs to know which one is in focus.
+  const focusedDriverId = hoveredDriverId ?? selectedDriverId ?? null;
 
   const points = useMemo(
     () =>
@@ -164,6 +264,28 @@ export function DistribusiMap({
       })
       .filter((item): item is NonNullable<typeof item> => Boolean(item));
   }, [assignments, drivers, points]);
+
+  /**
+   * Stops already made, per driver, in the order they were planned.
+   *
+   * The assignment only carries what is left to drive, so "where has he been"
+   * has to be reconstructed from the surat jalan that are already Selesai.
+   * jamRencana is the planned sequence, which is the order a dispatcher reads
+   * the round in anyway.
+   */
+  const doneStopsByDriver = useMemo(() => {
+    const byDriver = new Map<string, MonitoringRow[]>();
+    for (const row of rows) {
+      if (row.status !== "Selesai") continue;
+      const list = byDriver.get(row.driverId) ?? [];
+      list.push(row);
+      byDriver.set(row.driverId, list);
+    }
+    for (const list of byDriver.values()) {
+      list.sort((a, b) => a.jamRencana.localeCompare(b.jamRencana));
+    }
+    return byDriver;
+  }, [rows]);
 
   // Snap each round to real roads. A straight line between stops looks like a
   // sketch; the driver follows the road, so the map should too.
@@ -213,16 +335,125 @@ export function DistribusiMap({
   }, [resolvedAssignments]);
 
   // "Berjalan" means actually on the road, not merely rostered for today.
+  /**
+   * The path already driven, for the focused round only.
+   *
+   * Fetched on demand rather than for every truck: it is detail that only
+   * matters for the round you are looking at, and the public OSRM demo server
+   * is not somewhere to send six requests when one will do.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    const focus = resolvedAssignments.find((a) => a.driver.id === focusedDriverId);
+    const done = focus ? (doneStopsByDriver.get(focus.driver.id) ?? []) : [];
+
+    if (!focus || done.length === 0) {
+      setTravelledPath([]);
+      return;
+    }
+
+    const legs: Coord[] = [
+      ...done.map((r) => [r.coord.lat, r.coord.lng] as Coord),
+      focus.driverCoord,
+    ];
+
+    (async () => {
+      try {
+        const path = legs.map(([lat, lng]) => `${lng},${lat}`).join(";");
+        const response = await fetch(
+          `https://router.project-osrm.org/route/v1/driving/${path}?overview=full&geometries=geojson`,
+        );
+        if (!response.ok) throw new Error(String(response.status));
+        const data = (await response.json()) as {
+          routes?: Array<{ geometry?: { coordinates?: number[][] } }>;
+        };
+        const coordinates = data.routes?.[0]?.geometry?.coordinates;
+        if (!cancelled) {
+          setTravelledPath(
+            coordinates?.length
+              ? coordinates.map(([lng, lat]) => [lat, lng] as Coord)
+              : legs,
+          );
+        }
+      } catch {
+        // Straight legs still show which stops have been served.
+        if (!cancelled) setTravelledPath(legs);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [focusedDriverId, resolvedAssignments, doneStopsByDriver]);
+
   const activeDrivers = resolvedAssignments.filter((a) => a.assignment.berjalan).length;
   const selected =
     resolvedAssignments.find((a) => a.driver.id === selectedDriverId) ??
     resolvedAssignments[0];
+  const focusedRound =
+    resolvedAssignments.find((a) => a.driver.id === focusedDriverId) ?? null;
+  const focused = focusedRound
+    ? { ...focusedRound, color: fleetColor(focusedRound.driver.slot, isDark) }
+    : null;
 
-  // Fit to the whole round, so the yard and the last stop are both in frame.
-  const fitPoints: Coord[] = [
-    ...resolvedAssignments.flatMap((a) => a.waypoints),
-    ...points.map((p) => p.coord),
-  ];
+  /**
+   * The focused round as an ordered sequence of outlets.
+   *
+   * Built from the surat jalan rather than from assignment.stops, because those
+   * are bare coordinates with no identity — and the sequence has to span stops
+   * already served as well as the ones still to come.
+   */
+  const { stopSequence, isSingleRound } = useMemo(() => {
+    const map = new Map<string, { order: number; state: StopState }>();
+    if (!focusedRound) return { stopSequence: map, isSingleRound: false };
+
+    const mine = rows
+      .filter((r) => r.driverId === focusedRound.driver.id)
+      .sort((a, b) => a.jamRencana.localeCompare(b.jamRencana));
+
+    mine.forEach((row, i) => {
+      const state: StopState =
+        row.status === "Selesai"
+          ? "done"
+          : row.pangkalanId === focusedRound.assignment.pangkalanId
+            ? "next"
+            : "pending";
+      // Keyed by outlet, so a repeat visit overwrites: the newest state for an
+      // outlet is the one worth showing on a map.
+      map.set(row.pangkalanId, { order: i + 1, state });
+    });
+
+    // One round visits an outlet once. If the window holds repeat visits it is
+    // several rounds stacked together, the ordinals collide on the surviving
+    // key, and the sequence is a fiction.
+    return { stopSequence: map, isSingleRound: map.size === mine.length };
+  }, [focusedRound, rows]);
+
+  /**
+   * Number the stops only when the sequence is genuinely one round.
+   *
+   * Widen the board to seven days and a driver accumulates thirty-odd visits
+   * across a dozen outlets. "17 of 36" is not a sequence anyone drives, and
+   * because the map is keyed by outlet the ordinals collapse onto whichever
+   * visit happened to be written last — every pin ended up reading "11".
+   * Past that point the pins keep their state (served, next, still to come)
+   * and drop the ordinal, which is the part that stopped being true.
+   */
+  const numberedStops = isSingleRound && stopSequence.size > 0 && stopSequence.size <= 12;
+
+  // Frame the focused round if there is one, otherwise the whole board.
+  const fitPoints: Coord[] = focused
+    ? [
+        ...(routesByAssignmentId[focused.assignment.id] ?? focused.waypoints),
+        ...travelledPath,
+      ]
+    : [
+        ...resolvedAssignments.flatMap((a) => a.waypoints),
+        ...points.map((p) => p.coord),
+      ];
+
+  // Changing this is what asks the camera to move; see MapCamera.
+  const focusKey = focused ? `driver:${focused.driver.id}` : "all";
 
   return (
     <div
@@ -242,28 +473,79 @@ export function DistribusiMap({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <FitBounds points={fitPoints} />
+        <MapCamera points={fitPoints} focusKey={focusKey} />
+        <MapBackgroundClick onClear={() => onSelectDriver?.(null)} />
         <ResizeWatcher />
 
-        {points.map((p) => (
-          <Marker
-            key={p.id}
-            position={p.coord}
-            icon={makePangkalanIcon(p.color)}
-          >
-            <Popup>
-              <div className="text-xs space-y-1 min-w-[160px]">
-                <p className="font-bold text-sm">{p.pangkalan}</p>
-                <p className="text-ink-muted">{p.alamat}</p>
-                <p className="text-ink-muted">Status: {p.status}</p>
-                <p className="text-ink-muted">
-                  Realisasi: {p.realisasi.toLocaleString("id-ID")} /{" "}
-                  {p.target.toLocaleString("id-ID")} tabung
-                </p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+        {points.map((p) => {
+          // On a focused round the outlets stop being scenery and become the
+          // sequence: numbered, with the one being driven to carrying a halo.
+          const seq = focused ? stopSequence.get(p.pangkalanId) : undefined;
+          const offRound = !!focused && !seq;
+
+          return (
+            <Marker
+              key={p.id}
+              position={p.coord}
+              opacity={offRound ? 0.35 : 1}
+              zIndexOffset={seq?.state === "next" ? 500 : 0}
+              icon={
+                seq
+                  ? makeStopIcon(seq.order, seq.state, focused!.color, numberedStops)
+                  : makePangkalanIcon(p.color)
+              }
+            >
+              <Popup>
+                <div className="text-xs space-y-1 min-w-[160px]">
+                  {seq && (
+                    <p className="data text-2xs font-semibold text-ink-muted">
+                      {numberedStops
+                        ? `Pemberhentian ${seq.order} dari ${stopSequence.size}`
+                        : seq.state === "done"
+                          ? "Sudah dilayani"
+                          : "Belum dilayani"}
+                      {seq.state === "next" && " · tujuan berikutnya"}
+                    </p>
+                  )}
+                  <p className="font-bold text-sm">{p.pangkalan}</p>
+                  <p className="text-ink-muted">{p.alamat}</p>
+                  <p className="text-ink-muted">Status: {p.status}</p>
+                  <p className="text-ink-muted">
+                    Realisasi: {p.realisasi.toLocaleString("id-ID")} /{" "}
+                    {p.target.toLocaleString("id-ID")} tabung
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+
+        {/* Where the focused truck has already been: solid and receding, so it
+            reads as history rather than instruction. */}
+        {focused && travelledPath.length > 1 && (
+          <>
+            <Polyline
+              positions={travelledPath}
+              pathOptions={{
+                color: isDark ? "#131611" : "#ffffff",
+                weight: 6,
+                opacity: 0.75,
+                lineCap: "round",
+                lineJoin: "round",
+              }}
+            />
+            <Polyline
+              positions={travelledPath}
+              pathOptions={{
+                color: focused.color,
+                weight: 3,
+                opacity: 0.45,
+                lineCap: "round",
+                lineJoin: "round",
+              }}
+            />
+          </>
+        )}
 
         {resolvedAssignments.map((a) => {
           const { berjalan, selesai } = a.assignment;
@@ -273,8 +555,9 @@ export function DistribusiMap({
           const routePositions =
             routesByAssignmentId[a.assignment.id] ?? a.waypoints;
 
-          // Dim every other round when one truck is selected.
-          const dimmed = !!selectedDriverId && selectedDriverId !== a.driver.id;
+          // Dim every other round when one truck is in focus.
+          const dimmed = !!focusedDriverId && focusedDriverId !== a.driver.id;
+          const inFocus = focusedDriverId === a.driver.id;
           if (routePositions.length < 2) return null;
 
           return (
@@ -299,7 +582,10 @@ export function DistribusiMap({
                   opacity: dimmed ? 0.28 : 1,
                   lineCap: "round",
                   lineJoin: "round",
-                  weight: selesai ? 3 : 4,
+                  // The focused round gets weight, not motion. Motion already
+                  // means "this truck is driving" (route-animated below), and
+                  // spending it on selection too would make it mean nothing.
+                  weight: inFocus ? 5.5 : selesai ? 3 : 4,
                   dashArray: selesai ? undefined : berjalan ? "1 9" : "9 7",
                   className: berjalan ? "route-animated" : undefined,
                 }}
@@ -307,12 +593,18 @@ export function DistribusiMap({
               <Marker
                 position={a.driverCoord}
                 opacity={dimmed ? 0.45 : 1}
+                zIndexOffset={inFocus ? 1000 : 0}
                 icon={makeDriverIcon(
                   getInitials(a.driver.name),
                   routeColor,
                   selectedDriverId === a.driver.id,
                 )}
-                eventHandlers={{ click: () => onSelectDriver?.(a.driver.id) }}
+                eventHandlers={{
+                  click: () =>
+                    onSelectDriver?.(
+                      selectedDriverId === a.driver.id ? null : a.driver.id,
+                    ),
+                }}
               >
                 <Popup>
                   <div className="min-w-[180px] space-y-1 text-xs">
@@ -354,15 +646,16 @@ export function DistribusiMap({
         </span>
       </div>
 
-      {/* Colour tells the trucks apart; the line style tells you where each one
-          is in its round. */}
+      {/* Two states, not three. Progress used to be something you decoded from
+          a dash pattern; on a focused round it is now positional — the line
+          behind the truck is what has been driven, the line ahead is what has
+          not — so the legend only has to name that split. */}
       <div className="pointer-events-none absolute bottom-3 right-3 z-[400] rounded-md border border-line bg-panel/95 px-3 py-2">
         <p className="label mb-1.5 text-[0.625rem] text-ink-muted">Garis rute</p>
         <ul className="space-y-1">
           {[
-            { label: "Belum berangkat", dash: "6 5", width: 3 },
-            { label: "Sedang berjalan", dash: "1 6", width: 3 },
-            { label: "Rute selesai", dash: undefined, width: 2.5 },
+            { label: "Sudah dilalui", dash: undefined, width: 2.5, opacity: 0.45 },
+            { label: "Belum dilalui", dash: "6 5", width: 3, opacity: 1 },
           ].map((item) => (
             <li key={item.label} className="flex items-center gap-2">
               <svg width="26" height="6" aria-hidden className="shrink-0">
@@ -375,12 +668,21 @@ export function DistribusiMap({
                   className="text-ink-muted"
                   strokeWidth={item.width}
                   strokeDasharray={item.dash}
+                  strokeOpacity={item.opacity}
                   strokeLinecap="round"
                 />
               </svg>
               <span className="text-[0.625rem] text-ink-muted">{item.label}</span>
             </li>
           ))}
+          <li className="flex items-center gap-2 border-t border-line pt-1">
+            <svg width="26" height="8" aria-hidden className="shrink-0">
+              <circle cx="13" cy="4" r="3.5" className="fill-signal" />
+            </svg>
+            <span className="text-[0.625rem] text-ink-muted">
+              Tujuan berikutnya
+            </span>
+          </li>
         </ul>
       </div>
 

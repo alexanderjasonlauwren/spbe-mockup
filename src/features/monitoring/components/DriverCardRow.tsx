@@ -14,6 +14,8 @@ interface DriverCardRowProps {
   isLoading: boolean;
   selectedId?: string | null;
   onSelect?: (id: string | null) => void;
+  /** Previewing a round on the map costs nothing and commits nothing. */
+  onHover?: (id: string | null) => void;
 }
 
 export function DriverCardRow({
@@ -21,6 +23,7 @@ export function DriverCardRow({
   isLoading,
   selectedId,
   onSelect,
+  onHover,
 }: DriverCardRowProps) {
   const { isDark } = useTheme();
 
@@ -59,6 +62,11 @@ export function DriverCardRow({
         return (
           <div
             key={card.id}
+            // Hover previews the round on the map; the map frames it and dims
+            // the rest, then releases when the pointer leaves. Selection is
+            // still a deliberate click.
+            onMouseEnter={() => onHover?.(card.id)}
+            onMouseLeave={() => onHover?.(null)}
             className={cn(
               "spine w-60 shrink-0 rounded-md border bg-panel p-4 transition-colors",
               spineFor(card.status),

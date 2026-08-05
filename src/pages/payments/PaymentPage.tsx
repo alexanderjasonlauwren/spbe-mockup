@@ -434,7 +434,10 @@ function AllocateDialog({
           </Button>
         </div>
 
-        <div className="max-h-72 overflow-y-auto rounded-md border border-line">
+        {/* overflow-x too: four columns plus a numeric input do not fit the
+            ~295px of dialog interior on a phone, and the allocation input is
+            the whole point of this modal. */}
+        <div className="max-h-72 overflow-auto rounded-md border border-line">
           {(invoices.data ?? []).length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-ink-muted">
               Tidak ada tagihan terbuka untuk pangkalan ini.
@@ -483,7 +486,7 @@ function AllocateDialog({
                         min={0}
                         max={inv.sisa}
                         aria-label={`Alokasi untuk ${inv.nomor}`}
-                        className="w-32 py-1 text-right text-xs"
+                        className="w-24 py-1 text-right text-xs sm:w-32"
                         value={rows[inv.id] ?? ""}
                         onChange={(e) =>
                           setRows({ ...rows, [inv.id]: Number(e.target.value) })

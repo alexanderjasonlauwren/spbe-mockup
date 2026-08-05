@@ -80,7 +80,10 @@ export function DispatchRail({
       <div className="min-w-[46rem]">
         {/* Hour ruler */}
         <div className="flex border-b border-line">
-          <div className="w-52 shrink-0 border-r border-line px-5 py-2">
+          {/* Sticky: the rail scrolls sideways on a phone, and without this the
+              driver names scroll away and leave unlabelled colour blocks. It
+              needs its own background or the timeline shows through. */}
+          <div className="sticky left-0 z-10 w-32 shrink-0 border-r border-line bg-panel px-3 py-2 sm:w-52 sm:px-5">
             <span className="label text-2xs text-ink-muted">Armada</span>
           </div>
           <div className="relative flex-1 py-2 pr-5">
@@ -108,7 +111,7 @@ export function DispatchRail({
         <div className="relative">
           {lanes.map((lane, laneIndex) => (
             <div key={lane.driverId} className="flex border-b border-line last:border-b-0">
-              <div className="w-52 shrink-0 border-r border-line px-5 py-2.5">
+              <div className="sticky left-0 z-10 w-32 shrink-0 border-r border-line bg-panel px-3 py-2.5 sm:w-52 sm:px-5">
                 <Link
                   to={`/drivers/${lane.driverId}`}
                   className="block truncate text-sm font-semibold text-ink hover:underline hover:decoration-signal hover:decoration-2 hover:underline-offset-4"
@@ -212,6 +215,17 @@ function StopBlock({
       <Link
         to="/monitoring"
         aria-label={`${stop.kode} ke ${stop.pangkalan}, ${stop.stage}`}
+        // The block itself shows only a truncated name, so on a touch device
+        // the stop code, its window and its load were unreachable — hover is
+        // the only thing that revealed them. Focus and a first tap now do too.
+        onFocus={() => onHover(stop.id)}
+        onBlur={() => onHover(null)}
+        onClick={(e) => {
+          if (window.matchMedia("(hover: none)").matches && !isHovered) {
+            e.preventDefault();
+            onHover(stop.id);
+          }
+        }}
         className={cn(
           "flex h-full items-center overflow-hidden rounded-sm px-2 text-2xs font-semibold transition-transform duration-150 hover:z-10 hover:scale-[1.02]",
           tone,
@@ -221,7 +235,9 @@ function StopBlock({
       </Link>
 
       {isHovered && (
-        <div className="absolute bottom-[calc(100%+6px)] left-0 z-30 w-56 rounded-md border border-line bg-panel p-3 shadow-pop">
+        // max-w keeps it inside the scroller on a narrow track; left-0 alone
+        // let a 224px card spill past the right edge and get clipped.
+        <div className="absolute bottom-[calc(100%+6px)] left-0 z-30 w-56 max-w-[min(14rem,calc(100vw-2rem))] rounded-md border border-line bg-panel p-3 shadow-pop">
           <p className="data text-2xs text-ink-muted">{stop.kode}</p>
           <p className="mt-0.5 text-sm font-semibold leading-snug text-ink">
             {stop.pangkalan}

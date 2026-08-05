@@ -90,17 +90,21 @@ export function Header({ onMenuClick }: HeaderProps) {
       {/* Sticky inside the content column, so there is no left offset to keep
           in sync with the sidebar. */}
       <header className="sticky top-0 z-[1001] flex h-16 shrink-0 items-center justify-between gap-4 border-b border-line bg-panel/85 px-4 backdrop-blur-md lg:px-7">
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <button
             onClick={onMenuClick}
             aria-label="Buka menu navigasi"
-            className="rounded-md p-2 text-ink-muted transition-colors hover:bg-panel-raised hover:text-ink lg:hidden"
+            className="shrink-0 rounded-md p-2 text-ink-muted transition-colors hover:bg-panel-raised hover:text-ink lg:hidden"
           >
             <Menu className="h-5 w-5" />
           </button>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
+            {/* Hidden on phones: it restates the nav group the user just came
+                from, and at 414px there is no room for it — uppercased with
+                letter-spacing it wraps to two lines and pushes the title out of
+                the 64px bar entirely. */}
             {section && (
-              <p className="label text-[0.625rem] leading-tight text-ink-muted">
+              <p className="label hidden truncate text-[0.625rem] leading-tight text-ink-muted sm:block">
                 {section}
               </p>
             )}
@@ -110,7 +114,9 @@ export function Header({ onMenuClick }: HeaderProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        {/* shrink-0 so the title block yields first and truncates. Without it
+            nothing arbitrates between the two clusters and they collide. */}
+        <div className="flex shrink-0 items-center gap-1.5">
           <BranchSwitcher />
 
           <button
@@ -123,18 +129,14 @@ export function Header({ onMenuClick }: HeaderProps) {
               ⌘K
             </kbd>
           </button>
-          <button
-            onClick={() => setPaletteOpen(true)}
-            aria-label="Cari"
-            className="rounded-md p-2 text-ink-muted transition-colors hover:bg-panel-raised hover:text-ink sm:hidden"
-          >
-            <Search className="h-[1.1rem] w-[1.1rem]" />
-          </button>
 
+          {/* From sm up this is a bar icon. On phones it moves into the account
+              menu: theme is a set-once preference, and the 34px it costs here is
+              the difference between the page title fitting and not. */}
           <button
             onClick={toggleTheme}
             aria-label={theme === "dark" ? "Ganti ke tema terang" : "Ganti ke tema gelap"}
-            className="rounded-md p-2 text-ink-muted transition-colors hover:bg-panel-raised hover:text-ink"
+            className="hidden rounded-md p-2 text-ink-muted transition-colors hover:bg-panel-raised hover:text-ink sm:block"
           >
             {theme === "dark" ? (
               <Sun className="h-[1.1rem] w-[1.1rem]" />
@@ -160,8 +162,14 @@ export function Header({ onMenuClick }: HeaderProps) {
               )}
             </button>
 
+            {/* On phones this is a sheet pinned to the viewport, not a dropdown
+                hung off the bell. Anchoring it right-0 to the button put its
+                left edge off-screen (the avatar sits between the bell and the
+                screen edge), and left overflow cannot be scrolled to — the
+                first ~40px of every notification was simply unreachable.
+                Clamping the width alone did not fix it; the anchor was wrong. */}
             {bellOpen && (
-              <div className="animate-in-up absolute right-0 top-full mt-2 w-[22rem] overflow-hidden rounded-md border border-line bg-panel shadow-pop">
+              <div className="animate-in-up fixed inset-x-4 top-[4.5rem] overflow-hidden rounded-md border border-line bg-panel shadow-pop sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[22rem]">
                 <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
                   <p className="label text-2xs text-ink-muted">
                     Notifikasi{unread.length > 0 && ` · ${unread.length} baru`}
@@ -279,6 +287,32 @@ export function Header({ onMenuClick }: HeaderProps) {
                   <Settings className="h-4 w-4" />
                   Pengaturan
                 </Link>
+                {/* Below sm these two stand in for their bar icons. Labelled,
+                    because an icon alone in a menu row reads as decoration.
+                    Search earns its place here rather than in the bar: at 320px
+                    the 34px it cost left the page title no room at all, and the
+                    ⌘K hint it carried is meaningless on a phone. */}
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setPaletteOpen(true);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-ink-muted transition-colors hover:bg-panel-sunk hover:text-ink sm:hidden"
+                >
+                  <Search className="h-4 w-4" />
+                  Cari
+                </button>
+                <button
+                  onClick={toggleTheme}
+                  className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-ink-muted transition-colors hover:bg-panel-sunk hover:text-ink sm:hidden"
+                >
+                  {theme === "dark" ? (
+                    <Sun className="h-4 w-4" />
+                  ) : (
+                    <Moon className="h-4 w-4" />
+                  )}
+                  {theme === "dark" ? "Tema terang" : "Tema gelap"}
+                </button>
                 <button
                   onClick={() => {
                     logout();

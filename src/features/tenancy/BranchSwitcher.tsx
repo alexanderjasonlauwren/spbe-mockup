@@ -40,7 +40,7 @@ export function BranchSwitcher() {
         aria-expanded={open}
         aria-label="Ganti cabang"
         className={cn(
-          "flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
+          "flex shrink-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
           isConsolidated
             ? "border-signal bg-signal-soft text-signal-ink"
             : "border-line text-ink hover:border-line-strong",
@@ -51,7 +51,13 @@ export function BranchSwitcher() {
         ) : (
           <Building2 className="h-3.5 w-3.5 shrink-0" />
         )}
-        <span className="max-w-[9rem] truncate">
+        {/* On phones the branch code carries the scope in ~82px instead of
+            ~146px. It stays on screen either way: acting in the wrong cabang is
+            the mistake this control exists to prevent, so it is never hidden. */}
+        <span className="sm:hidden">
+          {isConsolidated ? "Semua" : (branch?.kode ?? "—")}
+        </span>
+        <span className="hidden max-w-[9rem] truncate sm:inline">
           {isConsolidated ? "Semua cabang" : (branch?.nama ?? "Pilih cabang")}
         </span>
         <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />

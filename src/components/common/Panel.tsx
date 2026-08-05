@@ -48,7 +48,15 @@ export function PanelHeader({
         <h2 className="label text-2xs text-ink-muted">{title}</h2>
         {hint && <p className="mt-1 text-xs text-ink-muted">{hint}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {/* flex-wrap, or the group cannot shrink below its min-content width and
+          a panel with three buttons clips the last one off-screen -- on the
+          distribution planner that was "Konfirmasi", the primary action, left
+          untappable on any phone. Same pattern as PageHeader. */}
+      {actions && (
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+          {actions}
+        </div>
+      )}
     </div>
   );
 }

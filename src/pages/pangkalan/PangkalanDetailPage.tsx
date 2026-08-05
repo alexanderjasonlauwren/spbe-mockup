@@ -171,7 +171,7 @@ export function PangkalanDetailPage() {
           <PanelBody className="space-y-4">
             <div className="flex items-end justify-between gap-4">
               <div>
-                <p className="data text-figure font-semibold text-ink">
+                <p className="data truncate text-figure font-semibold text-ink">
                   {formatNumber(p.sisaKuota)}
                   <span className="ml-1.5 font-sans text-sm font-medium tracking-normal text-ink-muted">
                     tabung tersisa
@@ -196,7 +196,7 @@ export function PangkalanDetailPage() {
         <Panel spine={p.tagihanTertunda > 0 ? "text-signal" : undefined}>
           <PanelHeader title="Tagihan tertunda" />
           <PanelBody>
-            <p className="data text-figure font-semibold text-ink">
+            <p className="data truncate text-figure font-semibold text-ink">
               {formatNumber(p.tagihanTertunda)}
               <span className="ml-1.5 font-sans text-sm font-medium tracking-normal text-ink-muted">
                 faktur

@@ -326,7 +326,7 @@ export function OrderListPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Menunggu persetujuan"
           value={formatNumber(totals.data?.baru ?? 0)}
@@ -616,7 +616,7 @@ function Stat({
   return (
     <div className={cn("rounded-md border border-line bg-panel p-4", tone && spine[tone])}>
       <p className="label text-2xs text-ink-muted">{label}</p>
-      <p className="data mt-1.5 text-figure font-semibold text-ink">{value}</p>
+      <p className="data mt-1.5 truncate text-figure font-semibold text-ink">{value}</p>
       {hint && <p className="mt-2 text-xs text-ink-muted">{hint}</p>}
     </div>
   );

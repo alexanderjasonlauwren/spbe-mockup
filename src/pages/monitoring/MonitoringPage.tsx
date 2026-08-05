@@ -77,7 +77,7 @@ export function MonitoringPage() {
         </Panel>
       )}
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Realisasi periode"
           value={formatNumber(totals?.realisasi ?? 0)}
@@ -150,7 +150,7 @@ export function MonitoringPage() {
         />
         <div className="p-4">
           <DistribusiMap
-            height="420px"
+            heightClass="h-72 sm:h-96 lg:h-[420px]"
             drivers={driverCards}
             rows={allRows}
             assignments={assignments}
@@ -299,7 +299,7 @@ function Stat({
       className={cn("rounded-md border border-line bg-panel p-4", tone && spine[tone])}
     >
       <p className="label text-2xs text-ink-muted">{label}</p>
-      <p className="data mt-1.5 text-figure font-semibold text-ink">
+      <p className="data mt-1.5 truncate text-figure font-semibold text-ink">
         {value}
         <span className="ml-1.5 font-sans text-sm font-medium tracking-normal text-ink-muted">
           {unit}

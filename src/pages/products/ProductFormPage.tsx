@@ -196,7 +196,7 @@ export function ProductFormPage() {
             <Panel>
               <PanelHeader title="Margin" />
               <PanelBody>
-                <p className="data text-figure font-semibold text-ink">
+                <p className="data truncate text-figure font-semibold text-ink">
                   {formatRupiah(margin)}
                 </p>
                 <p className="mt-1 text-xs text-ink-muted">

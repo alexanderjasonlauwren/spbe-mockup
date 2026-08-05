@@ -419,7 +419,7 @@ function Stat({
       {isLoading ? (
         <Skeleton className="mt-2 h-8 w-2/3" />
       ) : (
-        <p className="data mt-1.5 text-figure font-semibold text-ink">
+        <p className="data mt-1.5 truncate text-figure font-semibold text-ink">
           {value}
           {unit && (
             <span className="ml-1.5 font-sans text-sm font-medium tracking-normal text-ink-muted">

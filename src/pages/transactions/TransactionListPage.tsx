@@ -480,7 +480,7 @@ function Stat({
       {isLoading ? (
         <div className="mt-2 h-7 w-2/3 animate-pulse rounded-sm bg-panel-raised" />
       ) : (
-        <p className="data mt-1.5 text-figure font-semibold text-ink">
+        <p className="data mt-1.5 truncate text-figure font-semibold text-ink">
           {value}
           {unit && (
             <span className="ml-1.5 font-sans text-sm font-medium tracking-normal text-ink-muted">

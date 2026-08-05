@@ -88,7 +88,7 @@ export function Figure({
   return (
     <div className={cn("min-w-0", className)}>
       <p className="label text-2xs text-ink-muted">{label}</p>
-      <p className="data mt-1 text-figure font-semibold text-ink">
+      <p className="data mt-1 truncate text-figure font-semibold text-ink">
         {value}
         {unit && (
           <span className="ml-1.5 font-sans text-sm font-medium tracking-normal text-ink-muted">

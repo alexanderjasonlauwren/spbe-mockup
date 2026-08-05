@@ -103,7 +103,12 @@ function FitBounds({ points }: { points: Coord[] }) {
 }
 
 interface DistribusiMapProps {
-  height?: string;
+  /**
+   * Height as Tailwind classes, not a pixel string. A fixed inline height
+   * cannot carry a breakpoint, so a desk-sized map came through unchanged on a
+   * phone — 420px of a 667px screen.
+   */
+  heightClass?: string;
   drivers: DriverCard[];
   rows: MonitoringRow[];
   assignments: MonitoringAssignment[];
@@ -112,7 +117,7 @@ interface DistribusiMapProps {
 }
 
 export function DistribusiMap({
-  height = "360px",
+  heightClass = "h-64 sm:h-80 lg:h-[360px]",
   drivers,
   rows,
   assignments,
@@ -221,8 +226,10 @@ export function DistribusiMap({
 
   return (
     <div
-      className="relative overflow-hidden rounded-md border border-line"
-      style={{ height }}
+      className={cn(
+        "relative overflow-hidden rounded-md border border-line",
+        heightClass,
+      )}
     >
       <MapContainer
         center={[-6.236, 107.006]}

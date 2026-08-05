@@ -153,7 +153,7 @@ export function OcrPage() {
         description="Pindai bukti transfer dari pangkalan. Hasil yang divalidasi langsung menerbitkan tagihan untuk diverifikasi tim keuangan."
       />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           label="Menunggu review"
           value={formatNumber(s?.menungguReview ?? 0)}
@@ -362,7 +362,7 @@ export function OcrPage() {
               </SelectInput>
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Nomor kwitansi" htmlFor="ocr-no">
                 <TextInput
                   id="ocr-no"
@@ -384,7 +384,7 @@ export function OcrPage() {
               </Field>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Jumlah tabung" htmlFor="ocr-jml">
                 <TextInput
                   id="ocr-jml"
@@ -515,7 +515,7 @@ function Stat({
   return (
     <div className={cn("rounded-md border border-line bg-panel p-4", tone && spine[tone])}>
       <p className="label text-2xs text-ink-muted">{label}</p>
-      <p className="data mt-1.5 text-figure font-semibold text-ink">
+      <p className="data mt-1.5 truncate text-figure font-semibold text-ink">
         {value}
         {unit && (
           <span className="ml-1.5 font-sans text-sm font-medium tracking-normal text-ink-muted">

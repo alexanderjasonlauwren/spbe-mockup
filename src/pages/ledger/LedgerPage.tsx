@@ -476,7 +476,7 @@ function Figure({
       )}
     >
       <p className="label text-2xs text-ink-muted">{label}</p>
-      <p className="data mt-1.5 text-figure font-semibold text-ink">{value}</p>
+      <p className="data mt-1.5 truncate text-figure font-semibold text-ink">{value}</p>
       {hint && <p className="mt-2 text-xs text-ink-muted">{hint}</p>}
     </div>
   );

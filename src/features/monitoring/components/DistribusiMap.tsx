@@ -13,6 +13,7 @@ import { fleetColor } from "@/lib/chart";
 import { useTheme } from "@/hooks/useTheme";
 import { STATUS_HEX, getStatusVariant } from "@/lib/status";
 import type { DriverCard, MonitoringAssignment, MonitoringRow } from "../types";
+import { buildRoundSequence, type StopState } from "../lib/roundSequence";
 
 // Fix default marker icons broken by bundlers.
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)
@@ -68,8 +69,6 @@ function makePangkalanIcon(color: string) {
     iconAnchor: [7, 7],
   });
 }
-
-type StopState = "done" | "next" | "pending";
 
 /**
  * A stop on the selected round, carrying its position in the sequence.
@@ -167,7 +166,12 @@ function MapCamera({
     const first = lastKey.current === null;
     lastKey.current = focusKey;
 
-    const bounds = L.latLngBounds(points).pad(0.12);
+    // Padded once, in pixels. This also carried .pad(0.12), and the two
+    // compounded: a 12% ring on every side plus 36px cost roughly a whole zoom
+    // level, so the camera sat at 13 when the round would have fitted at 14.
+    // Pixel padding is the one to keep — it is what stops a marker halo from
+    // clipping, and it does not scale with how big the round happens to be.
+    const bounds = L.latLngBounds(points);
     // The first frame should just be there; later ones are a response to a
     // click and read better as movement.
     if (first || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -403,43 +407,18 @@ export function DistribusiMap({
    * are bare coordinates with no identity — and the sequence has to span stops
    * already served as well as the ones still to come.
    */
-  const { stopSequence, isSingleRound } = useMemo(() => {
-    const map = new Map<string, { order: number; state: StopState }>();
-    if (!focusedRound) return { stopSequence: map, isSingleRound: false };
+  const sequence = useMemo(
+    () =>
+      buildRoundSequence(
+        rows,
+        focusedRound?.driver.id ?? null,
+        focusedRound?.assignment.pangkalanId,
+      ),
+    [focusedRound, rows],
+  );
+  const stopSequence = sequence.byPangkalan;
 
-    const mine = rows
-      .filter((r) => r.driverId === focusedRound.driver.id)
-      .sort((a, b) => a.jamRencana.localeCompare(b.jamRencana));
-
-    mine.forEach((row, i) => {
-      const state: StopState =
-        row.status === "Selesai"
-          ? "done"
-          : row.pangkalanId === focusedRound.assignment.pangkalanId
-            ? "next"
-            : "pending";
-      // Keyed by outlet, so a repeat visit overwrites: the newest state for an
-      // outlet is the one worth showing on a map.
-      map.set(row.pangkalanId, { order: i + 1, state });
-    });
-
-    // One round visits an outlet once. If the window holds repeat visits it is
-    // several rounds stacked together, the ordinals collide on the surviving
-    // key, and the sequence is a fiction.
-    return { stopSequence: map, isSingleRound: map.size === mine.length };
-  }, [focusedRound, rows]);
-
-  /**
-   * Number the stops only when the sequence is genuinely one round.
-   *
-   * Widen the board to seven days and a driver accumulates thirty-odd visits
-   * across a dozen outlets. "17 of 36" is not a sequence anyone drives, and
-   * because the map is keyed by outlet the ordinals collapse onto whichever
-   * visit happened to be written last — every pin ended up reading "11".
-   * Past that point the pins keep their state (served, next, still to come)
-   * and drop the ordinal, which is the part that stopped being true.
-   */
-  const numberedStops = isSingleRound && stopSequence.size > 0 && stopSequence.size <= 12;
+  const numberedStops = sequence.numbered;
 
   // Frame the focused round if there is one, otherwise the whole board.
   const fitPoints: Coord[] = focused
@@ -500,7 +479,7 @@ export function DistribusiMap({
                   {seq && (
                     <p className="data text-2xs font-semibold text-ink-muted">
                       {numberedStops
-                        ? `Pemberhentian ${seq.order} dari ${stopSequence.size}`
+                        ? `Pemberhentian ${seq.order} dari ${sequence.stops.length}`
                         : seq.state === "done"
                           ? "Sudah dilayani"
                           : "Belum dilayani"}

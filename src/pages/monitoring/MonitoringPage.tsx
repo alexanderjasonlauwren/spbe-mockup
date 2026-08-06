@@ -3,6 +3,7 @@ import { AlertCircle, RefreshCw } from "lucide-react";
 import { useMonitoring } from "@/features/monitoring/hooks/useMonitoring";
 import { DateRangeFilter } from "@/features/monitoring/components/DateRangeFilter";
 import { DriverCardRow } from "@/features/monitoring/components/DriverCardRow";
+import { RoundStopList } from "@/features/monitoring/components/RoundStopList";
 import { DistribusiMap } from "@/features/monitoring/components/DistribusiMap";
 import { MonitoringTable } from "@/features/monitoring/components/MonitoringTable";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -151,16 +152,37 @@ export function MonitoringPage() {
             </div>
           }
         />
-        <div className="p-4">
-          <DistribusiMap
-            heightClass="h-72 sm:h-96 lg:h-[420px]"
-            drivers={driverCards}
-            rows={allRows}
-            assignments={assignments}
-            selectedDriverId={driverFilter ?? undefined}
-            onSelectDriver={setDriverFilter}
-            hoveredDriverId={hoveredDriver}
-          />
+        {/* Map two thirds, round one third.
+            The map used to be full width at 420px tall: a 3.24:1 letterbox for
+            a round that is roughly square (3.4 x 4.5 km). fitBounds picks the
+            zoom where BOTH axes fit, so height was the binding constraint and
+            the camera was pinned at zoom 13 no matter what it did — the route
+            used 14% of the available width. Measured: 620px still gives zoom
+            13, 640px gives zoom 14 — and dropping a redundant second layer
+            of bounds padding buys the same level back at 560px. Trading width
+            for height buys the zoom;
+            the width that comes off goes to the stop list, which is where the
+            sequence wanted to live anyway. */}
+        <div className="grid gap-4 p-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <DistribusiMap
+              heightClass="h-72 sm:h-96 lg:h-[560px]"
+              drivers={driverCards}
+              rows={allRows}
+              assignments={assignments}
+              selectedDriverId={driverFilter ?? undefined}
+              onSelectDriver={setDriverFilter}
+              hoveredDriverId={hoveredDriver}
+            />
+          </div>
+          <div className="min-h-[18rem] lg:h-[560px]">
+            <RoundStopList
+              rows={allRows}
+              drivers={driverCards}
+              assignments={assignments}
+              focusedDriverId={hoveredDriver ?? driverFilter ?? null}
+            />
+          </div>
         </div>
       </Panel>
 

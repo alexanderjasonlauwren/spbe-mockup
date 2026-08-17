@@ -36,6 +36,18 @@ export interface FilterSpec {
 }
 
 export interface ListParams {
+  /**
+   * Opaque position from a previous page's `next_cursor`.
+   *
+   * Send an empty string to start a cursor-paginated walk: the parameter's
+   * presence is what selects keyset pagination, because the first page has no
+   * cursor to send yet.
+   *
+   * Cursors are stable when rows are being inserted — offset pagination
+   * re-serves or skips rows as the list shifts — and cost the same at any
+   * depth. The trade is that there are no page numbers, only next.
+   */
+  cursor?: string;
   page?: number;
   pageSize?: number;
   sort?: SortSpec[];
@@ -64,7 +76,14 @@ export const MAX_SEARCH_LENGTH = 128;
 export function buildListQuery(params: ListParams = {}): URLSearchParams {
   const query = new URLSearchParams();
 
-  if (params.page !== undefined) query.set("page", String(params.page));
+  // Presence matters, including empty: `?cursor=` means "first keyset page".
+  // Page and cursor are different questions, so a cursor wins and page is not
+  // sent alongside it.
+  if (params.cursor !== undefined) {
+    query.set("cursor", params.cursor);
+  } else if (params.page !== undefined) {
+    query.set("page", String(params.page));
+  }
   if (params.pageSize !== undefined) query.set("page_size", String(params.pageSize));
 
   const search = params.search?.trim();

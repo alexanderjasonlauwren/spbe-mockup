@@ -48,10 +48,21 @@ apiClient.interceptors.response.use(
 export interface Pagination {
   page: number;
   page_size: number;
-  total_items: number;
-  total_pages: number;
+  /**
+   * Absent when the server did not count.
+   *
+   * A missing total is not zero. High-volume lists skip COUNT(*) entirely
+   * because it costs more than the page itself — so render "many" or just
+   * next/previous, never "0 results".
+   */
+  total_items?: number;
+  total_pages?: number;
+  /** total_items is a floor, not exact: render as `1000+`. */
+  total_is_floor?: boolean;
   has_next: boolean;
   has_prev: boolean;
+  /** Pass back as `cursor` for the next page. Empty on the last page. */
+  next_cursor?: string;
 }
 
 /** One field-level validation failure, as returned in error.details. */
@@ -157,8 +168,6 @@ export async function getList<T>(path: string, params: ListParams = {}): Promise
       pagination: pagination ?? {
         page: 1,
         page_size: data?.length ?? 0,
-        total_items: data?.length ?? 0,
-        total_pages: 1,
         has_next: false,
         has_prev: false,
       },

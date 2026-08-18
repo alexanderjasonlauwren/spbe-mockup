@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 import { latency, mutate } from "@/mocks/db";
 import { PERMISSIONS } from "@/features/rbac/permissions";
 import type { User, UserRole } from "@/types/auth";
+import { clearSessionTokens } from "@/lib/tokens";
 
 /**
  * What each role may do. The console reads these to hide actions a user cannot
@@ -147,7 +148,14 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        localStorage.removeItem("auth_token");
+        // Both tokens. Clearing only the access token strands the refresh
+        // token, and the next login would leave a usable session behind that
+        // nobody can see or revoke from the UI.
+        //
+        // This does not yet tell the server. POST /auth/logout revokes the
+        // refresh token so it cannot be replayed after the user walks away;
+        // wire it in when this store stops using the mock database.
+        clearSessionTokens();
         set({ user: null, token: null, isAuthenticated: false });
       },
 

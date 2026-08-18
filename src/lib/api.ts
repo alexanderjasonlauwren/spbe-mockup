@@ -1,6 +1,13 @@
-import axios, { AxiosError } from "axios";
+import axios, { AxiosError, type AxiosRequestConfig } from "axios";
 
 import { listQueryString, type ListParams } from "./listQuery";
+import {
+  clearSessionTokens,
+  getAccessToken,
+  getRefreshToken,
+  setSessionTokens,
+  type SessionTokens,
+} from "./tokens";
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000/api",
@@ -13,7 +20,7 @@ export const apiClient = axios.create({
 // Request interceptor - Add auth token
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("auth_token");
+    const token = getAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -24,16 +31,94 @@ apiClient.interceptors.request.use(
   },
 );
 
-// Response interceptor - Handle errors globally
+/* ------------------------------------------------------------------------- *
+ * Silent refresh
+ *
+ * Access tokens last 15 minutes, so without this a user is thrown back to the
+ * login screen four times an hour. On a 401 the client exchanges its refresh
+ * token for a new session and replays the original request once.
+ *
+ * The single-flight guard below is not an optimisation — it is required for
+ * correctness. The server rotates the refresh token on every use and treats a
+ * second presentation of the same token as a replay, which revokes the whole
+ * session family. A page that fires six requests on load and gets six 401s
+ * would send six refreshes with the same token: the first succeeds, the other
+ * five look exactly like a stolen token being reused, and the user is logged
+ * out of every device. So the first 401 refreshes and the rest wait on it.
+ * ------------------------------------------------------------------------- */
+
+/** In-flight refresh, shared by every request that hits a 401 while it runs. */
+let refreshInFlight: Promise<string> | null = null;
+
+/** Requests that already retried once, so a persistent 401 cannot loop. */
+const RETRIED = Symbol("retried");
+type RetriableConfig = AxiosRequestConfig & { [RETRIED]?: boolean };
+
+/**
+ * Called when the session cannot be recovered. Assigned by the auth store so
+ * this module does not have to know how the app navigates.
+ */
+let onSessionExpired: () => void = () => {
+  clearSessionTokens();
+  window.location.href = "/login";
+};
+
+export function setSessionExpiredHandler(handler: () => void): void {
+  onSessionExpired = handler;
+}
+
+async function refreshSession(): Promise<string> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) throw new Error("no refresh token");
+
+  // A bare axios call, not apiClient: going through the instance would attach
+  // the dead access token and re-enter this interceptor on failure.
+  const response = await axios.post<Envelope<SessionTokens>>(
+    `${apiClient.defaults.baseURL}/auth/refresh`,
+    { refresh_token: refreshToken },
+    { headers: { "Content-Type": "application/json" } },
+  );
+
+  const tokens = response.data.data;
+  setSessionTokens(tokens);
+  return tokens.token;
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Clear auth and redirect to login
-      localStorage.removeItem("auth_token");
-      window.location.href = "/login";
+  async (error: AxiosError) => {
+    const original = error.config as RetriableConfig | undefined;
+
+    const recoverable =
+      error.response?.status === 401 &&
+      original !== undefined &&
+      !original[RETRIED] &&
+      getRefreshToken() !== null;
+
+    if (!recoverable) {
+      if (error.response?.status === 401) onSessionExpired();
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+
+    original[RETRIED] = true;
+
+    try {
+      // Whoever arrives first starts the refresh; everyone else awaits it.
+      refreshInFlight = refreshInFlight ?? refreshSession();
+      const token = await refreshInFlight;
+
+      original.headers = { ...original.headers, Authorization: `Bearer ${token}` };
+      return apiClient.request(original);
+    } catch (refreshError) {
+      // The refresh itself failed: expired, revoked, or a replay the server
+      // refused. Nothing left to try.
+      onSessionExpired();
+      return Promise.reject(refreshError);
+    } finally {
+      // Cleared in finally, not on success: leaving a rejected promise cached
+      // would make every later 401 fail against the same stale error.
+      refreshInFlight = null;
+    }
   },
 );
 

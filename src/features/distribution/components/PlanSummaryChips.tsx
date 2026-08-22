@@ -1,20 +1,21 @@
+import { outletLabelTitle, unitLabelTitle } from "@/lib/lexicon";
 interface PlanSummaryChipsProps {
-  totalTabung: number;
-  jumlahPangkalan: number;
+  totalUnit: number;
+  jumlahOutlet: number;
   jumlahDriver: number;
 }
 
 export function PlanSummaryChips({
-  totalTabung,
-  jumlahPangkalan,
+  totalUnit,
+  jumlahOutlet,
   jumlahDriver,
 }: PlanSummaryChipsProps) {
   const chips = [
     {
       label: "Estimasi Muatan",
-      value: `${totalTabung.toLocaleString("id-ID")} / 600 Tabung`,
+      value: `${totalUnit.toLocaleString("id-ID")} / 600 ${unitLabelTitle()}`,
     },
-    { label: "Jumlah Pangkalan", value: `${jumlahPangkalan} Lokasi` },
+    { label: `Jumlah ${outletLabelTitle()}`, value: `${jumlahOutlet} Lokasi` },
     { label: "Total Driver", value: `${jumlahDriver} Personel` },
   ];
 

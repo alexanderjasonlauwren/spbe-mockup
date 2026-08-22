@@ -1,12 +1,15 @@
 import { Link } from "react-router-dom";
-import { CheckCircle2, PlayCircle, Printer, Route, TriangleAlert } from "lucide-react";
+import { CheckCircle2, Crosshair, PlayCircle, Printer, Route, TriangleAlert } from "lucide-react";
 import { DataTable, type Column } from "@/components/common/DataTable";
 import { Meter } from "@/components/common/Panel";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { getStatusVariant, spineFor } from "@/lib/status";
 import { Button } from "@/components/ui/button";
 import { formatNumber, formatPercentId } from "@/lib/format";
+import { formatDistance } from "@/lib/geo";
+import { cn } from "@/lib/utils";
 import type { MonitoringRow } from "../types";
+import { outletLabel, outletLabelTitle } from "@/lib/lexicon";
 
 interface MonitoringTableProps {
   data: MonitoringRow[];
@@ -40,20 +43,20 @@ export function MonitoringTable({
       sortValue: (row) => row.jamRencana,
     },
     {
-      key: "pangkalan",
-      header: "Pangkalan",
+      key: outletLabel(),
+      header: outletLabelTitle(),
       render: (row) => (
         <>
           <Link
-            to={`/pangkalan/${row.pangkalanId}`}
+            to={`/outlet/${row.outletId}`}
             className="block font-medium text-ink hover:underline hover:decoration-signal hover:decoration-2 hover:underline-offset-4"
           >
-            {row.pangkalan}
+            {row.outlet}
           </Link>
           <span className="block text-xs text-ink-muted">{row.alamat}</span>
         </>
       ),
-      sortValue: (row) => row.pangkalan,
+      sortValue: (row) => row.outlet,
     },
     {
       key: "driver",
@@ -93,7 +96,7 @@ export function MonitoringTable({
                   ? "pine"
                   : "signal"
             }
-            label={`${row.pangkalan}: ${formatPercentId(row.pencapaianPersen)} tercapai`}
+            label={`${row.outlet}: ${formatPercentId(row.pencapaianPersen)} tercapai`}
           />
         </div>
       ),
@@ -106,6 +109,26 @@ export function MonitoringTable({
       render: (row) => (
         <>
           <StatusBadge variant={getStatusVariant(row.status)} label={row.status} />
+          {/* Only worth a row's attention when it contradicts the claim; a fix
+              that lands at the outlet is the expected case and says nothing. */}
+          {row.lokasi && row.lokasi.verdict !== "sesuai" && (
+            <span
+              className={cn(
+                "mt-1 flex items-center gap-1 text-2xs leading-snug",
+                row.lokasi.verdict === "jauh" ? "font-semibold text-rust-ink" : "text-ink-muted",
+              )}
+              title={
+                row.lokasi.verdict === "jauh"
+                  ? `Surat jalan ditutup jauh dari titik ${outletLabel()}`
+                  : "Lokasi saat penutupan tidak dapat dipastikan"
+              }
+            >
+              <Crosshair className="h-3 w-3 shrink-0" aria-hidden />
+              {row.lokasi.verdict === "jauh"
+                ? `Ditutup ${formatDistance(row.lokasi.jarakMeter ?? 0)} dari ${outletLabel()}`
+                : "Lokasi penutupan tidak terekam"}
+            </span>
+          )}
           {row.catatan && (
             <span className="mt-1 block text-2xs leading-snug text-ink-muted">
               {row.catatan}

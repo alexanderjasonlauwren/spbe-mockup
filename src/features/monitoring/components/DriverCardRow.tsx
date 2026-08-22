@@ -104,9 +104,9 @@ export function DriverCardRow({
               />
 
               <p className="mt-3 text-xs text-ink-muted">
-                {card.tujuanPangkalan ? (
+                {card.tujuanOutlet ? (
                   <>
-                    Menuju <span className="text-ink">{card.tujuanPangkalan}</span>
+                    Menuju <span className="text-ink">{card.tujuanOutlet}</span>
                     {card.eta && (
                       <>
                         {" · ETA "}

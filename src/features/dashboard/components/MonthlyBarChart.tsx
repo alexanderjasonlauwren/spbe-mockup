@@ -9,9 +9,10 @@ import {
   YAxis,
 } from "recharts";
 import { useTheme } from "@/hooks/useTheme";
-import { axisProps, chartTheme, compactTabung, seriesColor } from "@/lib/chart";
+import { axisProps, chartTheme, compactUnit, seriesColor } from "@/lib/chart";
 import { ChartTooltip } from "@/components/common/ChartTooltip";
 import type { MonthlyChartPoint } from "../types";
+import { unitLabel } from "@/lib/lexicon";
 
 /**
  * Realisation against target, week by week. Both series are the same measure
@@ -27,10 +28,10 @@ export function MonthlyBarChart({ data }: { data: MonthlyChartPoint[] }) {
       <BarChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }} barGap={2}>
         <CartesianGrid stroke={t.grid} vertical={false} />
         <XAxis dataKey="week" {...axisProps(isDark)} />
-        <YAxis {...axisProps(isDark)} tickFormatter={compactTabung} width={58} />
+        <YAxis {...axisProps(isDark)} tickFormatter={compactUnit} width={58} />
         <Tooltip
           cursor={{ fill: t.grid, fillOpacity: 0.45 }}
-          content={<ChartTooltip unit="tabung" />}
+          content={<ChartTooltip unit={unitLabel()} />}
         />
         <Legend
           iconType="square"

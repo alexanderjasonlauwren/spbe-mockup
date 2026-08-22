@@ -26,12 +26,14 @@ import type {
   PlanOption,
   PlanRow,
 } from "../types";
+import { outletLabel, outletLabelTitle, unitLabel } from "@/lib/lexicon";
 
 interface PlanDetailPanelProps {
   plan?: DistributionPlan;
   rows: PlanRow[];
   isLoading: boolean;
-  pangkalanOptions: PlanOption[];
+  outletOptions: PlanOption[];
+  productOptions: { id: string; label: string; satuan: string }[];
   driverOptions: DriverOption[];
   onSaveDraft: (rows: PlanRow[]) => void;
   onConfirm: () => void;
@@ -48,7 +50,8 @@ export function PlanDetailPanel({
   plan,
   rows,
   isLoading,
-  pangkalanOptions,
+  outletOptions,
+  productOptions,
   driverOptions,
   onSaveDraft,
   onConfirm,
@@ -68,14 +71,14 @@ export function PlanDetailPanel({
 
   const editable = plan?.status === "Draft";
 
-  const total = draft.reduce((s, r) => s + r.jumlahTabung, 0);
+  const total = draft.reduce((s, r) => s + r.jumlahUnit, 0);
   const overQuota = plan ? total > plan.sisaKuotaSA : false;
 
   const loadByDriver = useMemo(() => {
     const map = new Map<string, number>();
     for (const row of draft) {
       if (!row.driverId) continue;
-      map.set(row.driverId, (map.get(row.driverId) ?? 0) + row.jumlahTabung);
+      map.set(row.driverId, (map.get(row.driverId) ?? 0) + row.jumlahUnit);
     }
     return map;
   }, [draft]);
@@ -84,11 +87,14 @@ export function PlanDetailPanel({
     (d) => (loadByDriver.get(d.id) ?? 0) > d.kapasitas,
   );
   const unassigned = draft.filter((r) => !r.driverId);
+  // A line with no product cannot be priced, so it cannot be invoiced either.
+  const tanpaProduk = draft.filter((r) => r.lines.some((l) => !l.productId));
   const kreditDiblokir = draft.filter((r) => r.alasanBlokir);
   const adaHambatan =
     overQuota ||
     overloaded.length > 0 ||
     unassigned.length > 0 ||
+    tanpaProduk.length > 0 ||
     kreditDiblokir.length > 0;
 
   const patchRow = (id: string, patch: Partial<PlanRow>) => {
@@ -96,9 +102,18 @@ export function PlanDetailPanel({
     setDirty(true);
   };
 
+  /**
+   * Lines are what the stop is; the total is a consequence of them.
+   *
+   * Recomputed here on every edit so the quota and capacity warnings above the
+   * table respond as the planner types, rather than after a save round trip.
+   */
+  const patchLines = (id: string, lines: PlanRow["lines"]) =>
+    patchRow(id, { lines, jumlahUnit: lines.reduce((s, l) => s + l.jumlah, 0) });
+
   const addRow = () => {
-    const used = new Set(draft.map((r) => r.pangkalanId));
-    const next = pangkalanOptions.find((p) => !used.has(p.id));
+    const used = new Set(draft.map((r) => r.outletId));
+    const next = outletOptions.find((p) => !used.has(p.id));
     if (!next) return;
     tempSeq += 1;
     const hour = Math.min(17, 7 + draft.length);
@@ -106,15 +121,16 @@ export function PlanDetailPanel({
       ...prev,
       {
         id: `baru-${tempSeq}`,
-        pangkalanId: next.id,
-        pangkalan: next.label,
+        outletId: next.id,
+        outlet: next.label,
         alamat: next.sublabel ?? "",
-        jumlahTabung: 100,
+        lines: [{ productId: productOptions[0]?.id ?? "", jumlah: 100 }],
+        jumlahUnit: 100,
         driverId: null,
         driver: "Belum ditetapkan",
         jamPengiriman: `${String(hour).padStart(2, "0")}:00`,
         statusBayar: "Lunas",
-        sisaKuotaPangkalan: 0,
+        sisaKuotaOutlet: 0,
         piutang: 0,
         piutangJatuhTempo: 0,
       },
@@ -198,17 +214,17 @@ export function PlanDetailPanel({
 
       {/* Running totals — the ceiling the planner works against. */}
       <div className="grid grid-cols-2 divide-x divide-line border-b border-line sm:grid-cols-4">
-        <Figure label="Titik singgah" value={formatNumber(draft.length)} unit="pangkalan" />
+        <Figure label="Titik singgah" value={formatNumber(draft.length)} unit={outletLabel()} />
         <Figure
           label="Total muatan"
           value={formatNumber(total)}
-          unit="tabung"
+          unit={unitLabel()}
           tone={overQuota ? "rust" : undefined}
         />
         <Figure
           label="Sisa kuota SA"
           value={formatNumber(Math.max(0, plan.sisaKuotaSA - (editable ? total : 0)))}
-          unit="tabung"
+          unit={unitLabel()}
           tone={overQuota ? "rust" : undefined}
         />
         <Figure
@@ -225,7 +241,7 @@ export function PlanDetailPanel({
             <Blocker>
               Muatan melebihi sisa kuota {plan.nomorSA} sebanyak{" "}
               <span className="data">{formatNumber(total - plan.sisaKuotaSA)}</span>{" "}
-              tabung. Kurangi jumlah, atau aktifkan agreement lain di{" "}
+              {unitLabel()}. Kurangi jumlah, atau aktifkan agreement lain di{" "}
               <Link to="/sa" className="font-semibold text-ink underline decoration-signal decoration-2 underline-offset-2">
                 Schedule Agreement
               </Link>
@@ -236,11 +252,17 @@ export function PlanDetailPanel({
             <Blocker key={d.id}>
               {d.label} membawa{" "}
               <span className="data">{formatNumber(loadByDriver.get(d.id) ?? 0)}</span>{" "}
-              tabung, melebihi kapasitas{" "}
+              {unitLabel()}, melebihi kapasitas{" "}
               <span className="data">{formatNumber(d.kapasitas)}</span>. Pindahkan
               sebagian titik ke armada lain.
             </Blocker>
           ))}
+          {tanpaProduk.length > 0 && (
+            <Blocker>
+              {tanpaProduk.length} titik punya baris muatan tanpa produk. Pilih
+              produknya agar tagihan dapat dihitung.
+            </Blocker>
+          )}
           {unassigned.length > 0 && (
             <Blocker>
               {unassigned.length} titik belum punya driver. Tetapkan armada sebelum
@@ -249,7 +271,7 @@ export function PlanDetailPanel({
           )}
           {kreditDiblokir.map((r) => (
               <Blocker key={`kredit-${r.id}`}>
-                {r.pangkalan} diblokir karena kredit. {r.alasanBlokir} Selesaikan
+                {r.outlet} diblokir karena kredit. {r.alasanBlokir} Selesaikan
                 tagihan di{" "}
                 <Link
                   to="/receivables"
@@ -257,7 +279,7 @@ export function PlanDetailPanel({
                 >
                   Piutang
                 </Link>
-                , atau naikkan plafon pada data pangkalan.
+                , atau naikkan plafon pada data {outletLabel()}.
             </Blocker>
           ))}
         </ul>
@@ -275,13 +297,13 @@ export function PlanDetailPanel({
           <EmptyState
             icon={Truck}
             title="Rencana ini belum punya titik singgah"
-            description="Tambahkan pangkalan satu per satu, atau tarik pesanan yang sudah disetujui dari halaman Pesanan Pangkalan."
+            description={`Tambahkan ${outletLabel()} satu per satu, atau tarik pesanan yang sudah disetujui dari halaman Pesanan ${outletLabelTitle()}.`}
             action={
               editable && (
                 <div className="flex gap-2">
                   <Button size="sm" onClick={addRow}>
                     <Plus className="h-3.5 w-3.5" />
-                    Tambah pangkalan
+                    Tambah {outletLabel()}
                   </Button>
                   <Button asChild size="sm" variant="outline">
                     <Link to="/orders">Lihat pesanan</Link>
@@ -294,12 +316,12 @@ export function PlanDetailPanel({
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-line bg-panel-sunk">
-                <th className="label px-5 py-2.5 text-2xs text-ink-muted">Pangkalan</th>
+                <th className="label px-5 py-2.5 text-2xs text-ink-muted">{outletLabelTitle()}</th>
                 <th className="label px-3 py-2.5 text-2xs text-ink-muted" style={{ width: "6.5rem" }}>
                   Jam
                 </th>
-                <th className="label px-3 py-2.5 text-right text-2xs text-ink-muted" style={{ width: "8rem" }}>
-                  Tabung
+                <th className="label px-3 py-2.5 text-2xs text-ink-muted" style={{ width: "19rem" }}>
+                  Muatan
                 </th>
                 <th className="label px-3 py-2.5 text-2xs text-ink-muted" style={{ width: "14rem" }}>
                   Driver / armada
@@ -320,7 +342,7 @@ export function PlanDetailPanel({
                   <tr key={row.id} className="border-b border-line last:border-b-0">
                     <td className="px-5 py-2.5">
                       <span className="block text-sm font-medium text-ink">
-                        {row.pangkalan}
+                        {row.outlet}
                       </span>
                       <span className="block text-xs text-ink-muted">{row.alamat}</span>
                     </td>
@@ -330,7 +352,7 @@ export function PlanDetailPanel({
                         <TextInput
                           type="time"
                           mono
-                          aria-label={`Jam pengiriman ${row.pangkalan}`}
+                          aria-label={`Jam pengiriman ${row.outlet}`}
                           value={row.jamPengiriman}
                           onChange={(e) =>
                             patchRow(row.id, { jamPengiriman: e.target.value })
@@ -341,26 +363,15 @@ export function PlanDetailPanel({
                       )}
                     </td>
 
-                    <td className="px-3 py-2.5 text-right">
+                    <td className="px-3 py-2.5">
                       {editable ? (
-                        <TextInput
-                          type="number"
-                          min={1}
-                          step={10}
-                          mono
-                          aria-label={`Jumlah tabung ${row.pangkalan}`}
-                          className="text-right"
-                          value={row.jumlahTabung}
-                          onChange={(e) =>
-                            patchRow(row.id, {
-                              jumlahTabung: Math.max(0, Number(e.target.value)),
-                            })
-                          }
+                        <LoadEditor
+                          row={row}
+                          products={productOptions}
+                          onChange={(lines) => patchLines(row.id, lines)}
                         />
                       ) : (
-                        <span className="data text-sm font-semibold text-ink">
-                          {formatNumber(row.jumlahTabung)}
-                        </span>
+                        <LoadSummary row={row} products={productOptions} />
                       )}
                     </td>
 
@@ -368,7 +379,7 @@ export function PlanDetailPanel({
                       {editable ? (
                         <>
                           <SelectInput
-                            aria-label={`Driver untuk ${row.pangkalan}`}
+                            aria-label={`Driver untuk ${row.outlet}`}
                             value={row.driverId ?? ""}
                             invalid={!row.driverId || over}
                             onChange={(e) =>
@@ -429,7 +440,7 @@ export function PlanDetailPanel({
                         <Button
                           variant="ghost"
                           size="icon-xs"
-                          aria-label={`Hapus ${row.pangkalan} dari rencana`}
+                          aria-label={`Hapus ${row.outlet} dari rencana`}
                           onClick={() => removeRow(row.id)}
                           className="hover:bg-rust-soft hover:text-rust-ink"
                         >
@@ -449,7 +460,7 @@ export function PlanDetailPanel({
         {editable ? (
           <Button variant="outline" size="sm" onClick={addRow}>
             <Plus className="h-3.5 w-3.5" />
-            Tambah pangkalan
+            Tambah {outletLabel()}
           </Button>
         ) : (
           <p className="flex items-center gap-2 text-xs text-ink-muted">
@@ -465,6 +476,131 @@ export function PlanDetailPanel({
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * What one stop carries, per product.
+ *
+ * The planner used to type a single number here and the API guessed which
+ * product it meant — fine while everything was 3 kg cylinders, wrong the moment
+ * a round carries two sizes at very different prices. A stop is a set of lines,
+ * so this edits lines.
+ */
+function LoadEditor({
+  row,
+  products,
+  onChange,
+}: {
+  row: PlanRow;
+  products: { id: string; label: string; satuan: string }[];
+  onChange: (lines: PlanRow["lines"]) => void;
+}) {
+  const used = new Set(row.lines.map((l) => l.productId));
+  const spare = products.find((p) => !used.has(p.id));
+
+  return (
+    <div className="space-y-1.5">
+      {row.lines.map((line, i) => (
+        <div key={i} className="flex items-center gap-1.5">
+          <SelectInput
+            aria-label={`Produk baris ${i + 1} untuk ${row.outlet}`}
+            className="min-w-0 flex-1 py-1.5 text-xs"
+            value={line.productId}
+            invalid={!line.productId}
+            onChange={(e) =>
+              onChange(
+                row.lines.map((l, li) =>
+                  li === i ? { ...l, productId: e.target.value } : l,
+                ),
+              )
+            }
+          >
+            <option value="">Pilih produk</option>
+            {products.map((p) => (
+              <option key={p.id} value={p.id} disabled={used.has(p.id) && p.id !== line.productId}>
+                {p.label}
+              </option>
+            ))}
+          </SelectInput>
+
+          <TextInput
+            type="number"
+            min={1}
+            step={10}
+            mono
+            aria-label={`Jumlah baris ${i + 1} untuk ${row.outlet}`}
+            className="w-20 shrink-0 py-1.5 text-right text-xs"
+            value={line.jumlah}
+            onChange={(e) =>
+              onChange(
+                row.lines.map((l, li) =>
+                  li === i ? { ...l, jumlah: Math.max(0, Number(e.target.value)) } : l,
+                ),
+              )
+            }
+          />
+
+          {/* The last line stays: a stop with nothing on it is not a stop. */}
+          {row.lines.length > 1 && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Hapus baris ${i + 1}`}
+              onClick={() => onChange(row.lines.filter((_, li) => li !== i))}
+              className="shrink-0 hover:bg-rust-soft hover:text-rust-ink"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      ))}
+
+      <div className="flex items-center justify-between gap-2 pt-0.5">
+        {spare ? (
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => onChange([...row.lines, { productId: spare.id, jumlah: 10 }])}
+          >
+            <Plus className="h-3 w-3" />
+            Produk
+          </Button>
+        ) : (
+          <span />
+        )}
+        <span className="data text-2xs font-semibold text-ink">
+          {formatNumber(row.jumlahUnit)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** The same load, once the plan is frozen. */
+function LoadSummary({
+  row,
+  products,
+}: {
+  row: PlanRow;
+  products: { id: string; label: string; satuan: string }[];
+}) {
+  return (
+    <div className="space-y-0.5">
+      {row.lines.map((line, i) => {
+        const p = products.find((x) => x.id === line.productId);
+        return (
+          <p key={i} className="flex items-baseline justify-between gap-3 text-xs">
+            <span className="truncate text-ink-muted">
+              {p?.label ?? "Produk tidak dikenal"}
+            </span>
+            <span className="data shrink-0 font-semibold text-ink">
+              {formatNumber(line.jumlah)}
+            </span>
+          </p>
+        );
+      })}
     </div>
   );
 }

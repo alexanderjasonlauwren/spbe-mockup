@@ -33,8 +33,8 @@ import {
 } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
 import { cn, getInitials } from "@/lib/utils";
-import { formatRupiah } from "@/lib/format";
 import type { SettingsEntity } from "@/mocks/types";
+import { supplierLabel } from "@/lib/lexicon";
 
 export function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -247,21 +247,6 @@ export function SettingsPage() {
               />
             </Field>
             <Field
-              label="Harga per tabung"
-              htmlFor="harga"
-              hint={`Tagihan otomatis dihitung dengan harga ini — kini ${formatRupiah(form.hargaPerTabung)}.`}
-            >
-              <TextInput
-                id="harga"
-                type="number"
-                min={1}
-                step={100}
-                mono
-                value={form.hargaPerTabung}
-                onChange={(e) => set("hargaPerTabung", Number(e.target.value))}
-              />
-            </Field>
-            <Field
               label="Target harian"
               htmlFor="target"
               hint="Dipakai bila belum ada rencana untuk hari itu."
@@ -287,6 +272,66 @@ export function SettingsPage() {
                 <option value="Asia/Jayapura">WIT — Asia/Jayapura</option>
               </SelectInput>
             </Field>
+          </PanelBody>
+        </Panel>
+
+        <Panel className="lg:col-span-2">
+          <PanelHeader
+            title="Istilah"
+            hint="Sebutan yang dipakai di seluruh konsol — ubah untuk bidang usaha lain"
+          />
+          <PanelBody className="space-y-4">
+            <p className="text-xs leading-relaxed text-ink-muted">
+              Konsol ini menangani distribusi apa pun. Yang membedakan satu bidang
+              usaha dari yang lain hanyalah sebutannya, jadi tiga kata di bawah ini
+              adalah data, bukan bagian dari aplikasi. Mengubahnya mengganti label
+              di seluruh halaman, kolom tabel, surat jalan, dan berkas ekspor —
+              tanpa menyentuh satu pun angka atau riwayat.
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Field
+                label="Satuan"
+                htmlFor="istilah-satuan"
+                hint="Satu unit yang Anda antar — tabung, galon, dus, sak. Dipakai pada angka gabungan lintas produk."
+              >
+                <TextInput
+                  id="istilah-satuan"
+                  value={form.istilah.satuan}
+                  placeholder="tabung"
+                  onChange={(e) =>
+                    set("istilah", { ...form.istilah, satuan: e.target.value })
+                  }
+                />
+              </Field>
+              <Field
+                label="Titik antar"
+                htmlFor="istilah-outlet"
+                hint="Tempat tujuan pengiriman — pangkalan, depot, toko, gerai."
+              >
+                <TextInput
+                  id="istilah-outlet"
+                  value={form.istilah.outlet}
+                  placeholder="outlet"
+                  onChange={(e) =>
+                    set("istilah", { ...form.istilah, outlet: e.target.value })
+                  }
+                />
+              </Field>
+              <Field
+                label="Pemasok"
+                htmlFor="istilah-pemasok"
+                hint="Sumber pasokan yang kuotanya Anda tarik — SPBE, pabrik, distributor pusat."
+              >
+                <TextInput
+                  id="istilah-pemasok"
+                  value={form.istilah.pemasok}
+                  placeholder="SPBE"
+                  onChange={(e) =>
+                    set("istilah", { ...form.istilah, pemasok: e.target.value })
+                  }
+                />
+              </Field>
+            </div>
           </PanelBody>
         </Panel>
 
@@ -343,7 +388,7 @@ export function SettingsPage() {
           >
             <p className="text-sm font-semibold text-ink">Konfigurasi Sistem</p>
             <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-              Mitra SPBE, rekening penerimaan, penomoran dokumen, dan hari kerja.
+              Mitra {supplierLabel()}, rekening penerimaan, penomoran dokumen, dan hari kerja.
             </p>
           </Link>
           <Link

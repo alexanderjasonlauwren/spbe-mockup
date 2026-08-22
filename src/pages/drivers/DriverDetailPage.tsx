@@ -14,6 +14,7 @@ import { getStatusVariant, spineFor } from "@/lib/status";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/button";
 import { formatDateId, formatNumber, formatPercentId } from "@/lib/format";
+import { outletLabel, unitLabel } from "@/lib/lexicon";
 
 type StopRow = Awaited<ReturnType<typeof getDriverSchedule>>[number];
 
@@ -31,15 +32,15 @@ const columns: Column<StopRow>[] = [
     render: (row) => <span className="data text-xs text-ink-muted">{row.kode}</span>,
   },
   {
-    key: "pangkalan",
+    key: outletLabel(),
     header: "Tujuan",
     render: (row) => (
       <>
-        <span className="block font-medium text-ink">{row.pangkalan}</span>
+        <span className="block font-medium text-ink">{row.outlet}</span>
         <span className="block text-xs text-ink-muted">Kec. {row.kecamatan}</span>
       </>
     ),
-    sortValue: (row) => row.pangkalan,
+    sortValue: (row) => row.outlet,
   },
   {
     key: "muatan",
@@ -117,7 +118,7 @@ export function DriverDetailPage() {
       <PageHeader
         eyebrow={`${d.plat} · ${d.armada}`}
         title={d.nama}
-        description={`Kapasitas ${formatNumber(d.kapasitas)} tabung per rit. Bergabung ${formatDateId(d.bergabungPada)}.`}
+        description={`Kapasitas ${formatNumber(d.kapasitas)} ${unitLabel()} per rit. Bergabung ${formatDateId(d.bergabungPada)}.`}
         meta={<StatusBadge variant={getStatusVariant(d.status)} label={d.status} />}
       />
 
@@ -125,7 +126,7 @@ export function DriverDetailPage() {
         <Stat
           label="Muatan hari ini"
           value={formatNumber(d.muatanHariIni)}
-          unit="tabung"
+          unit={unitLabel()}
           meter={{ value: d.muatanHariIni, max: d.kapasitas }}
           hint={`${formatPercentId(d.utilisasi * 100)} dari kapasitas armada`}
         />
@@ -143,7 +144,7 @@ export function DriverDetailPage() {
           label="Pengiriman 30 hari"
           value={formatNumber(d.pengiriman30Hari)}
           unit="surat jalan"
-          hint={`${formatNumber(d.tabung30Hari)} tabung terkirim`}
+          hint={`${formatNumber(d.unit30Hari)} ${unitLabel()} terkirim`}
         />
         <Stat
           label="Ketepatan penyelesaian"

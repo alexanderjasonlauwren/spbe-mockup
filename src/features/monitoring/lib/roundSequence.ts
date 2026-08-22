@@ -3,7 +3,7 @@ import type { MonitoringRow } from "../types";
 export type StopState = "done" | "next" | "pending";
 
 export interface RoundStop {
-  pangkalanId: string;
+  outletId: string;
   /** 1-based position in the round. Only meaningful when `numbered` is true. */
   order: number;
   state: StopState;
@@ -13,7 +13,7 @@ export interface RoundStop {
 export interface RoundSequence {
   /** Stops in planned order. */
   stops: RoundStop[];
-  byPangkalan: Map<string, RoundStop>;
+  byOutlet: Map<string, RoundStop>;
   /**
    * True when the window holds exactly one visit per outlet — i.e. one round.
    * Widen the board to seven days and a driver accumulates repeat visits, at
@@ -27,7 +27,7 @@ export interface RoundSequence {
 
 const EMPTY: RoundSequence = {
   stops: [],
-  byPangkalan: new Map(),
+  byOutlet: new Map(),
   isSingleRound: false,
   numbered: false,
   doneCount: 0,
@@ -46,7 +46,7 @@ const EMPTY: RoundSequence = {
 export function buildRoundSequence(
   rows: MonitoringRow[],
   driverId: string | null,
-  nextPangkalanId: string | undefined,
+  nextOutletId: string | undefined,
 ): RoundSequence {
   if (!driverId) return EMPTY;
 
@@ -57,12 +57,12 @@ export function buildRoundSequence(
   if (mine.length === 0) return EMPTY;
 
   const stops: RoundStop[] = mine.map((row, i) => ({
-    pangkalanId: row.pangkalanId,
+    outletId: row.outletId,
     order: i + 1,
     state:
       row.status === "Selesai"
         ? "done"
-        : row.pangkalanId === nextPangkalanId
+        : row.outletId === nextOutletId
           ? "next"
           : "pending",
     row,
@@ -70,16 +70,16 @@ export function buildRoundSequence(
 
   // Keyed by outlet, so a repeat visit overwrites: the newest state for an
   // outlet is the one worth putting on a map pin.
-  const byPangkalan = new Map(stops.map((s) => [s.pangkalanId, s]));
+  const byOutlet = new Map(stops.map((s) => [s.outletId, s]));
 
   // One round visits an outlet once. Fewer keys than stops means the window is
   // several rounds stacked together, and the ordinals collide on whichever
   // visit was written last.
-  const isSingleRound = byPangkalan.size === stops.length;
+  const isSingleRound = byOutlet.size === stops.length;
 
   return {
     stops,
-    byPangkalan,
+    byOutlet,
     isSingleRound,
     numbered: isSingleRound && stops.length <= 12,
     doneCount: stops.filter((s) => s.state === "done").length,

@@ -3,6 +3,7 @@ import { latency } from "@/mocks/db";
 import { updateDeliveryStatus } from "@/mocks/rules";
 import { DEPOT } from "@/mocks/seed";
 import { printDocument } from "@/lib/export";
+import { geoVerdict } from "@/lib/geo";
 import type {
   DriverCard,
   MonitoringAssignment,
@@ -21,14 +22,27 @@ export async function getMonitoringSnapshot(dateRange: {
     .filter((d) => d.tanggal >= dateRange.from && d.tanggal <= dateRange.to)
     .sort((a, b) => a.jamRencana.localeCompare(b.jamRencana));
 
+  const radius = db.settings.operasi.radiusGeofenceMeter;
+
   const rows: MonitoringRow[] = drops.map((d) => {
-    const pkl = db.pangkalan.find((p) => p.id === d.pangkalanId);
+    const pkl = db.outlets.find((p) => p.id === d.outletId);
     const drv = db.drivers.find((x) => x.id === d.driverId);
+    // The latest filing is the one worth showing: an earlier depart from the
+    // yard is expected to be far away, a later completion is not.
+    const filing = db.deliveryEvents
+      .filter((e) => e.deliveryId === d.id && e.tipe !== "berangkat")
+      .sort((a, b) => b.at.localeCompare(a.at))[0];
     return {
+      lokasi: filing
+        ? {
+            verdict: geoVerdict(filing.posisi, filing.jarakMeter, radius),
+            jarakMeter: filing.jarakMeter,
+          }
+        : undefined,
       id: d.id,
       kode: d.kode,
-      pangkalanId: d.pangkalanId,
-      pangkalan: pkl?.nama ?? "—",
+      outletId: d.outletId,
+      outlet: pkl?.nama ?? "—",
       alamat: pkl ? `Kec. ${pkl.kecamatan}` : "—",
       driverId: d.driverId,
       driver: drv?.nama ?? "—",
@@ -56,7 +70,7 @@ export async function getMonitoringSnapshot(dateRange: {
       const mine = drops.filter((d) => d.driverId === driver.id);
       const running = mine.find((d) => d.status === "Proses");
       const target = running
-        ? db.pangkalan.find((p) => p.id === running.pangkalanId)
+        ? db.outlets.find((p) => p.id === running.outletId)
         : undefined;
 
       return {
@@ -68,7 +82,7 @@ export async function getMonitoringSnapshot(dateRange: {
         kapasitas: driver.kapasitas,
         status: driver.status,
         muatan: mine.reduce((s, d) => s + d.target, 0),
-        tujuanPangkalan: target?.nama,
+        tujuanOutlet: target?.nama,
         eta: running ? `${running.jamRencana} WIB` : undefined,
         lokasi: driver.status === "Standby" ? "Pool Bekasi" : target?.kecamatan,
         durasi: driver.status === "Bongkar Muat" ? "±15 menit" : undefined,
@@ -88,8 +102,8 @@ export async function getMonitoringSnapshot(dateRange: {
 
       const running = mine.find((d) => d.status === "Proses");
       const remaining = mine.filter((d) => d.status !== "Selesai");
-      const coordOf = (pangkalanId: string) => {
-        const pkl = db.pangkalan.find((p) => p.id === pangkalanId);
+      const coordOf = (outletId: string) => {
+        const pkl = db.outlets.find((p) => p.id === outletId);
         return { lat: pkl?.lat ?? DEPOT.lat, lng: pkl?.lng ?? DEPOT.lng };
       };
 
@@ -109,7 +123,7 @@ export async function getMonitoringSnapshot(dateRange: {
         running && running.driverLat != null && running.driverLng != null
           ? { lat: running.driverLat, lng: running.driverLng }
           : lastDone && remaining.length === 0
-            ? coordOf(lastDone.pangkalanId)
+            ? coordOf(lastDone.outletId)
             : parked;
 
       const target = remaining[0] ?? mine[mine.length - 1];
@@ -117,10 +131,10 @@ export async function getMonitoringSnapshot(dateRange: {
       return {
         id: driver.id,
         driverId: driver.id,
-        pangkalanId: target.pangkalanId,
+        outletId: target.outletId,
         driverCoord,
         stops: (remaining.length > 0 ? remaining : mine).map((d) =>
-          coordOf(d.pangkalanId),
+          coordOf(d.outletId),
         ),
         berjalan: !!running,
         selesai: remaining.length === 0,
@@ -169,7 +183,7 @@ export async function printSuratJalan(deliveryId: string): Promise<void> {
   const d = db.deliveries.find((x) => x.id === deliveryId);
   if (!d) throw new Error("Surat jalan tidak ditemukan.");
 
-  const pkl = db.pangkalan.find((p) => p.id === d.pangkalanId);
+  const pkl = db.outlets.find((p) => p.id === d.outletId);
   const drv = db.drivers.find((x) => x.id === d.driverId);
   const fmt = (n: number) => n.toLocaleString("id-ID");
 

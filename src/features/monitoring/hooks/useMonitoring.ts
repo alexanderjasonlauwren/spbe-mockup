@@ -7,6 +7,7 @@ import {
   printSuratJalan,
   setDeliveryStatus,
 } from "../api/monitoringApi";
+import { unitLabel } from "@/lib/lexicon";
 
 function todayStr() {
   const d = new Date();
@@ -33,7 +34,7 @@ export function useMonitoring() {
       title: `${delivery.kode} → ${delivery.status}`,
       description:
         delivery.status === "Selesai"
-          ? `Realisasi ${delivery.realisasi.toLocaleString("id-ID")} tabung. Tagihan otomatis diterbitkan untuk verifikasi keuangan.`
+          ? `Realisasi ${delivery.realisasi.toLocaleString("id-ID")} ${unitLabel()}. Tagihan otomatis diterbitkan untuk verifikasi keuangan.`
           : undefined,
     }),
   });

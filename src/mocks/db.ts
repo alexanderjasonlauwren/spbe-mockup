@@ -11,6 +11,7 @@ import {
   createSeedDatabase,
   DB_VERSION,
   DEFAULT_NOTIFICATIONS,
+  DEFAULT_LEXICON,
   DEFAULT_NUMBERING,
   DEFAULT_OPERATIONS,
   isoDate,
@@ -52,12 +53,20 @@ function read(): Database | null {
  * they have already done in the session.
  */
 function migrate(db: Database): Database {
-  db.spbe ??= [];
+  db.suppliers ??= [];
   db.bankAccounts ??= [];
+  db.deliveryEvents ??= [];
 
   const s = db.settings as Partial<Database["settings"]>;
   s.penomoran ??= { ...DEFAULT_NUMBERING };
+  s.istilah ??= { ...DEFAULT_LEXICON };
+  // A tenant stored before the lexicon existed keeps its unit word.
+  s.istilah.satuan ??= (s as { satuanDefault?: string }).satuanDefault ?? DEFAULT_LEXICON.satuan;
+  s.istilah.outlet ??= DEFAULT_LEXICON.outlet;
+  s.istilah.pemasok ??= DEFAULT_LEXICON.pemasok;
   s.operasi ??= { ...DEFAULT_OPERATIONS };
+  s.operasi.rekamLokasi ??= DEFAULT_OPERATIONS.rekamLokasi;
+  s.operasi.radiusGeofenceMeter ??= DEFAULT_OPERATIONS.radiusGeofenceMeter;
   s.notifikasi ??= structuredClone(DEFAULT_NOTIFICATIONS);
 
   // A rule added after this database was stored still needs its default.

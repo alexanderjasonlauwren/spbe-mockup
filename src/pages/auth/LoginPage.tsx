@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2, TriangleAlert } from "lucide-react";
 import { useAuthStore } from "@/features/auth/store/authStore";
+import { landingPathFor } from "@/layouts/nav";
 import { Field, TextInput } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
-import { APP_NAME } from "@/utils/constants";
+import { APP_NAME, APP_SUBTITLE } from "@/utils/constants";
 import { cn } from "@/lib/utils";
 
 /**
@@ -72,7 +73,11 @@ export function LoginPage() {
     setIsLoading(true);
     try {
       await login(email, password);
-      navigate("/dashboard", { replace: true });
+      // Read after the store settles: a sopir belongs on their run, not on a
+      // dashboard of trucks that are not theirs.
+      navigate(landingPathFor(useAuthStore.getState().user?.role), {
+        replace: true,
+      });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -96,7 +101,7 @@ export function LoginPage() {
             <p className="text-lg font-bold leading-tight tracking-[-0.02em] text-[#F4F5F0]">
               {APP_NAME}
             </p>
-            <p className="label text-[0.625rem] text-[#9AA093]">Konsol Agen LPG</p>
+            <p className="label text-[0.625rem] text-[#9AA093]">{APP_SUBTITLE}</p>
           </div>
         </div>
 
@@ -107,7 +112,7 @@ export function LoginPage() {
             jam berangkatnya.
           </h2>
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-[#9AA093]">
-            Konsol operasional untuk agen distribusi LPG: kuota SPBE, rencana rute,
+            Konsol operasional untuk agen distribusi: kuota pasokan, rencana rute,
             posisi armada, dan verifikasi pembayaran dalam satu papan.
           </p>
 
@@ -161,7 +166,7 @@ export function LoginPage() {
         <div className="w-full max-w-sm">
           <div className="mb-8 lg:hidden">
             <p className="text-xl font-bold tracking-[-0.02em] text-ink">{APP_NAME}</p>
-            <p className="label text-2xs text-ink-muted">Konsol Agen LPG</p>
+            <p className="label text-2xs text-ink-muted">{APP_SUBTITLE}</p>
           </div>
 
           <h1 className="text-2xl font-bold tracking-[-0.02em] text-ink">Masuk</h1>

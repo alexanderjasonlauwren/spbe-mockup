@@ -8,7 +8,8 @@ import {
   scheduleOrders,
 } from "@/mocks/rules";
 import { printDocument } from "@/lib/export";
-import { pangkalanExposure } from "@/mocks/ar";
+import { outletExposure } from "@/mocks/ar";
+import { defaultProduct } from "@/mocks/lines";
 import { isoDate, startOfToday } from "@/mocks/seed";
 import type { PlanEntity } from "@/mocks/types";
 import type {
@@ -17,6 +18,7 @@ import type {
   PlanOption,
   PlanRow,
 } from "../types";
+import { outletLabelTitle, unitLabel, unitLabelTitle } from "@/lib/lexicon";
 
 function toPlanView(plan: PlanEntity): DistributionPlan {
   const db = scopedDb();
@@ -27,8 +29,8 @@ function toPlanView(plan: PlanEntity): DistributionPlan {
     id: plan.id,
     kode: plan.kode,
     tanggal: plan.tanggal,
-    totalTabung: rows.reduce((s, r) => s + r.jumlahTabung, 0),
-    jumlahPangkalan: rows.length,
+    totalUnit: rows.reduce((s, r) => s + r.jumlahUnit, 0),
+    jumlahOutlet: rows.length,
     jumlahDriver: new Set(rows.map((r) => r.driverId).filter(Boolean)).size,
     status: plan.status,
     saId: plan.saId,
@@ -60,26 +62,27 @@ export async function getPlanDetail(planId: string): Promise<PlanRow[]> {
     .filter((r) => r.planId === planId)
     .sort((a, b) => a.jamPengiriman.localeCompare(b.jamPengiriman))
     .map((r) => {
-      const pkl = db.pangkalan.find((p) => p.id === r.pangkalanId);
+      const pkl = db.outlets.find((p) => p.id === r.outletId);
       const driver = db.drivers.find((d) => d.id === r.driverId);
       const takenThisMonth = db.deliveries
-        .filter((d) => d.pangkalanId === r.pangkalanId && d.tanggal >= monthStart)
+        .filter((d) => d.outletId === r.outletId && d.tanggal >= monthStart)
         .reduce((s, d) => s + d.target, 0);
       // Credit standing, not "is there an unverified transfer" — this column
       // is what tells the planner a stop is about to be refused.
-      const exp = pangkalanExposure(db, r.pangkalanId);
+      const exp = outletExposure(db, r.outletId);
 
       return {
         id: r.id,
-        pangkalanId: r.pangkalanId,
-        pangkalan: pkl?.nama ?? "—",
+        outletId: r.outletId,
+        outlet: pkl?.nama ?? "—",
         alamat: pkl ? `${pkl.alamat}, Kec. ${pkl.kecamatan}` : "—",
-        jumlahTabung: r.jumlahTabung,
+        lines: r.lines.map((l) => ({ ...l })),
+        jumlahUnit: r.jumlahUnit,
         driverId: r.driverId,
         driver: driver?.nama ?? "Belum ditetapkan",
         jamPengiriman: r.jamPengiriman,
         statusBayar: exp.terblokir ? "Belum Lunas" : "Lunas",
-        sisaKuotaPangkalan: Math.max(0, (pkl?.kuotaBulanan ?? 0) - takenThisMonth),
+        sisaKuotaOutlet: Math.max(0, (pkl?.kuotaBulanan ?? 0) - takenThisMonth),
         piutang: exp.outstanding,
         piutangJatuhTempo: exp.jatuhTempo,
         alasanBlokir: exp.alasan,
@@ -93,9 +96,14 @@ export async function saveDraft(planId: string, rows: PlanRow[]): Promise<void> 
     planId,
     rows.map((r) => ({
       id: r.id,
-      pangkalanId: r.pangkalanId,
+      outletId: r.outletId,
       driverId: r.driverId,
-      jumlahTabung: r.jumlahTabung,
+      // A row edited on a screen that still only knows totals keeps its mix and
+      // pushes the change onto the first line, rather than dropping the rest.
+      lines: r.lines.filter((l) => l.productId && l.jumlah > 0),
+      // Recomputed by the rules layer from the lines; sent only so the shape
+      // matches the entity.
+      jumlahUnit: r.jumlahUnit,
       jamPengiriman: r.jamPengiriman,
     })),
   );
@@ -123,16 +131,31 @@ export async function addApprovedOrders(planId: string, orderIds: string[]) {
 
 /* ── option lists for the planner ──────────────────────────────────────── */
 
-export async function getPangkalanOptions(): Promise<PlanOption[]> {
+export async function getOutletOptions(): Promise<PlanOption[]> {
   await latency("read");
   return scopedDb()
-    .pangkalan.filter((p) => p.status === "Aktif")
+    .outlets.filter((p) => p.status === "Aktif")
     .sort((a, b) => a.nama.localeCompare(b.nama))
     .map((p) => ({
       id: p.id,
       label: p.nama,
       sublabel: `Kec. ${p.kecamatan} · kuota ${p.kuotaBulanan.toLocaleString("id-ID")}/bln`,
     }));
+}
+
+/** What a stop can be loaded with. */
+export async function getProductOptions(): Promise<
+  { id: string; label: string; satuan: string }[]
+> {
+  await latency("read");
+  return scopedDb()
+    .products.filter((p) => p.aktif)
+    .map((p) => ({ id: p.id, label: p.nama, satuan: p.satuan }));
+}
+
+/** The line a brand-new stop starts with, so a row is never empty. */
+export async function getDefaultProductId(): Promise<string> {
+  return defaultProduct(scopedDb().products)?.id ?? "";
 }
 
 export async function getDriverOptions(planId: string): Promise<DriverOption[]> {
@@ -147,7 +170,7 @@ export async function getDriverOptions(planId: string): Promise<DriverOption[]> 
     kapasitas: d.kapasitas,
     muatan: rows
       .filter((r) => r.driverId === d.id)
-      .reduce((s, r) => s + r.jumlahTabung, 0),
+      .reduce((s, r) => s + r.jumlahUnit, 0),
     status: d.status,
     disabled: d.status === "Cuti",
   }));
@@ -163,7 +186,7 @@ export async function getActiveSaOptions(): Promise<PlanOption[]> {
     .map((s) => ({
       id: s.id,
       label: s.nomorSA,
-      sublabel: `${s.spbe} · sisa ${(s.totalKuota - s.terpakai).toLocaleString("id-ID")} tabung`,
+      sublabel: `${s.supplier} · sisa ${(s.totalKuota - s.terpakai).toLocaleString("id-ID")} ${unitLabel()}`,
       disabled: s.terpakai >= s.totalKuota,
     }));
 }
@@ -178,7 +201,7 @@ export async function printRouteSheet(planId: string): Promise<void> {
   const rows = db.planRows
     .filter((r) => r.planId === planId)
     .sort((a, b) => a.jamPengiriman.localeCompare(b.jamPengiriman));
-  const total = rows.reduce((s, r) => s + r.jumlahTabung, 0);
+  const total = rows.reduce((s, r) => s + r.jumlahUnit, 0);
   const fmt = (n: number) => n.toLocaleString("id-ID");
 
   printDocument(
@@ -196,21 +219,21 @@ export async function printRouteSheet(planId: string): Promise<void> {
     <table>
       <thead>
         <tr>
-          <th>Jam</th><th>Pangkalan</th><th>Alamat</th><th>Driver / Armada</th>
-          <th style="text-align:right">Tabung</th><th style="width:90px">Diterima</th>
+          <th>Jam</th><th>${outletLabelTitle()}</th><th>Alamat</th><th>Driver / Armada</th>
+          <th style="text-align:right">${unitLabelTitle()}</th><th style="width:90px">Diterima</th>
         </tr>
       </thead>
       <tbody>
         ${rows
           .map((r) => {
-            const pkl = db.pangkalan.find((p) => p.id === r.pangkalanId);
+            const pkl = db.outlets.find((p) => p.id === r.outletId);
             const drv = db.drivers.find((d) => d.id === r.driverId);
             return `<tr>
               <td class="code">${r.jamPengiriman}</td>
               <td>${pkl?.nama ?? "—"}</td>
               <td>${pkl ? `${pkl.alamat}, Kec. ${pkl.kecamatan}` : "—"}</td>
               <td>${drv ? `${drv.nama}<br /><span class="code">${drv.plat}</span>` : "Belum ditetapkan"}</td>
-              <td class="num">${fmt(r.jumlahTabung)}</td>
+              <td class="num">${fmt(r.jumlahUnit)}</td>
               <td></td>
             </tr>`;
           })

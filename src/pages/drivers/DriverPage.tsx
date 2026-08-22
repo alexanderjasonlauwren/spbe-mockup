@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatNumber, formatPercentId } from "@/lib/format";
 import type { DriverStatusEntity } from "@/mocks/types";
+import { unitLabel } from "@/lib/lexicon";
 
 const STATUSES: (DriverStatusEntity | "Semua")[] = [
   "Semua",
@@ -188,13 +189,13 @@ export function DriverPage() {
       align: "right",
       render: (row) => (
         <>
-          <span className="data block text-ink">{formatNumber(row.tabung30Hari)}</span>
+          <span className="data block text-ink">{formatNumber(row.unit30Hari)}</span>
           <span className="data block text-2xs text-ink-muted">
             {formatPercentId(row.ketepatan * 100)} tepat
           </span>
         </>
       ),
-      sortValue: (row) => row.tabung30Hari,
+      sortValue: (row) => row.unit30Hari,
     },
     {
       key: "status",
@@ -388,7 +389,7 @@ export function DriverPage() {
                   label="Kapasitas"
                   htmlFor="d-kap"
                   error={errors.kapasitas}
-                  hint="Jumlah tabung per rit."
+                  hint={`Jumlah ${unitLabel()} per rit.`}
                   required
                 >
                   <TextInput

@@ -35,7 +35,7 @@ export function SATable({
           <span className="data block whitespace-nowrap text-xs font-semibold text-ink">
             {row.nomorSA}
           </span>
-          <span className="block text-xs text-ink-muted">{row.spbe}</span>
+          <span className="block text-xs text-ink-muted">{row.supplier}</span>
         </>
       ),
       sortValue: (row) => row.nomorSA,

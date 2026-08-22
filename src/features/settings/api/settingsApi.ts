@@ -3,6 +3,7 @@ import { latency, resetDb } from "@/mocks/db";
 import { saveSettings } from "@/mocks/rules";
 import { exportJson, timestampSuffix } from "@/lib/export";
 import type { SettingsEntity } from "@/mocks/types";
+import { term, type TermKey } from "@/lib/lexicon";
 
 export async function getSettings(): Promise<SettingsEntity> {
   await latency("read");
@@ -11,8 +12,13 @@ export async function getSettings(): Promise<SettingsEntity> {
 
 export async function updateSettings(patch: Partial<SettingsEntity>) {
   await latency("write");
-  if (patch.hargaPerTabung != null && patch.hargaPerTabung <= 0) {
-    throw new Error("Harga per tabung harus lebih dari nol.");
+  // An empty word would leave columns and toasts reading "1.284 " — the
+  // console has no fallback once the tenant has chosen its own vocabulary.
+  if (patch.istilah) {
+    for (const key of Object.keys(patch.istilah) as TermKey[]) {
+      if (patch.istilah[key]?.trim()) continue;
+      throw new Error(`Istilah "${key}" wajib diisi — saat ini "${term(key)}".`);
+    }
   }
   if (
     patch.jamOperasionalMulai &&

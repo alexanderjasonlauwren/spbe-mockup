@@ -9,13 +9,15 @@ import {
   createPlan,
   getActiveSaOptions,
   getDriverOptions,
-  getPangkalanOptions,
+  getOutletOptions,
+  getProductOptions,
   getPlanDetail,
   getPlanList,
   printRouteSheet,
   saveDraft,
 } from "../api/distributionApi";
 import type { PlanRow } from "../types";
+import { outletLabel, unitLabel } from "@/lib/lexicon";
 
 export function useDistributionPlan() {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
@@ -35,15 +37,20 @@ export function useDistributionPlan() {
     enabled: !!selectedPlanId,
   });
 
-  const pangkalanOptions = useQuery({
-    queryKey: [...scopeKey(), "pangkalan-options"],
-    queryFn: getPangkalanOptions,
+  const outletOptions = useQuery({
+    queryKey: [...scopeKey(), "outlet-options"],
+    queryFn: getOutletOptions,
   });
 
   const driverOptions = useQuery({
     queryKey: [...scopeKey(), "driver-options", selectedPlanId],
     queryFn: () => getDriverOptions(selectedPlanId!),
     enabled: !!selectedPlanId,
+  });
+
+  const productOptions = useQuery({
+    queryKey: [...scopeKey(), "product-options"],
+    queryFn: getProductOptions,
   });
 
   const saOptions = useQuery({
@@ -63,7 +70,7 @@ export function useDistributionPlan() {
     errorTitle: "Konfirmasi gagal",
     success: (result) => ({
       title: "Rencana dikonfirmasi",
-      description: `${result.deliveries} surat jalan terbit dan ${result.total.toLocaleString("id-ID")} tabung ditarik dari kuota SA. Pantau di Monitoring Distribusi.`,
+      description: `${result.deliveries} surat jalan terbit dan ${result.total.toLocaleString("id-ID")} ${unitLabel()} ditarik dari kuota SA. Pantau di Monitoring Distribusi.`,
     }),
   });
 
@@ -72,7 +79,7 @@ export function useDistributionPlan() {
     errorTitle: "Rencana tidak dibuat",
     success: (plan) => ({
       title: `Rencana ${plan.kode} dibuat`,
-      description: "Tambahkan pangkalan dan tetapkan driver sebelum konfirmasi.",
+      description: `Tambahkan ${outletLabel()} dan tetapkan driver sebelum konfirmasi.`,
     }),
     onDone: (plan) => setSelectedPlanId(plan.id),
   });
@@ -110,7 +117,8 @@ export function useDistributionPlan() {
     error: planList.error as Error | null,
     selectedPlanId,
     setSelectedPlanId,
-    pangkalanOptions: pangkalanOptions.data ?? [],
+    outletOptions: outletOptions.data ?? [],
+    productOptions: productOptions.data ?? [],
     driverOptions: driverOptions.data ?? [],
     saOptions: saOptions.data ?? [],
     saveDraftMutation,

@@ -11,15 +11,15 @@ import {
 } from "lucide-react";
 import {
   deleteBankAccount,
-  deleteSpbe,
+  deleteSupplier,
   getBankAccounts,
-  getSpbeList,
+  getSupplierList,
   getSystemConfig,
   saveBankAccount,
   saveNumbering,
   saveOperations,
-  saveSpbe,
-  type SpbeView,
+  saveSupplier,
+  type SupplierView,
 } from "@/features/system/api/systemApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -51,27 +51,28 @@ import type {
   NumberingEntity,
   OperationsEntity,
 } from "@/mocks/types";
+import { outletLabel, supplierLabel } from "@/lib/lexicon";
 
-type Tab = "spbe" | "rekening" | "penomoran" | "operasi";
+type Tab = "supplier" | "rekening" | "penomoran" | "operasi";
 
 const BANKS: BankNameEntity[] = ["BCA", "BNI", "Mandiri", "BRI", "BSI"];
 const HARI = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
 export function SystemConfigPage() {
-  const [tab, setTab] = useState<Tab>("spbe");
+  const [tab, setTab] = useState<Tab>("supplier");
 
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="Data induk"
         title="Konfigurasi Sistem"
-        description="Data acuan yang dipakai seluruh konsol: mitra SPBE, rekening penerimaan, penomoran dokumen, dan jadwal operasi."
+        description={`Data acuan yang dipakai seluruh konsol: mitra ${supplierLabel()}, rekening penerimaan, penomoran dokumen, dan jadwal operasi.`}
         meta={
           <SegmentedControl
             value={tab}
             onChange={setTab}
             options={[
-              { value: "spbe" as const, label: "Mitra SPBE" },
+              { value: "supplier" as const, label: `Mitra ${supplierLabel()}` },
               { value: "rekening" as const, label: "Rekening penerimaan" },
               { value: "penomoran" as const, label: "Penomoran dokumen" },
               { value: "operasi" as const, label: "Jadwal operasi" },
@@ -80,7 +81,7 @@ export function SystemConfigPage() {
         }
       />
 
-      {tab === "spbe" && <SpbeSection />}
+      {tab === "supplier" && <SupplierSection />}
       {tab === "rekening" && <BankSection />}
       {tab === "penomoran" && <NumberingSection />}
       {tab === "operasi" && <OperationsSection />}
@@ -88,9 +89,9 @@ export function SystemConfigPage() {
   );
 }
 
-/* ── SPBE ──────────────────────────────────────────────────────────────── */
+/* ── supply sources ────────────────────────────────────────────────────── */
 
-interface SpbeForm {
+interface SupplierForm {
   id?: string;
   kode: string;
   nama: string;
@@ -100,7 +101,7 @@ interface SpbeForm {
   aktif: boolean;
 }
 
-const EMPTY_SPBE: SpbeForm = {
+const EMPTY_SUPPLIER: SupplierForm = {
   kode: "",
   nama: "",
   alamat: "",
@@ -109,35 +110,35 @@ const EMPTY_SPBE: SpbeForm = {
   aktif: true,
 };
 
-function SpbeSection() {
-  const list = useQuery({ queryKey: [...scopeKey(), "spbe-list"], queryFn: getSpbeList });
-  const [editing, setEditing] = useState<SpbeForm | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<SpbeView | null>(null);
+function SupplierSection() {
+  const list = useQuery({ queryKey: [...scopeKey(), "supplier-list"], queryFn: getSupplierList });
+  const [editing, setEditing] = useState<SupplierForm | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<SupplierView | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const saveMutation = useDeskMutation({
-    mutationFn: (values: SpbeForm) => saveSpbe(values),
-    errorTitle: "SPBE tidak tersimpan",
+    mutationFn: (values: SupplierForm) => saveSupplier(values),
+    errorTitle: `${supplierLabel()} tidak tersimpan`,
     success: (s) => ({ title: `${s.nama} tersimpan` }),
     onDone: () => setEditing(null),
   });
 
   const deleteMutation = useDeskMutation({
-    mutationFn: (id: string) => deleteSpbe(id),
-    errorTitle: "Hapus SPBE gagal",
-    success: "SPBE dihapus",
+    mutationFn: (id: string) => deleteSupplier(id),
+    errorTitle: `Hapus ${supplierLabel()} gagal`,
+    success: `${supplierLabel()} dihapus`,
     onDone: () => setPendingDelete(null),
   });
 
-  const open = (values: SpbeForm) => {
+  const open = (values: SupplierForm) => {
     setError(null);
     setEditing(values);
   };
 
-  const columns: Column<SpbeView>[] = [
+  const columns: Column<SupplierView>[] = [
     {
       key: "nama",
-      header: "SPBE",
+      header: supplierLabel(),
       render: (row) => (
         <>
           <span className="block font-medium text-ink">{row.nama}</span>
@@ -221,12 +222,12 @@ function SpbeSection() {
     <>
       <Panel>
         <PanelHeader
-          title="Mitra SPBE"
-          hint="Sumber kuota. Setiap Schedule Agreement diterbitkan oleh salah satu SPBE di sini."
+          title={`Mitra ${supplierLabel()}`}
+          hint={`Sumber kuota. Setiap Schedule Agreement diterbitkan oleh salah satu ${supplierLabel()} di sini.`}
           actions={
-            <Button size="sm" onClick={() => open(EMPTY_SPBE)}>
+            <Button size="sm" onClick={() => open(EMPTY_SUPPLIER)}>
               <Plus className="h-3.5 w-3.5" />
-              Tambah SPBE
+              Tambah {supplierLabel()}
             </Button>
           }
         />
@@ -237,11 +238,11 @@ function SpbeSection() {
           rowKey={(row) => row.id}
           spineFor={(row) => (row.aktif ? "text-pine" : "text-draft")}
           emptyIcon={Factory}
-          emptyMessage="Belum ada mitra SPBE"
-          emptyDescription="Tambahkan SPBE agar dapat dipilih saat mengunggah Schedule Agreement."
+          emptyMessage={`Belum ada mitra ${supplierLabel()}`}
+          emptyDescription={`Tambahkan ${supplierLabel()} agar dapat dipilih saat mengunggah Schedule Agreement.`}
           emptyAction={
-            <Button size="sm" onClick={() => open(EMPTY_SPBE)}>
-              Tambah SPBE
+            <Button size="sm" onClick={() => open(EMPTY_SUPPLIER)}>
+              Tambah {supplierLabel()}
             </Button>
           }
           dense
@@ -254,16 +255,16 @@ function SpbeSection() {
             onSubmit={(e) => {
               e.preventDefault();
               if (!editing) return;
-              if (!editing.nama.trim()) return setError("Nama SPBE wajib diisi.");
+              if (!editing.nama.trim()) return setError(`Nama ${supplierLabel()} wajib diisi.`);
               saveMutation.mutate(editing);
             }}
           >
             <DialogHeader>
               <DialogTitle>
-                {editing?.id ? `Ubah ${editing.nama}` : "Tambah mitra SPBE"}
+                {editing?.id ? `Ubah ${editing.nama}` : `Tambah mitra ${supplierLabel()}`}
               </DialogTitle>
               <DialogDescription>
-                Mengubah nama SPBE juga memperbarui agreement yang sudah merujuk
+                Mengubah nama {supplierLabel()} juga memperbarui agreement yang sudah merujuk
                 padanya.
               </DialogDescription>
             </DialogHeader>
@@ -271,48 +272,48 @@ function SpbeSection() {
             {editing && (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field
-                  label="Nama SPBE"
-                  htmlFor="spbe-nama"
+                  label={`Nama ${supplierLabel()}`}
+                  htmlFor="supplier-nama"
                   error={error ?? undefined}
                   required
                   className="sm:col-span-2"
                 >
                   <TextInput
-                    id="spbe-nama"
+                    id="supplier-nama"
                     value={editing.nama}
                     invalid={!!error}
-                    placeholder="SPBE Bekasi Utama"
+                    placeholder={`${supplierLabel()} Bekasi Utama`}
                     onChange={(e) => setEditing({ ...editing, nama: e.target.value })}
                   />
                 </Field>
-                <Field label="Kode" htmlFor="spbe-kode" hint="Dibuat otomatis jika kosong.">
+                <Field label="Kode" htmlFor="supplier-kode" hint="Dibuat otomatis jika kosong.">
                   <TextInput
-                    id="spbe-kode"
+                    id="supplier-kode"
                     mono
                     value={editing.kode}
                     onChange={(e) => setEditing({ ...editing, kode: e.target.value })}
                   />
                 </Field>
-                <Field label="Telepon" htmlFor="spbe-telp">
+                <Field label="Telepon" htmlFor="supplier-telp">
                   <TextInput
-                    id="spbe-telp"
+                    id="supplier-telp"
                     mono
                     value={editing.telepon}
                     onChange={(e) => setEditing({ ...editing, telepon: e.target.value })}
                   />
                 </Field>
-                <Field label="Penanggung jawab" htmlFor="spbe-pj">
+                <Field label="Penanggung jawab" htmlFor="supplier-pj">
                   <TextInput
-                    id="spbe-pj"
+                    id="supplier-pj"
                     value={editing.penanggungJawab}
                     onChange={(e) =>
                       setEditing({ ...editing, penanggungJawab: e.target.value })
                     }
                   />
                 </Field>
-                <Field label="Alamat" htmlFor="spbe-alamat">
+                <Field label="Alamat" htmlFor="supplier-alamat">
                   <TextInput
-                    id="spbe-alamat"
+                    id="supplier-alamat"
                     value={editing.alamat}
                     onChange={(e) => setEditing({ ...editing, alamat: e.target.value })}
                   />
@@ -320,7 +321,7 @@ function SpbeSection() {
                 <div className="sm:col-span-2 border-t border-line">
                   <Toggle
                     label="Aktif"
-                    description="SPBE nonaktif tidak muncul saat mengunggah agreement baru."
+                    description={`${supplierLabel()} nonaktif tidak muncul saat mengunggah agreement baru.`}
                     checked={editing.aktif}
                     onChange={(aktif) => setEditing({ ...editing, aktif })}
                   />
@@ -333,7 +334,7 @@ function SpbeSection() {
                 Batal
               </Button>
               <Button type="submit" disabled={saveMutation.isPending}>
-                Simpan SPBE
+                Simpan {supplierLabel()}
               </Button>
             </DialogFooter>
           </form>
@@ -343,13 +344,13 @@ function SpbeSection() {
       <ConfirmDialog
         isOpen={!!pendingDelete}
         title={`Hapus ${pendingDelete?.nama}?`}
-        message="SPBE hilang dari pilihan saat mengunggah Schedule Agreement."
+        message={`${supplierLabel()} hilang dari pilihan saat mengunggah Schedule Agreement.`}
         details={
           pendingDelete && pendingDelete.jumlahSA > 0
             ? `Masih dipakai ${pendingDelete.jumlahSA} agreement — penghapusan akan ditolak. Nonaktifkan saja agar riwayat kuota tetap utuh.`
-            : "Tidak ada agreement yang merujuk SPBE ini, jadi aman dihapus."
+            : `Tidak ada agreement yang merujuk ${supplierLabel()} ini, jadi aman dihapus.`
         }
-        confirmLabel="Hapus SPBE"
+        confirmLabel={`Hapus ${supplierLabel()}`}
         isPending={deleteMutation.isPending}
         onCancel={() => setPendingDelete(null)}
         onConfirm={() => pendingDelete && deleteMutation.mutate(pendingDelete.id)}
@@ -403,7 +404,7 @@ function BankSection() {
       <Panel>
         <PanelHeader
           title="Rekening penerimaan"
-          hint="Rekening tujuan transfer pangkalan. Yang utama dicetak pada tagihan."
+          hint={`Rekening tujuan transfer ${outletLabel()}. Yang utama dicetak pada tagihan.`}
           actions={
             <Button size="sm" onClick={() => setEditing(EMPTY_BANK)}>
               <Plus className="h-3.5 w-3.5" />
@@ -621,7 +622,7 @@ function NumberingSection() {
       { key: "suratJalan", label: "Surat jalan", hint: "Dicetak dan dibawa armada.", seq: "01" },
       { key: "invoice", label: "Tagihan", hint: "Dipakai tim keuangan.", seq: "001" },
       { key: "rencana", label: "Rencana distribusi", hint: "Satu per hari pengiriman.", seq: "" },
-      { key: "pesanan", label: "Pesanan pangkalan", hint: "Permintaan masuk.", seq: "001" },
+      { key: "pesanan", label: `Pesanan ${outletLabel()}`, hint: "Permintaan masuk.", seq: "001" },
     ];
 
   return (
@@ -779,11 +780,40 @@ function OperationsSection() {
           </p>
         </div>
 
+        <div className="border-t border-line">
+          <Toggle
+            label="Rekam lokasi saat sopir mencatat pengiriman"
+            description="Titik koordinat diambil hanya pada saat tombol ditekan, bukan sepanjang hari. Pengiriman tetap dapat dicatat bila GPS tidak aktif."
+            checked={form.rekamLokasi}
+            onChange={(rekamLokasi) => setForm({ ...form, rekamLokasi })}
+          />
+        </div>
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {form.rekamLokasi && (
+            <Field
+              label={`Radius wajar dari ${outletLabel()}`}
+              htmlFor="ops-radius"
+              hint="Penutupan surat jalan di luar radius ini ditandai di Monitoring. Meter."
+            >
+              <TextInput
+                id="ops-radius"
+                type="number"
+                mono
+                min={50}
+                max={5000}
+                step={50}
+                value={form.radiusGeofenceMeter}
+                onChange={(e) =>
+                  setForm({ ...form, radiusGeofenceMeter: Number(e.target.value) })
+                }
+              />
+            </Field>
+          )}
           <Field
             label="Durasi singgah"
             htmlFor="ops-durasi"
-            hint="Perjalanan dan bongkar per pangkalan. Menentukan lebar balok pada papan berangkat."
+            hint={`Perjalanan dan bongkar per ${outletLabel()}. Menentukan lebar balok pada papan berangkat.`}
           >
             <TextInput
               id="ops-durasi"

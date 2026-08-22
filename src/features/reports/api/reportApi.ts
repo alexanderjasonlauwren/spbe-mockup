@@ -2,6 +2,7 @@ import { scopedDb } from "@/mocks/scope";
 import { latency } from "@/mocks/db";
 import { exportCsv, printDocument, timestampSuffix } from "@/lib/export";
 import { addDays, isoDate, startOfToday } from "@/mocks/seed";
+import { outletLabelTitle, unitLabel, unitLabelTitle } from "@/lib/lexicon";
 
 export type ReportRange = "7h" | "30h" | "bulan-ini" | "bulan-lalu";
 
@@ -34,8 +35,8 @@ export function resolveRange(range: ReportRange): { from: string; to: string } {
 
 export interface ReportSummary {
   range: { from: string; to: string };
-  tabungTerkirim: number;
-  tabungTarget: number;
+  unitTerkirim: number;
+  unitTarget: number;
   pencapaian: number;
   pendapatan: number;
   piutang: number;
@@ -43,7 +44,7 @@ export interface ReportSummary {
   suratJalan: number;
   suratJalanSelesai: number;
   suratJalanTertunda: number;
-  pangkalanDilayani: number;
+  outletDilayani: number;
   rerataPerHari: number;
 }
 
@@ -81,8 +82,8 @@ export async function getReportSummary(range: ReportRange): Promise<ReportSummar
 
   return {
     range: window,
-    tabungTerkirim: realisasi,
-    tabungTarget: target,
+    unitTerkirim: realisasi,
+    unitTarget: target,
     pencapaian: target === 0 ? 0 : (realisasi / target) * 100,
     pendapatan: payments
       .filter((p) => p.status === "Terverifikasi")
@@ -94,7 +95,7 @@ export async function getReportSummary(range: ReportRange): Promise<ReportSummar
     suratJalan: drops.length,
     suratJalanSelesai: drops.filter((d) => d.status === "Selesai").length,
     suratJalanTertunda: drops.filter((d) => d.status === "Tertunda").length,
-    pangkalanDilayani: new Set(drops.map((d) => d.pangkalanId)).size,
+    outletDilayani: new Set(drops.map((d) => d.outletId)).size,
     rerataPerHari: Math.round(realisasi / days),
   };
 }
@@ -133,33 +134,46 @@ export async function getDailySeries(range: ReportRange): Promise<DailyPoint[]> 
   return [...points.values()];
 }
 
-export async function getTopPangkalan(range: ReportRange, limit = 8) {
+export async function getTopOutlet(range: ReportRange, limit = 8) {
   await latency("read");
   const db = scopedDb();
   const window = resolveRange(range);
-  const totals = new Map<string, { tabung: number; suratJalan: number }>();
+  const totals = new Map<
+    string,
+    { unit: number; suratJalan: number; nilai: number }
+  >();
 
   for (const d of db.deliveries) {
     if (d.tanggal < window.from || d.tanggal > window.to) continue;
-    const row = totals.get(d.pangkalanId) ?? { tabung: 0, suratJalan: 0 };
-    row.tabung += d.realisasi;
+    const row = totals.get(d.outletId) ?? { unit: 0, suratJalan: 0, nilai: 0 };
+    row.unit += d.realisasi;
     row.suratJalan += 1;
-    totals.set(d.pangkalanId, row);
+    totals.set(d.outletId, row);
+  }
+
+  // Value comes from the invoices actually raised, not units × a global price.
+  // With a mixed catalogue those two answers differ by whatever the product mix
+  // happens to be, and only one of them is what the outlet was billed.
+  for (const inv of db.invoices) {
+    if (inv.tanggal < window.from || inv.tanggal > window.to) continue;
+    if (inv.status === "Batal") continue;
+    const row = totals.get(inv.outletId);
+    if (row) row.nilai += inv.total;
   }
 
   return [...totals.entries()]
     .map(([id, v]) => {
-      const pkl = db.pangkalan.find((p) => p.id === id);
+      const pkl = db.outlets.find((p) => p.id === id);
       return {
         id,
         nama: pkl?.nama ?? "—",
         kecamatan: pkl?.kecamatan ?? "—",
-        tabung: v.tabung,
+        unit: v.unit,
         suratJalan: v.suratJalan,
-        nilai: v.tabung * db.settings.hargaPerTabung,
+        nilai: v.nilai,
       };
     })
-    .sort((a, b) => b.tabung - a.tabung)
+    .sort((a, b) => b.unit - a.unit)
     .slice(0, limit);
 }
 
@@ -187,7 +201,7 @@ export async function getDriverPerformance(range: ReportRange) {
         suratJalan: mine.length,
         selesai: mine.filter((d) => d.status === "Selesai").length,
         tertunda: mine.filter((d) => d.status === "Tertunda").length,
-        tabung: mine.reduce((s, d) => s + d.realisasi, 0),
+        unit: mine.reduce((s, d) => s + d.realisasi, 0),
         ketepatan:
           closed.length === 0
             ? 0
@@ -195,7 +209,7 @@ export async function getDriverPerformance(range: ReportRange) {
       };
     })
     .filter((d) => d.suratJalan > 0)
-    .sort((a, b) => b.tabung - a.tabung);
+    .sort((a, b) => b.unit - a.unit);
 }
 
 export async function exportReport(range: ReportRange) {
@@ -203,7 +217,7 @@ export async function exportReport(range: ReportRange) {
   const series = await getDailySeries(range);
   exportCsv(
     `laporan-${range}-${timestampSuffix()}`,
-    ["Tanggal", "Target (tabung)", "Realisasi (tabung)", "Pendapatan (Rp)"],
+    ["Tanggal", `Target (${unitLabel()})`, `Realisasi (${unitLabel()})`, "Pendapatan (Rp)"],
     series.map((p) => [
       new Date(p.tanggal).toLocaleDateString("id-ID"),
       p.target,
@@ -219,7 +233,7 @@ export async function printReport(range: ReportRange) {
   await latency("read");
   const db = scopedDb();
   const summary = await getReportSummary(range);
-  const top = await getTopPangkalan(range, 10);
+  const top = await getTopOutlet(range, 10);
   const fmt = (n: number) => n.toLocaleString("id-ID");
   const rupiah = (n: number) => `Rp ${fmt(n)}`;
   const tanggal = (iso: string) =>
@@ -238,15 +252,15 @@ export async function printReport(range: ReportRange) {
     <div class="meta">
       <div>Periode<strong>${tanggal(summary.range.from)} – ${tanggal(summary.range.to)}</strong></div>
       <div>Surat jalan<strong>${fmt(summary.suratJalan)}</strong></div>
-      <div>Pangkalan dilayani<strong>${fmt(summary.pangkalanDilayani)}</strong></div>
+      <div>Outlet dilayani<strong>${fmt(summary.outletDilayani)}</strong></div>
       <div>Dicetak<strong>${new Date().toLocaleString("id-ID")}</strong></div>
     </div>
 
     <table>
       <thead><tr><th>Ringkasan</th><th style="text-align:right">Nilai</th></tr></thead>
       <tbody>
-        <tr><td>Tabung terkirim</td><td class="num">${fmt(summary.tabungTerkirim)}</td></tr>
-        <tr><td>Target periode</td><td class="num">${fmt(summary.tabungTarget)}</td></tr>
+        <tr><td>${unitLabelTitle()} terkirim</td><td class="num">${fmt(summary.unitTerkirim)}</td></tr>
+        <tr><td>Target periode</td><td class="num">${fmt(summary.unitTarget)}</td></tr>
         <tr><td>Pencapaian</td><td class="num">${summary.pencapaian.toFixed(1)}%</td></tr>
         <tr><td>Rata-rata per hari</td><td class="num">${fmt(summary.rerataPerHari)}</td></tr>
         <tr><td>Pendapatan terverifikasi</td><td class="num">${rupiah(summary.pendapatan)}</td></tr>
@@ -256,12 +270,12 @@ export async function printReport(range: ReportRange) {
     </table>
 
     <table>
-      <thead><tr><th>Pangkalan</th><th>Kecamatan</th><th style="text-align:right">Surat jalan</th><th style="text-align:right">Tabung</th><th style="text-align:right">Nilai</th></tr></thead>
+      <thead><tr><th>${outletLabelTitle()}</th><th>Kecamatan</th><th style="text-align:right">Surat jalan</th><th style="text-align:right">${unitLabelTitle()}</th><th style="text-align:right">Nilai</th></tr></thead>
       <tbody>
         ${top
           .map(
             (t) =>
-              `<tr><td>${t.nama}</td><td>${t.kecamatan}</td><td class="num">${fmt(t.suratJalan)}</td><td class="num">${fmt(t.tabung)}</td><td class="num">${rupiah(t.nilai)}</td></tr>`,
+              `<tr><td>${t.nama}</td><td>${t.kecamatan}</td><td class="num">${fmt(t.suratJalan)}</td><td class="num">${fmt(t.unit)}</td><td class="num">${rupiah(t.nilai)}</td></tr>`,
           )
           .join("")}
       </tbody>

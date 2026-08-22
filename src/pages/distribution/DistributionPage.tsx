@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { formatDateLong, formatNumber } from "@/lib/format";
 import type { PlanRow } from "@/features/distribution/types";
+import { unitLabel } from "@/lib/lexicon";
 
 function tomorrowIso() {
   const d = new Date();
@@ -33,7 +34,8 @@ export function DistributionPage() {
     isLoadingDetail,
     selectedPlanId,
     setSelectedPlanId,
-    pangkalanOptions,
+    outletOptions,
+    productOptions,
     driverOptions,
     saOptions,
     saveDraftMutation,
@@ -49,7 +51,7 @@ export function DistributionPage() {
   const [confirming, setConfirming] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
-  const total = planDetail.reduce((s, r) => s + r.jumlahTabung, 0);
+  const total = planDetail.reduce((s, r) => s + r.jumlahUnit, 0);
   const drafts = planList.filter((p) => p.status === "Draft").length;
 
   const handleSaveDraft = (rows: PlanRow[]) => {
@@ -88,7 +90,8 @@ export function DistributionPage() {
             plan={selectedPlan}
             rows={planDetail}
             isLoading={isLoadingDetail}
-            pangkalanOptions={pangkalanOptions}
+            outletOptions={outletOptions}
+            productOptions={productOptions}
             driverOptions={driverOptions}
             onSaveDraft={handleSaveDraft}
             onConfirm={() => setConfirming(true)}
@@ -171,7 +174,7 @@ export function DistributionPage() {
           selectedPlan && (
             <ul className="space-y-1.5">
               <li>
-                <span className="data">{formatNumber(total)}</span> tabung ditarik dari{" "}
+                <span className="data">{formatNumber(total)}</span> {unitLabel()} ditarik dari{" "}
                 <span className="data">{selectedPlan.nomorSA}</span>, menyisakan{" "}
                 <span className="data">
                   {formatNumber(Math.max(0, selectedPlan.sisaKuotaSA - total))}

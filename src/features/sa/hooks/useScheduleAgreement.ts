@@ -6,11 +6,12 @@ import {
   activateSA,
   deleteSA,
   getSAList,
-  getSpbeOptions,
+  getSupplierOptions,
   printSA,
   uploadSA,
 } from "../api/saApi";
 import type { SAFilterParams, UploadSAPayload } from "../types";
+import { unitLabel } from "@/lib/lexicon";
 
 export function useScheduleAgreement() {
   const [filters, setFilters] = useState<SAFilterParams>({});
@@ -20,9 +21,9 @@ export function useScheduleAgreement() {
     queryFn: () => getSAList(filters),
   });
 
-  const spbeOptions = useQuery({
-    queryKey: [...scopeKey(), "spbe-options"],
-    queryFn: getSpbeOptions,
+  const supplierOptions = useQuery({
+    queryKey: [...scopeKey(), "supplier-options"],
+    queryFn: getSupplierOptions,
   });
 
   const uploadMutation = useDeskMutation({
@@ -30,7 +31,7 @@ export function useScheduleAgreement() {
     errorTitle: "Unggah SA gagal",
     success: (sa) => ({
       title: `${sa.nomorSA} diunggah`,
-      description: `${sa.totalKuota.toLocaleString("id-ID")} tabung tercatat sebagai draf. Aktifkan agar bisa dipakai untuk perencanaan.`,
+      description: `${sa.totalKuota.toLocaleString("id-ID")} ${unitLabel()} tercatat sebagai draf. Aktifkan agar bisa dipakai untuk perencanaan.`,
     }),
   });
 
@@ -60,7 +61,7 @@ export function useScheduleAgreement() {
     isError: saList.isError,
     error: saList.error as Error | null,
     refetch: saList.refetch,
-    spbeOptions: spbeOptions.data ?? [],
+    supplierOptions: supplierOptions.data ?? [],
     filters,
     setFilters,
     uploadMutation,

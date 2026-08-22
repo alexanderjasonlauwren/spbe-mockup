@@ -4,7 +4,7 @@ import {
   getDispatchRail,
   getKpiSummary,
   getMonthlyChart,
-  getPangkalanShares,
+  getOutletShares,
   getRecentActivities,
   getRecentAudit,
 } from "../api/dashboardApi";
@@ -16,9 +16,9 @@ export function useDashboard() {
     queryKey: [...scopeKey(), "monthly-chart"],
     queryFn: getMonthlyChart,
   });
-  const pangkalanShares = useQuery({
-    queryKey: [...scopeKey(), "pangkalan-shares"],
-    queryFn: getPangkalanShares,
+  const outletShares = useQuery({
+    queryKey: [...scopeKey(), "outlet-shares"],
+    queryFn: getOutletShares,
   });
   const recentActivities = useQuery({
     queryKey: [...scopeKey(), "recent-activities"],
@@ -30,11 +30,11 @@ export function useDashboard() {
     kpi: kpi.data,
     rail: rail.data,
     monthlyChart: monthlyChart.data ?? [],
-    pangkalanShares: pangkalanShares.data ?? [],
+    outletShares: outletShares.data ?? [],
     recentActivities: recentActivities.data ?? [],
     audit: audit.data ?? [],
     isLoading: kpi.isLoading || rail.isLoading,
-    isLoadingCharts: monthlyChart.isLoading || pangkalanShares.isLoading,
+    isLoadingCharts: monthlyChart.isLoading || outletShares.isLoading,
     isLoadingActivities: recentActivities.isLoading,
     isError: kpi.isError || rail.isError,
     error: (kpi.error ?? rail.error) as Error | null,
@@ -42,7 +42,7 @@ export function useDashboard() {
       void kpi.refetch();
       void rail.refetch();
       void monthlyChart.refetch();
-      void pangkalanShares.refetch();
+      void outletShares.refetch();
       void recentActivities.refetch();
       void audit.refetch();
     },

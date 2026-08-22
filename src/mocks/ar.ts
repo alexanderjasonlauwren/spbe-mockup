@@ -13,6 +13,12 @@
 import { ApiError, nextId, recordAudit } from "./db";
 import { accountByRole, postJournal } from "./ledger";
 import { isoDate, startOfToday } from "./seed";
+import {
+  blendedUnitPrice,
+  costOfGoods,
+  priceLines,
+  sumRealisasi,
+} from "./lines";
 import type {
   CreditNoteEntity,
   Database,
@@ -20,12 +26,13 @@ import type {
   InvoiceEntity,
   PaymentEntity,
 } from "./types";
+import { outletLabel } from "@/lib/lexicon";
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
 /** A receivable belongs to the branch that serves the outlet. */
-function scopeFromPangkalan(db: Database, pangkalanId: ID) {
-  const pkl = db.pangkalan.find((p) => p.id === pangkalanId);
+function scopeFromOutlet(db: Database, outletId: ID) {
+  const pkl = db.outlets.find((p) => p.id === outletId);
   return {
     tenantId: pkl?.tenantId ?? db.tenant.id,
     branchId: pkl?.branchId ?? db.branches[0]?.id ?? "",
@@ -95,11 +102,11 @@ export interface Exposure {
   alasan?: string;
 }
 
-export function pangkalanExposure(db: Database, pangkalanId: ID): Exposure {
+export function outletExposure(db: Database, outletId: ID): Exposure {
   const today = isoDate(startOfToday());
-  const pkl = db.pangkalan.find((p) => p.id === pangkalanId);
+  const pkl = db.outlets.find((p) => p.id === outletId);
   const open = db.invoices.filter(
-    (i) => i.pangkalanId === pangkalanId && i.status !== "Batal" && invoiceSisa(i) > 0,
+    (i) => i.outletId === outletId && i.status !== "Batal" && invoiceSisa(i) > 0,
   );
 
   const outstanding = round(open.reduce((s, i) => s + invoiceSisa(i), 0));
@@ -162,9 +169,15 @@ export function issueInvoiceForDelivery(
   const d = db.deliveries.find((x) => x.id === deliveryId);
   if (!d) throw new ApiError("Surat jalan tidak ditemukan.", 404);
 
-  const pkl = db.pangkalan.find((p) => p.id === d.pangkalanId);
-  const harga = db.settings.hargaPerTabung;
-  const subtotal = round(d.realisasi * harga);
+  const pkl = db.outlets.find((p) => p.id === d.outletId);
+  // Priced per product from the catalogue. The global `hargaPerTabung` this
+  // used to read applied one price to every line in the book — a 50 kg
+  // cylinder was billed at the 3 kg rate.
+  const lines = priceLines(
+    db.products,
+    d.lines.map((l) => ({ productId: l.productId, jumlah: l.realisasi })),
+  );
+  const subtotal = round(lines.reduce((s, l) => s + l.subtotal, 0));
   const termin = pkl?.termin ?? 0;
 
   const seq = db.invoices.length + 1;
@@ -175,12 +188,13 @@ export function issueInvoiceForDelivery(
     branchId: d.branchId,
     id: nextId("inv"),
     nomor: docNo(db, db.settings.penomoran.invoice, d.tanggal, seq),
-    pangkalanId: d.pangkalanId,
+    outletId: d.outletId,
     deliveryId: d.id,
     tanggal: d.tanggal,
     jatuhTempo: addDaysIso(d.tanggal, termin),
-    jumlahTabung: d.realisasi,
-    hargaSatuan: harga,
+    lines,
+    jumlahUnit: sumRealisasi(d.lines),
+    hargaSatuan: blendedUnitPrice(lines),
     subtotal,
     pajak: 0,
     total: subtotal,
@@ -193,14 +207,13 @@ export function issueInvoiceForDelivery(
   refreshInvoiceStatus(inv);
   db.invoices.unshift(inv);
 
-  // Cost of goods, taken from the catalogue so margin is not guesswork.
-  const produk = db.products.find((p) => p.ukuran.startsWith("3")) ?? db.products[0];
-  const hpp = round(d.realisasi * (produk?.hargaBeli ?? 0));
+  // Cost of goods per line, from each product's own purchase price.
+  const hpp = costOfGoods(db.products, d.lines);
 
   postJournal(db, {
     scope: { tenantId: inv.tenantId, branchId: inv.branchId },
     tanggal: inv.tanggal,
-    keterangan: `${inv.nomor} — penjualan ke ${pkl?.nama ?? "pangkalan"}`,
+    keterangan: `${inv.nomor} — penjualan ke ${pkl?.nama ?? "${outletLabel()}"}`,
     sumber: { tipe: "invoice", id: inv.id },
     aktor,
     lines: [
@@ -231,7 +244,7 @@ export function unallocated(p: PaymentEntity): number {
 export function recordPayment(
   db: Database,
   input: {
-    pangkalanId: ID;
+    outletId: ID;
     jumlah: number;
     tanggal: string;
     bank: PaymentEntity["bank"];
@@ -248,10 +261,10 @@ export function recordPayment(
 
   const seq = db.payments.length + 1;
   const payment: PaymentEntity = {
-    ...scopeFromPangkalan(db, input.pangkalanId),
+    ...scopeFromOutlet(db, input.outletId),
     id: nextId("pay"),
     nomor: docNo(db, "BKM", input.tanggal, seq),
-    pangkalanId: input.pangkalanId,
+    outletId: input.outletId,
     tanggal: input.tanggal,
     jumlah: round(input.jumlah),
     bank: input.bank,
@@ -300,8 +313,8 @@ export function applyAllocation(
   for (const row of rows) {
     const inv = db.invoices.find((i) => i.id === row.invoiceId);
     if (!inv) throw new ApiError("Tagihan tidak ditemukan.", 404);
-    if (inv.pangkalanId !== payment.pangkalanId) {
-      throw new ApiError(`${inv.nomor} milik pangkalan lain.`);
+    if (inv.outletId !== payment.outletId) {
+      throw new ApiError(`${inv.nomor} milik ${outletLabel()} lain.`);
     }
     // Money already pledged by receipts still awaiting verification counts
     // against the invoice too, or it could be over-allocated twice.
@@ -348,11 +361,11 @@ function postAllocationJournal(
   aktor: string,
 ) {
   const total = round(rows.reduce((s, a) => s + a.jumlah, 0));
-  const pkl = db.pangkalan.find((p) => p.id === payment.pangkalanId);
+  const pkl = db.outlets.find((p) => p.id === payment.outletId);
   postJournal(db, {
     scope: { tenantId: payment.tenantId, branchId: payment.branchId },
     tanggal: payment.tanggal,
-    keterangan: `${payment.nomor} — penerimaan dari ${pkl?.nama ?? "pangkalan"}`,
+    keterangan: `${payment.nomor} — penerimaan dari ${pkl?.nama ?? "${outletLabel()}"}`,
     sumber: { tipe: "payment", id: payment.id },
     aktor,
     lines: [
@@ -404,7 +417,7 @@ export function verifyPaymentRecord(
 
 export function issueCreditNote(
   db: Database,
-  input: { pangkalanId: ID; invoiceId: ID | null; jumlah: number; alasan: string },
+  input: { outletId: ID; invoiceId: ID | null; jumlah: number; alasan: string },
   aktor: string,
 ): CreditNoteEntity {
   if (input.jumlah <= 0) throw new ApiError("Nilai nota kredit harus lebih dari nol.");
@@ -424,10 +437,10 @@ export function issueCreditNote(
   const today = isoDate(startOfToday());
   const seq = db.creditNotes.length + 1;
   const note: CreditNoteEntity = {
-    ...scopeFromPangkalan(db, input.pangkalanId),
+    ...scopeFromOutlet(db, input.outletId),
     id: nextId("cn"),
     nomor: docNo(db, "NK", today, seq),
-    pangkalanId: input.pangkalanId,
+    outletId: input.outletId,
     invoiceId: input.invoiceId,
     tanggal: today,
     jumlah: round(input.jumlah),

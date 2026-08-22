@@ -4,12 +4,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Download, Pencil, Plus, Store, Trash2 } from "lucide-react";
 import {
-  exportPangkalan,
+  exportOutlet,
   getKecamatanOptions,
-  getPangkalanList,
-  removePangkalan,
-  type PangkalanView,
-} from "@/features/pangkalan/api/pangkalanApi";
+  getOutletList,
+  removeOutlet,
+  type OutletView,
+} from "@/features/outlet/api/outletApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelHeader, Meter } from "@/components/common/Panel";
@@ -21,25 +21,26 @@ import { Field, SearchInput, SelectInput } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatNumber, formatPercentId, formatRupiahShort } from "@/lib/format";
-import type { PangkalanStatus } from "@/mocks/types";
+import type { OutletStatus } from "@/mocks/types";
+import { outletLabel, outletLabelTitle } from "@/lib/lexicon";
 
-const STATUSES: (PangkalanStatus | "Semua")[] = [
+const STATUSES: (OutletStatus | "Semua")[] = [
   "Semua",
   "Aktif",
   "Nonaktif",
   "Ditangguhkan",
 ];
 
-export function PangkalanListPage() {
+export function OutletListPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<PangkalanStatus | "Semua">("Semua");
+  const [status, setStatus] = useState<OutletStatus | "Semua">("Semua");
   const [kecamatan, setKecamatan] = useState("Semua");
-  const [pendingDelete, setPendingDelete] = useState<PangkalanView | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<OutletView | null>(null);
 
   const list = useQuery({
-    queryKey: [...scopeKey(), "pangkalan-list", search, status, kecamatan],
-    queryFn: () => getPangkalanList({ search, status, kecamatan }),
+    queryKey: [...scopeKey(), "outlet-list", search, status, kecamatan],
+    queryFn: () => getOutletList({ search, status, kecamatan }),
   });
   const kecamatanOptions = useQuery({
     queryKey: [...scopeKey(), "kecamatan-options"],
@@ -47,18 +48,18 @@ export function PangkalanListPage() {
   });
 
   const deleteMutation = useDeskMutation({
-    mutationFn: (id: string) => removePangkalan(id),
-    errorTitle: "Hapus pangkalan gagal",
-    success: "Pangkalan dihapus",
+    mutationFn: (id: string) => removeOutlet(id),
+    errorTitle: `Hapus ${outletLabel()} gagal`,
+    success: `${outletLabelTitle()} dihapus`,
     onDone: () => setPendingDelete(null),
   });
 
   const exportMutation = useDeskMutation({
-    mutationFn: () => exportPangkalan(),
+    mutationFn: () => exportOutlet(),
     errorTitle: "Unduh gagal",
     success: (count) => ({
       title: "Berkas CSV diunduh",
-      description: `${count} pangkalan diekspor.`,
+      description: `${count} ${outletLabel()} diekspor.`,
     }),
   });
 
@@ -66,14 +67,14 @@ export function PangkalanListPage() {
   const aktif = rows.filter((p) => p.status === "Aktif").length;
   const tertunggak = rows.filter((p) => p.tagihanTertunda > 0);
 
-  const columns: Column<PangkalanView>[] = [
+  const columns: Column<OutletView>[] = [
     {
       key: "nama",
-      header: "Pangkalan",
+      header: outletLabelTitle(),
       render: (row) => (
         <>
           <Link
-            to={`/pangkalan/${row.id}`}
+            to={`/outlet/${row.id}`}
             className="block font-medium text-ink hover:underline hover:decoration-signal hover:decoration-2 hover:underline-offset-4"
           >
             {row.nama}
@@ -172,7 +173,7 @@ export function PangkalanListPage() {
             variant="ghost"
             size="icon-xs"
             aria-label={`Ubah ${row.nama}`}
-            onClick={() => navigate(`/pangkalan/${row.id}/edit`)}
+            onClick={() => navigate(`/outlet/${row.id}/edit`)}
           >
             <Pencil className="h-3.5 w-3.5" />
           </Button>
@@ -194,8 +195,8 @@ export function PangkalanListPage() {
     <div className="space-y-5">
       <PageHeader
         eyebrow="Data induk"
-        title="Pangkalan"
-        description="Outlet yang dilayani agen, beserta kuota bulanan dan tagihan yang masih terbuka."
+        title={outletLabelTitle()}
+        description={`${outletLabelTitle()} yang dilayani agen, beserta kuota bulanan dan tagihan yang masih terbuka.`}
         actions={
           <>
             <Button
@@ -207,9 +208,9 @@ export function PangkalanListPage() {
               Unduh CSV
             </Button>
             <Button asChild>
-              <Link to="/pangkalan/new">
+              <Link to="/outlet/new">
                 <Plus className="h-3.5 w-3.5" />
-                Daftarkan pangkalan
+                Daftarkan {outletLabel()}
               </Link>
             </Button>
           </>
@@ -242,7 +243,7 @@ export function PangkalanListPage() {
         <Field label="Status">
           <SelectInput
             value={status}
-            onChange={(e) => setStatus(e.target.value as PangkalanStatus | "Semua")}
+            onChange={(e) => setStatus(e.target.value as OutletStatus | "Semua")}
           >
             {STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -264,7 +265,7 @@ export function PangkalanListPage() {
       </div>
 
       <Panel>
-        <PanelHeader title="Daftar pangkalan" hint={`${rows.length} baris`} />
+        <PanelHeader title={`Daftar ${outletLabel()}`} hint={`${rows.length} baris`} />
         <DataTable
           columns={columns}
           data={rows}
@@ -274,11 +275,11 @@ export function PangkalanListPage() {
           pageSize={12}
           defaultSortKey="nama"
           emptyIcon={Store}
-          emptyMessage="Tidak ada pangkalan yang cocok"
-          emptyDescription="Ubah filter, atau daftarkan outlet baru untuk mulai melayaninya."
+          emptyMessage={`Tidak ada ${outletLabel()} yang cocok`}
+          emptyDescription={`Ubah filter, atau daftarkan ${outletLabel()} baru untuk mulai melayaninya.`}
           emptyAction={
             <Button asChild size="sm">
-              <Link to="/pangkalan/new">Daftarkan pangkalan</Link>
+              <Link to="/outlet/new">Daftarkan {outletLabel()}</Link>
             </Button>
           }
           dense
@@ -288,7 +289,7 @@ export function PangkalanListPage() {
       <ConfirmDialog
         isOpen={!!pendingDelete}
         title={`Hapus ${pendingDelete?.nama}?`}
-        message="Pangkalan hilang dari daftar dan tidak dapat dipilih pada rencana distribusi berikutnya."
+        message={`${outletLabelTitle()} hilang dari daftar dan tidak dapat dipilih pada rencana distribusi berikutnya.`}
         details={
           pendingDelete && (
             <p className={cn(pendingDelete.tagihanTertunda > 0 && "text-rust-ink")}>
@@ -298,7 +299,7 @@ export function PangkalanListPage() {
             </p>
           )
         }
-        confirmLabel="Hapus pangkalan"
+        confirmLabel={`Hapus ${outletLabel()}`}
         isPending={deleteMutation.isPending}
         onCancel={() => setPendingDelete(null)}
         onConfirm={() => pendingDelete && deleteMutation.mutate(pendingDelete.id)}

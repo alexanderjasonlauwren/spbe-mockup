@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatDateId, formatDateTimeId, relativeTime } from "@/lib/format";
 import type { UserEntity } from "@/mocks/types";
+import { outletLabel } from "@/lib/lexicon";
 
 const TYPE_STYLE = {
   Alert: { spine: "text-rust", icon: TriangleAlert, iconClass: "text-rust-ink" },
@@ -50,7 +51,14 @@ const CHANNEL_ICON: Record<NotifChannel, typeof Monitor> = {
   email: Mail,
 };
 
-const ROLES: UserEntity["role"][] = ["admin", "manager", "finance", "staff", "viewer"];
+const ROLES: UserEntity["role"][] = [
+  "admin",
+  "manager",
+  "finance",
+  "staff",
+  "viewer",
+  "driver",
+];
 
 /** Groups the inbox the way people scan it: today, yesterday, then older. */
 function dayBucket(iso: string): string {
@@ -476,7 +484,7 @@ export function NotificationPage() {
                 <div className="divide-y divide-line">
                   <Toggle
                     label="WhatsApp"
-                    description="Pesan otomatis ke pangkalan dan tim lapangan."
+                    description={`Pesan otomatis ke ${outletLabel()} dan tim lapangan.`}
                     checked={form.whatsapp.aktif}
                     onChange={(aktif) =>
                       setForm({ ...form, whatsapp: { ...form.whatsapp, aktif } })
@@ -513,7 +521,7 @@ export function NotificationPage() {
                     <Field
                       label="Templat pesan"
                       htmlFor="wa-templat"
-                      hint="Penanda isian: {pangkalan}, {jumlah}, {tanggal}, {jam}."
+                      hint={`Penanda isian: {${outletLabel()}}, {jumlah}, {tanggal}, {jam}.`}
                     >
                       <TextareaInput
                         id="wa-templat"

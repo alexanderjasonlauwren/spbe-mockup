@@ -21,7 +21,7 @@ import {
   getOrderTotals,
   getSchedulablePlans,
 } from "@/features/orders/api/orderApi";
-import { getPangkalanOptions } from "@/features/distribution/api/distributionApi";
+import { getOutletOptions } from "@/features/distribution/api/distributionApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelHeader } from "@/components/common/Panel";
@@ -49,6 +49,7 @@ import { cn } from "@/lib/utils";
 import { formatDateId, formatDateTimeId, formatNumber } from "@/lib/format";
 import type { OrderView } from "@/features/orders/api/orderApi";
 import type { OrderStatus } from "@/mocks/types";
+import { outletLabel, outletLabelTitle, unitLabel } from "@/lib/lexicon";
 
 type Tab = OrderStatus | "Semua";
 const TABS: Tab[] = ["Baru", "Disetujui", "Dijadwalkan", "Selesai", "Ditolak", "Semua"];
@@ -70,8 +71,8 @@ export function OrderListPage() {
   const [planId, setPlanId] = useState("");
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({
-    pangkalanId: "",
-    jumlahTabung: 100,
+    outletId: "",
+    jumlahUnit: 100,
     tanggalDiminta: todayIso(1),
     catatan: "",
   });
@@ -82,9 +83,9 @@ export function OrderListPage() {
   });
   const totals = useQuery({ queryKey: [...scopeKey(), "order-totals"], queryFn: getOrderTotals });
   const plans = useQuery({ queryKey: [...scopeKey(), "schedulable-plans"], queryFn: getSchedulablePlans });
-  const pangkalan = useQuery({
-    queryKey: [...scopeKey(), "pangkalan-options"],
-    queryFn: getPangkalanOptions,
+  const outlet = useQuery({
+    queryKey: [...scopeKey(), "outlet-options"],
+    queryFn: getOutletOptions,
   });
 
   const clearSelection = () => setSelected(new Set());
@@ -197,20 +198,20 @@ export function OrderListPage() {
       sortValue: (row) => row.tanggalMasuk,
     },
     {
-      key: "pangkalan",
-      header: "Pangkalan",
+      key: outletLabel(),
+      header: outletLabelTitle(),
       render: (row) => (
         <>
           <Link
-            to={`/pangkalan/${row.pangkalanId}`}
+            to={`/outlet/${row.outletId}`}
             className="block font-medium text-ink hover:underline hover:decoration-signal hover:decoration-2 hover:underline-offset-4"
           >
-            {row.pangkalan}
+            {row.outlet}
           </Link>
           <span className="block text-xs text-ink-muted">Kec. {row.kecamatan}</span>
         </>
       ),
-      sortValue: (row) => row.pangkalan,
+      sortValue: (row) => row.outlet,
     },
     {
       key: "jumlah",
@@ -219,21 +220,21 @@ export function OrderListPage() {
       render: (row) => (
         <>
           <span className="data block font-semibold text-ink">
-            {formatNumber(row.jumlahTabung)}
+            {formatNumber(row.jumlahUnit)}
           </span>
           <span
             className={cn(
               "block text-2xs",
-              row.jumlahTabung > row.sisaKuotaPangkalan
+              row.jumlahUnit > row.sisaKuotaOutlet
                 ? "font-semibold text-rust-ink"
                 : "text-ink-muted",
             )}
           >
-            sisa kuota {formatNumber(row.sisaKuotaPangkalan)}
+            sisa kuota {formatNumber(row.sisaKuotaOutlet)}
           </span>
         </>
       ),
-      sortValue: (row) => row.jumlahTabung,
+      sortValue: (row) => row.jumlahUnit,
     },
     {
       key: "diminta",
@@ -302,8 +303,8 @@ export function OrderListPage() {
     <div className="space-y-5">
       <PageHeader
         eyebrow="Operasi harian"
-        title="Pesanan Pangkalan"
-        description="Permintaan yang masuk dari outlet. Pesanan yang disetujui dapat ditarik langsung ke rencana distribusi."
+        title={`Pesanan ${outletLabelTitle()}`}
+        description={`Permintaan yang masuk dari ${outletLabel()}. Pesanan yang disetujui dapat ditarik langsung ke rencana distribusi.`}
         actions={
           <>
             <Button variant="outline" onClick={() => exportMutation.mutate(undefined as never)}>
@@ -314,7 +315,7 @@ export function OrderListPage() {
               onClick={() => {
                 setForm((f) => ({
                   ...f,
-                  pangkalanId: pangkalan.data?.[0]?.id ?? "",
+                  outletId: outlet.data?.[0]?.id ?? "",
                 }));
                 setCreating(true);
               }}
@@ -330,13 +331,13 @@ export function OrderListPage() {
         <Stat
           label="Menunggu persetujuan"
           value={formatNumber(totals.data?.baru ?? 0)}
-          hint={`${formatNumber(totals.data?.baruTabung ?? 0)} tabung diminta`}
+          hint={`${formatNumber(totals.data?.baruUnit ?? 0)} ${unitLabel()} diminta`}
           tone={totals.data && totals.data.baru > 0 ? "signal" : undefined}
         />
         <Stat
           label="Disetujui, belum dijadwalkan"
           value={formatNumber(totals.data?.disetujui ?? 0)}
-          hint={`${formatNumber(totals.data?.disetujuiTabung ?? 0)} tabung siap dijadwalkan`}
+          hint={`${formatNumber(totals.data?.disetujuiUnit ?? 0)} ${unitLabel()} siap dijadwalkan`}
         />
         <Stat label="Dijadwalkan" value={formatNumber(totals.data?.dijadwalkan ?? 0)} />
         <Stat label="Selesai" value={formatNumber(totals.data?.selesai ?? 0)} tone="pine" />
@@ -351,7 +352,7 @@ export function OrderListPage() {
               <SearchInput
                 value={search}
                 onChange={setSearch}
-                placeholder="Kode atau pangkalan"
+                placeholder={`Kode atau ${outletLabel()}`}
                 className="w-52"
               />
               <SegmentedControl
@@ -385,9 +386,9 @@ export function OrderListPage() {
                 <span className="text-xs text-ink">
                   <span className="data font-semibold">{chosen.length}</span> dipilih ·{" "}
                   <span className="data">
-                    {formatNumber(chosen.reduce((s, o) => s + o.jumlahTabung, 0))}
+                    {formatNumber(chosen.reduce((s, o) => s + o.jumlahUnit, 0))}
                   </span>{" "}
-                  tabung
+                  {unitLabel()}
                 </span>
                 <div className="ml-auto flex gap-2">
                   {selectableStatus === "Baru" ? (
@@ -448,7 +449,7 @@ export function OrderListPage() {
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Catat pesanan pangkalan</DialogTitle>
+            <DialogTitle>Catat pesanan {outletLabel()}</DialogTitle>
             <DialogDescription>
               Untuk permintaan yang masuk lewat telepon atau WhatsApp. Pesanan
               tercatat sebagai baru dan menunggu persetujuan.
@@ -456,14 +457,14 @@ export function OrderListPage() {
           </DialogHeader>
 
           <div className="space-y-4">
-            <Field label="Pangkalan" htmlFor="pkl" required>
+            <Field label={outletLabelTitle()} htmlFor="pkl" required>
               <SelectInput
                 id="pkl"
-                value={form.pangkalanId}
-                onChange={(e) => setForm({ ...form, pangkalanId: e.target.value })}
+                value={form.outletId}
+                onChange={(e) => setForm({ ...form, outletId: e.target.value })}
               >
-                <option value="">Pilih pangkalan</option>
-                {(pangkalan.data ?? []).map((p) => (
+                <option value="">Pilih {outletLabel()}</option>
+                {(outlet.data ?? []).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
                   </option>
@@ -471,16 +472,16 @@ export function OrderListPage() {
               </SelectInput>
             </Field>
 
-            <Field label="Jumlah tabung" htmlFor="jumlah" required>
+            <Field label={`Jumlah ${unitLabel()}`} htmlFor="jumlah" required>
               <TextInput
                 id="jumlah"
                 type="number"
                 min={1}
                 step={10}
                 mono
-                value={form.jumlahTabung}
+                value={form.jumlahUnit}
                 onChange={(e) =>
-                  setForm({ ...form, jumlahTabung: Number(e.target.value) })
+                  setForm({ ...form, jumlahUnit: Number(e.target.value) })
                 }
               />
             </Field>
@@ -511,7 +512,7 @@ export function OrderListPage() {
               Batal
             </Button>
             <Button
-              disabled={!form.pangkalanId || createMutation.isPending}
+              disabled={!form.outletId || createMutation.isPending}
               onClick={() => createMutation.mutate(form)}
             >
               Catat pesanan
@@ -567,7 +568,7 @@ export function OrderListPage() {
           <DialogHeader>
             <DialogTitle>Tolak {rejecting?.kode}</DialogTitle>
             <DialogDescription>
-              {rejecting?.pangkalan} akan melihat alasan ini pada riwayat pesanannya.
+              {rejecting?.outlet} akan melihat alasan ini pada riwayat pesanannya.
             </DialogDescription>
           </DialogHeader>
 
@@ -577,7 +578,7 @@ export function OrderListPage() {
               rows={3}
               value={alasan}
               onChange={(e) => setAlasan(e.target.value)}
-              placeholder="Contoh: melebihi kuota bulanan pangkalan."
+              placeholder={`Contoh: melebihi kuota bulanan ${outletLabel()}.`}
             />
           </Field>
 

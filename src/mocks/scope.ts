@@ -69,7 +69,7 @@ export function scopedDb(override?: Partial<ActiveScope>): Database {
 
   return {
     ...db,
-    pangkalan: db.pangkalan.filter(keep),
+    outlets: db.outlets.filter(keep),
     drivers: db.drivers.filter(keep),
     scheduleAgreements: db.scheduleAgreements.filter(keep),
     plans: db.plans.filter(keep),

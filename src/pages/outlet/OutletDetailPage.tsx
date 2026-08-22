@@ -11,9 +11,9 @@ import {
   UserRound,
 } from "lucide-react";
 import {
-  getPangkalanDetail,
-  getPangkalanHistory,
-} from "@/features/pangkalan/api/pangkalanApi";
+  getOutletDetail,
+  getOutletHistory,
+} from "@/features/outlet/api/outletApi";
 import { printSuratJalan } from "@/features/monitoring/api/monitoringApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -29,21 +29,22 @@ import {
   formatPercentId,
   formatRupiah,
 } from "@/lib/format";
+import { outletLabel, outletLabelTitle, unitLabel } from "@/lib/lexicon";
 
-type HistoryRow = Awaited<ReturnType<typeof getPangkalanHistory>>[number];
+type HistoryRow = Awaited<ReturnType<typeof getOutletHistory>>[number];
 
-export function PangkalanDetailPage() {
+export function OutletDetailPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
 
   const detail = useQuery({
-    queryKey: [...scopeKey(), "pangkalan-detail", id],
-    queryFn: () => getPangkalanDetail(id),
+    queryKey: [...scopeKey(), "outlet-detail", id],
+    queryFn: () => getOutletDetail(id),
   });
 
   const history = useQuery({
-    queryKey: [...scopeKey(), "pangkalan-history", id],
-    queryFn: () => getPangkalanHistory(id, 12),
+    queryKey: [...scopeKey(), "outlet-history", id],
+    queryFn: () => getOutletHistory(id, 12),
   });
 
   const printMutation = useDeskMutation({
@@ -128,11 +129,11 @@ export function PangkalanDetailPage() {
       <Panel>
         <EmptyState
           icon={MapPin}
-          title="Pangkalan tidak ditemukan"
-          description="Data mungkin sudah dihapus. Kembali ke daftar untuk memilih pangkalan lain."
+          title={`${outletLabelTitle()} tidak ditemukan`}
+          description={`Data mungkin sudah dihapus. Kembali ke daftar untuk memilih ${outletLabel()} lain.`}
           action={
             <Button asChild size="sm">
-              <Link to="/pangkalan">Ke daftar pangkalan</Link>
+              <Link to="/outlet">Ke daftar outlet</Link>
             </Button>
           }
         />
@@ -157,7 +158,7 @@ export function PangkalanDetailPage() {
         meta={<StatusBadge variant={getStatusVariant(p.status)} label={p.status} />}
         actions={
           <Button asChild variant="outline">
-            <Link to={`/pangkalan/${p.id}/edit`}>
+            <Link to={`/outlet/${p.id}/edit`}>
               <Pencil className="h-3.5 w-3.5" />
               Ubah data
             </Link>
@@ -174,7 +175,7 @@ export function PangkalanDetailPage() {
                 <p className="data truncate text-figure font-semibold text-ink">
                   {formatNumber(p.sisaKuota)}
                   <span className="ml-1.5 font-sans text-sm font-medium tracking-normal text-ink-muted">
-                    tabung tersisa
+                    {unitLabel()} tersisa
                   </span>
                 </p>
                 <p className="mt-1 text-xs text-ink-muted">
@@ -264,7 +265,7 @@ export function PangkalanDetailPage() {
             spineFor={(row) => spineFor(row.status)}
             emptyIcon={Truck}
             emptyMessage="Belum ada pengiriman"
-            emptyDescription="Riwayat muncul setelah pangkalan ini masuk rencana distribusi yang dikonfirmasi."
+            emptyDescription={`Riwayat muncul setelah ${outletLabel()} ini masuk rencana distribusi yang dikonfirmasi.`}
             dense
           />
         </Panel>

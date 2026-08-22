@@ -5,6 +5,7 @@ import { exportCsv, timestampSuffix } from "@/lib/export";
 import { addDays, isoDate, startOfToday } from "@/mocks/seed";
 import { todayIso } from "@/mocks/selectors";
 import type { DriverEntity, DriverStatusEntity } from "@/mocks/types";
+import { unitLabelTitle } from "@/lib/lexicon";
 
 export interface DriverView extends DriverEntity {
   /** Surat jalan assigned today. */
@@ -15,7 +16,7 @@ export interface DriverView extends DriverEntity {
   utilisasi: number;
   /** Completed drops over the trailing 30 days. */
   pengiriman30Hari: number;
-  tabung30Hari: number;
+  unit30Hari: number;
   /** Share of drops finished on the day they were planned, 0..1. */
   ketepatan: number;
 }
@@ -41,7 +42,7 @@ function toView(d: DriverEntity): DriverView {
     muatanHariIni: muatan,
     utilisasi: d.kapasitas === 0 ? 0 : Math.min(1, muatan / d.kapasitas),
     pengiriman30Hari: window.filter((x) => x.status === "Selesai").length,
-    tabung30Hari: window.reduce((s, x) => s + x.realisasi, 0),
+    unit30Hari: window.reduce((s, x) => s + x.realisasi, 0),
     ketepatan:
       closed.length === 0
         ? 1
@@ -90,8 +91,8 @@ export async function getDriverSchedule(id: string) {
       id: d.id,
       kode: d.kode,
       jam: d.jamRencana,
-      pangkalan: db.pangkalan.find((p) => p.id === d.pangkalanId)?.nama ?? "—",
-      kecamatan: db.pangkalan.find((p) => p.id === d.pangkalanId)?.kecamatan ?? "—",
+      outlet: db.outlets.find((p) => p.id === d.outletId)?.nama ?? "—",
+      kecamatan: db.outlets.find((p) => p.id === d.outletId)?.kecamatan ?? "—",
       target: d.target,
       realisasi: d.realisasi,
       status: d.status,
@@ -125,7 +126,7 @@ export async function exportDrivers() {
       "Selesai Hari Ini",
       "Muatan Hari Ini",
       "Pengiriman 30 Hari",
-      "Tabung 30 Hari",
+      `${unitLabelTitle()} 30 Hari`,
       "Ketepatan (%)",
     ],
     rows.map((d) => [
@@ -140,7 +141,7 @@ export async function exportDrivers() {
       d.selesaiHariIni,
       d.muatanHariIni,
       d.pengiriman30Hari,
-      d.tabung30Hari,
+      d.unit30Hari,
       Math.round(d.ketepatan * 100),
     ]),
   );

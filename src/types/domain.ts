@@ -9,6 +9,9 @@
 
 export type ID = string;
 
+export type { GeoStamp } from "@/lib/geo";
+import type { GeoStamp } from "@/lib/geo";
+
 /* ── tenancy ───────────────────────────────────────────────────────────── */
 
 /**
@@ -44,7 +47,7 @@ export interface BranchEntity {
 }
 
 /** The four authorisation levels the backend defines on iam.user_roles. */
-export type ScopeType = "global" | "tenant" | "branch" | "pangkalan";
+export type ScopeType = "global" | "tenant" | "branch" | "outlet";
 
 /** Everything that scopes a row. Present on every operational entity. */
 export interface Scoped {
@@ -52,9 +55,9 @@ export interface Scoped {
   branchId: ID;
 }
 
-export type PangkalanStatus = "Aktif" | "Nonaktif" | "Ditangguhkan";
+export type OutletStatus = "Aktif" | "Nonaktif" | "Ditangguhkan";
 
-export interface PangkalanEntity extends Scoped {
+export interface OutletEntity extends Scoped {
   id: ID;
   kode: string;
   nama: string;
@@ -65,7 +68,7 @@ export interface PangkalanEntity extends Scoped {
   lng: number;
   penanggungJawab: string;
   telepon: string;
-  status: PangkalanStatus;
+  status: OutletStatus;
   kuotaBulanan: number;
   terdaftarPada: string;
 
@@ -102,7 +105,7 @@ export type SAStatusEntity = "Draft" | "Aktif" | "Limit" | "Selesai";
 export interface SAEntity extends Scoped {
   id: ID;
   nomorSA: string;
-  spbe: string;
+  supplier: string;
   periodeMulai: string; // ISO date
   periodeBerakhir: string; // ISO date
   totalKuota: number;
@@ -132,10 +135,61 @@ export interface PlanEntity extends Scoped {
 export interface PlanRowEntity {
   id: ID;
   planId: ID;
-  pangkalanId: ID;
+  outletId: ID;
   driverId: ID | null;
-  jumlahTabung: number;
+  lines: PlanRowLine[];
+  /** Derived: total units across `lines`. */
+  jumlahUnit: number;
   jamPengiriman: string; // "HH:mm"
+}
+
+/* ── transaction lines ─────────────────────────────────────────────────── */
+
+/**
+ * What is being moved, and how much of it.
+ *
+ * Lines are the source of truth on every transaction. The scalar totals beside
+ * them (`jumlahUnit`, `target`, `realisasi`) are derived and kept in step by
+ * the rules layer — they exist so the many screens that only need "how many
+ * units" do not each have to sum a line set.
+ *
+ * Before this, a transaction carried a bare quantity of an *implicit* product
+ * and every invoice was priced from one global setting. A catalogue with 3 kg,
+ * 12 kg and 50 kg cylinders in it was therefore billed entirely at the 3 kg
+ * price, and posted cost of goods at the 3 kg cost.
+ */
+export interface OrderLine {
+  productId: ID;
+  jumlah: number;
+}
+
+export type PlanRowLine = OrderLine;
+
+export interface DeliveryLine {
+  productId: ID;
+  /** Loaded onto the truck. */
+  target: number;
+  /** Accepted at the drop — what the invoice is raised from. */
+  realisasi: number;
+  /** Empty containers collected in exchange, for returnable products. */
+  kembali?: number;
+}
+
+/**
+ * A priced line on an invoice.
+ *
+ * Name, unit and price are snapshotted rather than joined: an invoice must
+ * reprint identically years later, after the product has been renamed and
+ * repriced. Reading them live from the catalogue would silently rewrite issued
+ * documents.
+ */
+export interface InvoiceLine {
+  productId: ID;
+  nama: string;
+  satuan: string;
+  jumlah: number;
+  hargaSatuan: number;
+  subtotal: number;
 }
 
 export type DeliveryStatus = "Antrian" | "Proses" | "Selesai" | "Tertunda";
@@ -145,10 +199,12 @@ export interface DeliveryEntity extends Scoped {
   kode: string; // surat jalan number
   planId: ID;
   planRowId: ID;
-  pangkalanId: ID;
+  outletId: ID;
   driverId: ID;
   tanggal: string; // ISO date
   jamRencana: string; // "HH:mm"
+  lines: DeliveryLine[];
+  /** Derived from `lines`: total units loaded, accepted, and collected back. */
   target: number;
   realisasi: number;
   status: DeliveryStatus;
@@ -156,6 +212,46 @@ export interface DeliveryEntity extends Scoped {
   selesaiPada?: string;
   driverLat?: number;
   driverLng?: number;
+  /**
+   * Empty cylinders collected at the drop.
+   *
+   * Recorded by the sopir, not derived: an outlet rarely returns exactly what
+   * it receives, and the difference is what cylinder reconciliation is about.
+   */
+  unitKembali?: number;
+  /** Who signed for the load — the proof-of-delivery the driver captures. */
+  diterimaOleh?: string;
+  catatan?: string;
+}
+
+/* ── delivery events ───────────────────────────────────────────────────── */
+
+export type DeliveryEventType = "berangkat" | "selesai" | "tertunda";
+
+/**
+ * One thing the sopir filed, and where they were when they filed it.
+ *
+ * An append-only log rather than fields on the delivery, because a drop can be
+ * departed, attempted, held and re-attempted — and the position at each of
+ * those is a separate fact. Overwriting one slot would keep only the last.
+ *
+ * Mirrors core.delivery_events in the Go schema.
+ */
+export interface DeliveryEventEntity extends Scoped {
+  id: ID;
+  deliveryId: ID;
+  driverId: ID;
+  tipe: DeliveryEventType;
+  at: string;
+  aktor: string;
+  posisi: GeoStamp;
+  /**
+   * Metres between the fix and the outlet, frozen at the time of filing.
+   *
+   * Stored rather than derived: re-pinning a outlet later would silently
+   * rewrite history, and this figure is what an auditor reads.
+   */
+  jarakMeter?: number;
   catatan?: string;
 }
 
@@ -171,19 +267,21 @@ export type InvoiceStatus =
   | "Batal";
 
 /**
- * What a pangkalan owes. Separate from the cash that settles it: one transfer
+ * What a outlet owes. Separate from the cash that settles it: one transfer
  * can pay several invoices, and one invoice can be settled by several
  * transfers, so the two cannot share a record.
  */
 export interface InvoiceEntity extends Scoped {
   id: ID;
   nomor: string;
-  pangkalanId: ID;
+  outletId: ID;
   deliveryId: ID | null;
   tanggal: string;
   /** Derived from the outlet's payment terms at the time of issue. */
   jatuhTempo: string;
-  jumlahTabung: number;
+  lines: InvoiceLine[];
+  /** Derived from `lines`. `hargaSatuan` is a blended average once mixed. */
+  jumlahUnit: number;
   hargaSatuan: number;
   subtotal: number;
   /** Zero for now; the column exists so adding PPN is not another migration. */
@@ -209,11 +307,11 @@ export interface PaymentAllocation {
   jumlah: number;
 }
 
-/** Cash received from a pangkalan, which may settle several invoices. */
+/** Cash received from a outlet, which may settle several invoices. */
 export interface PaymentEntity extends Scoped {
   id: ID;
   nomor: string;
-  pangkalanId: ID;
+  outletId: ID;
   tanggal: string;
   jumlah: number;
   bank: BankNameEntity;
@@ -234,7 +332,7 @@ export type CreditNoteStatus = "Terbit" | "Terpakai" | "Batal";
 export interface CreditNoteEntity extends Scoped {
   id: ID;
   nomor: string;
-  pangkalanId: ID;
+  outletId: ID;
   invoiceId: ID | null;
   tanggal: string;
   jumlah: number;
@@ -316,13 +414,46 @@ export interface JournalEntity extends Scoped {
 
 export type ReceiptStatus = "Menunggu Review" | "Tervalidasi" | "Ditolak";
 
+/**
+ * One item read off a scanned receipt.
+ *
+ * `productId` is nullable on purpose. A scan reads text, not identifiers, and
+ * "LPG 3KG SUBS." may match nothing in the catalogue — the same honest
+ * unmatched state `outletId` and `bank` already carry. Forcing every line
+ * onto a default product would silently bill the wrong item at the wrong price,
+ * which is precisely the failure a review step exists to prevent.
+ *
+ * `namaTerbaca` keeps the raw text so the reviewer can see what the matcher was
+ * working from, rather than only its conclusion.
+ *
+ * Mirrors ocr.receipt_items in the Go schema.
+ */
+export interface ReceiptLine {
+  productId: ID | null;
+  namaTerbaca: string;
+  jumlah: number;
+  /** As printed on the paper — what the customer was actually charged. */
+  hargaSatuan: number;
+}
+
 export interface ReceiptEntity extends Scoped {
   id: ID;
   namaBerkas: string;
-  pangkalanId: ID | null;
+  outletId: ID | null;
   nomorKwitansi: string;
   tanggalKwitansi: string;
-  jumlahTabung: number;
+  lines: ReceiptLine[];
+  /** Derived from `lines`. Named for units, not cylinders — a receipt may
+   *  itemise anything the agency sells. */
+  jumlahUnit: number;
+  /**
+   * The total the document states, read separately from the items.
+   *
+   * Deliberately not derived: OCR reads the printed total and the line items as
+   * two independent facts, and a disagreement between them is the strongest
+   * signal that the scan is wrong. Computing one from the other would destroy
+   * the check.
+   */
   nominal: number;
   bank: BankNameEntity | null;
   keyakinan: number; // OCR confidence 0..1
@@ -364,8 +495,17 @@ export interface UserEntity {
   id: ID;
   nama: string;
   email: string;
-  role: "admin" | "manager" | "finance" | "staff" | "viewer";
+  role: "admin" | "manager" | "finance" | "staff" | "viewer" | "driver";
   telepon: string;
+  /**
+   * The fleet record this account drives, for `driver` accounts.
+   *
+   * A console user and a truck are different things — a dispatcher covering a
+   * route is still not the driver — so the link is explicit rather than matched
+   * on name. Without it a sopir signs in and the console cannot tell whose run
+   * to show.
+   */
+  driverId?: ID;
   cabang: string;
   /** Empty = tenant-wide. One entry = a single-branch user. */
   branchIds: ID[];
@@ -380,6 +520,17 @@ export interface ProductEntity {
   kode: string;
   nama: string;
   ukuran: string;
+  /**
+   * The counting noun for one unit: tabung, botol, dus, sak.
+   *
+   * The single concession to businesses other than LPG at this stage. Kept on
+   * the product rather than in a global setting because a catalogue can mix
+   * them, and deliberately not built out further until a real second business
+   * says what else needs to vary.
+   */
+  satuan: string;
+  /** Whether the customer hands back an empty in exchange for a full one. */
+  returnable: boolean;
   hargaJual: number;
   hargaBeli: number;
   stok: number;
@@ -394,12 +545,14 @@ export type OrderStatus =
   | "Selesai"
   | "Ditolak";
 
-/** An order placed by a pangkalan. Approved orders feed distribution planning. */
+/** An order placed by a outlet. Approved orders feed distribution planning. */
 export interface OrderEntity extends Scoped {
   id: ID;
   kode: string;
-  pangkalanId: ID;
-  jumlahTabung: number;
+  outletId: ID;
+  lines: OrderLine[];
+  /** Derived: total units across `lines`. */
+  jumlahUnit: number;
   tanggalMasuk: string; // ISO datetime
   tanggalDiminta: string; // ISO date
   status: OrderStatus;
@@ -411,8 +564,8 @@ export interface OrderEntity extends Scoped {
 
 /* ── system configuration ──────────────────────────────────────────────── */
 
-/** An SPBE the agency draws quota from. Referenced by Schedule Agreements. */
-export interface SpbeEntity {
+/** A supply source the agency draws quota from. Referenced by Schedule Agreements. */
+export interface SupplierEntity {
   id: ID;
   kode: string;
   nama: string;
@@ -422,7 +575,7 @@ export interface SpbeEntity {
   aktif: boolean;
 }
 
-/** An account pangkalan transfer into. Finance reconciles against these. */
+/** An account outlets transfer into. Finance reconciles against these. */
 export interface BankAccountEntity {
   id: ID;
   bank: BankNameEntity;
@@ -445,6 +598,21 @@ export interface NumberingEntity {
 }
 
 export interface OperationsEntity {
+  /**
+   * Whether the console records where the sopir was when they filed a drop.
+   *
+   * A switch rather than an assumption: this is location data about employees,
+   * and whether to collect it is the agency's decision to make and to be able
+   * to answer for.
+   */
+  rekamLokasi: boolean;
+  /**
+   * How close to the outlet a submission has to be to count as "at the drop".
+   *
+   * Mirrors geofence_rules.radius_meter — per-outlet radii belong there
+   * eventually; this is the agency-wide default.
+   */
+  radiusGeofenceMeter: number;
   /** Days the agency dispatches, 0 = Sunday. */
   hariKerja: number[];
   /** Minutes budgeted per stop — drives the width of a block on the rail. */
@@ -487,6 +655,27 @@ export interface NotificationSettings {
   email: { aktif: boolean; pengirim: string };
 }
 
+/**
+ * What this tenant calls the three things every screen has to name.
+ *
+ * The console's own words are role names — outlet, supplier, unit — because
+ * the roles are what generalise across verticals. The nouns on screen are the
+ * tenant's: an LPG agency reads pangkalan / SPBE / tabung, a water depot reads
+ * depot / pabrik / galon. Read through `lib/lexicon`, never inlined.
+ *
+ * `satuan` also replaced a global `hargaPerTabung`, which priced every product
+ * in the catalogue identically and stopped meaning anything once invoices
+ * carried lines. Prices belong on products; only the noun is agency-wide.
+ */
+export interface LexiconEntity {
+  /** One unit of the thing moved: tabung, galon, dus, sak. */
+  satuan: string;
+  /** A delivery destination: pangkalan, depot, toko, gerai. */
+  outlet: string;
+  /** A supply source drawn against: SPBE, pabrik, distributor pusat. */
+  pemasok: string;
+}
+
 export interface SettingsEntity {
   namaPerusahaan: string;
   nomorAgen: string;
@@ -496,7 +685,8 @@ export interface SettingsEntity {
   zonaWaktu: string;
   jamOperasionalMulai: string;
   jamOperasionalSelesai: string;
-  hargaPerTabung: number;
+  /** The tenant's own vocabulary. See `LexiconEntity`. */
+  istilah: LexiconEntity;
   targetHarian: number;
   notifikasi: NotificationSettings;
   penomoran: NumberingEntity;
@@ -509,12 +699,13 @@ export interface Database {
   seededAt: string;
   tenant: TenantEntity;
   branches: BranchEntity[];
-  pangkalan: PangkalanEntity[];
+  outlets: OutletEntity[];
   drivers: DriverEntity[];
   scheduleAgreements: SAEntity[];
   plans: PlanEntity[];
   planRows: PlanRowEntity[];
   deliveries: DeliveryEntity[];
+  deliveryEvents: DeliveryEventEntity[];
   payments: PaymentEntity[];
   receipts: ReceiptEntity[];
   notifications: NotificationEntity[];
@@ -522,7 +713,7 @@ export interface Database {
   users: UserEntity[];
   products: ProductEntity[];
   orders: OrderEntity[];
-  spbe: SpbeEntity[];
+  suppliers: SupplierEntity[];
   bankAccounts: BankAccountEntity[];
   accounts: AccountEntity[];
   journals: JournalEntity[];

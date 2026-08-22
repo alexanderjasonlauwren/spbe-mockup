@@ -4,23 +4,24 @@ import type {
   BankAccountEntity,
   NumberingEntity,
   OperationsEntity,
-  SpbeEntity,
+  SupplierEntity,
 } from "@/mocks/types";
+import { supplierLabel } from "@/lib/lexicon";
 
-/* ── SPBE partners ─────────────────────────────────────────────────────── */
+/* ── supply sources ────────────────────────────────────────────────────── */
 
-export interface SpbeView extends SpbeEntity {
-  /** Agreements issued by this SPBE, so it is clear what deleting would orphan. */
+export interface SupplierView extends SupplierEntity {
+  /** Agreements issued by this supplier, so it is clear what deleting would orphan. */
   jumlahSA: number;
   kuotaAktif: number;
 }
 
-export async function getSpbeList(): Promise<SpbeView[]> {
+export async function getSupplierList(): Promise<SupplierView[]> {
   await latency("read");
   const db = scopedDb();
-  return db.spbe
+  return db.suppliers
     .map((s) => {
-      const sas = db.scheduleAgreements.filter((x) => x.spbe === s.nama);
+      const sas = db.scheduleAgreements.filter((x) => x.supplier === s.nama);
       return {
         ...s,
         jumlahSA: sas.length,
@@ -32,72 +33,72 @@ export async function getSpbeList(): Promise<SpbeView[]> {
     .sort((a, b) => a.nama.localeCompare(b.nama));
 }
 
-export async function saveSpbe(input: Partial<SpbeEntity> & { id?: string }) {
+export async function saveSupplier(input: Partial<SupplierEntity> & { id?: string }) {
   await latency("write");
   return mutate((db) => {
-    if (!input.nama?.trim()) throw new ApiError("Nama SPBE wajib diisi.");
-    const clash = db.spbe.find(
+    if (!input.nama?.trim()) throw new ApiError(`Nama ${supplierLabel()} wajib diisi.`);
+    const clash = db.suppliers.find(
       (s) => s.nama.toLowerCase() === input.nama!.trim().toLowerCase() && s.id !== input.id,
     );
     if (clash) throw new ApiError(`${input.nama} sudah terdaftar.`, 409);
 
     if (input.id) {
-      const existing = db.spbe.find((s) => s.id === input.id);
-      if (!existing) throw new ApiError("SPBE tidak ditemukan.", 404);
+      const existing = db.suppliers.find((s) => s.id === input.id);
+      if (!existing) throw new ApiError(`${supplierLabel()} tidak ditemukan.`, 404);
       const namaLama = existing.nama;
       Object.assign(existing, input);
-      // Agreements reference the SPBE by name, so a rename has to follow through.
+      // Agreements reference the supplier by name, so a rename has to follow through.
       if (namaLama !== existing.nama) {
         db.scheduleAgreements
-          .filter((sa) => sa.spbe === namaLama)
-          .forEach((sa) => (sa.spbe = existing.nama));
+          .filter((sa) => sa.supplier === namaLama)
+          .forEach((sa) => (sa.supplier = existing.nama));
       }
       recordAudit(db, {
-        action: "spbe.update",
-        entity: "Spbe",
+        action: "supplier.update",
+        entity: "Supplier",
         entityId: existing.id,
-        summary: `Memperbarui SPBE ${existing.nama}.`,
+        summary: `Memperbarui ${supplierLabel()} ${existing.nama}.`,
       });
       return existing;
     }
 
-    const created: SpbeEntity = {
-      id: nextId("spbe"),
-      kode: input.kode?.trim() || `SPBE-${String(db.spbe.length + 1).padStart(3, "0")}`,
+    const created: SupplierEntity = {
+      id: nextId("supplier"),
+      kode: input.kode?.trim() || `${supplierLabel()}-${String(db.suppliers.length + 1).padStart(3, "0")}`,
       nama: input.nama.trim(),
       alamat: input.alamat ?? "",
       penanggungJawab: input.penanggungJawab ?? "",
       telepon: input.telepon ?? "",
       aktif: input.aktif ?? true,
     };
-    db.spbe.unshift(created);
+    db.suppliers.unshift(created);
     recordAudit(db, {
-      action: "spbe.create",
-      entity: "Spbe",
+      action: "supplier.create",
+      entity: "Supplier",
       entityId: created.id,
-      summary: `Menambahkan SPBE ${created.nama}.`,
+      summary: `Menambahkan ${supplierLabel()} ${created.nama}.`,
     });
     return created;
   });
 }
 
-export async function deleteSpbe(id: string) {
+export async function deleteSupplier(id: string) {
   await latency("write");
   mutate((db) => {
-    const s = db.spbe.find((x) => x.id === id);
-    if (!s) throw new ApiError("SPBE tidak ditemukan.", 404);
-    const used = db.scheduleAgreements.filter((sa) => sa.spbe === s.nama).length;
+    const s = db.suppliers.find((x) => x.id === id);
+    if (!s) throw new ApiError(`${supplierLabel()} tidak ditemukan.`, 404);
+    const used = db.scheduleAgreements.filter((sa) => sa.supplier === s.nama).length;
     if (used > 0) {
       throw new ApiError(
         `${s.nama} masih dipakai ${used} Schedule Agreement. Nonaktifkan saja agar riwayat kuota tetap utuh.`,
       );
     }
-    db.spbe = db.spbe.filter((x) => x.id !== id);
+    db.suppliers = db.suppliers.filter((x) => x.id !== id);
     recordAudit(db, {
-      action: "spbe.delete",
-      entity: "Spbe",
+      action: "supplier.delete",
+      entity: "Supplier",
       entityId: id,
-      summary: `Menghapus SPBE ${s.nama}.`,
+      summary: `Menghapus ${supplierLabel()} ${s.nama}.`,
     });
   });
 }
@@ -226,6 +227,10 @@ export async function saveOperations(operasi: OperationsEntity) {
   }
   if (operasi.durasiSinggahMenit < 15) {
     throw new Error("Durasi singgah minimal 15 menit.");
+  }
+  // Below this, ordinary phone GPS error alone would flag honest deliveries.
+  if (operasi.rekamLokasi && operasi.radiusGeofenceMeter < 50) {
+    throw new Error("Radius wajar minimal 50 meter agar tidak salah menandai.");
   }
   return mutate((db) => {
     db.settings.operasi = { ...operasi };

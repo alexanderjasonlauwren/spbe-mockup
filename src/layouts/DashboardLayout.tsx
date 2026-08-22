@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { useOpsClock } from "@/hooks/useOpsClock";
 import { useSidebarShortcut, useSidebarStore } from "@/hooks/useSidebar";
 import { useScope } from "@/features/tenancy/useScope";
+import { getSettings } from "@/features/settings/api/settingsApi";
+import { setLexicon } from "@/lib/lexicon";
+import { scopeKey } from "@/mocks/scope";
 import { cn } from "@/lib/utils";
 
 export function DashboardLayout() {
@@ -13,6 +17,16 @@ export function DashboardLayout() {
 
   // Establishes the active branch before any child query runs.
   const { branchId } = useScope();
+
+  // This tenant's vocabulary. Set during render rather than in an
+  // effect, the same way useScope sets the active scope: print templates and
+  // toast strings read it synchronously and cannot wait for a commit.
+  const settings = useQuery({
+    queryKey: [...scopeKey(), "settings"],
+    queryFn: getSettings,
+    staleTime: 5 * 60_000,
+  });
+  if (settings.data) setLexicon(settings.data.istilah);
 
   // Keeps today's run moving while the console is open.
   useOpsClock();

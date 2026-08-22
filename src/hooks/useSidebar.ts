@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { create } from "zustand";
-import { NAV_GROUPS } from "@/layouts/nav";
+import { ALL_NAV_GROUPS, NAV_GROUPS } from "@/layouts/nav";
 
 const COLLAPSED_KEY = "sidebar:collapsed";
 const OPEN_GROUPS_KEY = "sidebar:groups";
@@ -82,7 +82,7 @@ export function useSidebarShortcut() {
 export function useRevealActiveGroup(pathname: string) {
   const ensureGroupOpen = useSidebarStore((s) => s.ensureGroupOpen);
   useEffect(() => {
-    const group = NAV_GROUPS.find((g) =>
+    const group = ALL_NAV_GROUPS.find((g) =>
       g.items.some((i) => pathname === i.href || pathname.startsWith(`${i.href}/`)),
     );
     if (group) ensureGroupOpen(group.label);

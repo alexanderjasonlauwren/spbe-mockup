@@ -5,8 +5,8 @@ export interface DistributionPlan {
   kode: string;
   /** ISO date. */
   tanggal: string;
-  totalTabung: number;
-  jumlahPangkalan: number;
+  totalUnit: number;
+  jumlahOutlet: number;
   jumlahDriver: number;
   status: PlanStatus;
   saId: string;
@@ -21,16 +21,19 @@ export interface DistributionPlan {
 
 export interface PlanRow {
   id: string;
-  pangkalanId: string;
-  pangkalan: string;
+  outletId: string;
+  outlet: string;
   alamat: string;
-  jumlahTabung: number;
+  /** What this stop is carrying, per product. */
+  lines: { productId: string; jumlah: number }[];
+  /** Derived from `lines`. */
+  jumlahUnit: number;
   driverId: string | null;
   driver: string;
   jamPengiriman: string;
   statusBayar: "Lunas" | "Belum Lunas";
-  /** Cylinders this pangkalan may still take this month. */
-  sisaKuotaPangkalan: number;
+  /** Cylinders this outlet may still take this month. */
+  sisaKuotaOutlet: number;
   /** Outstanding receivable, so credit risk is visible while planning. */
   piutang: number;
   piutangJatuhTempo: number;

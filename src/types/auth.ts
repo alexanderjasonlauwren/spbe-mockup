@@ -17,8 +17,10 @@ export interface User {
   /** Branches this user may read. Empty = every branch (tenant-wide scope). */
   branchIds?: string[];
   /** Mirrors iam.user_roles.scope_type on the backend. */
-  scopeType?: "global" | "tenant" | "branch" | "pangkalan";
+  scopeType?: "global" | "tenant" | "branch" | "outlet";
   phone?: string;
+  /** Set for `driver` accounts: the fleet record this user drives. */
+  driverId?: string;
 }
 
 export interface AuthResponse {

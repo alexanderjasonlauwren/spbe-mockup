@@ -1,6 +1,7 @@
 import { Field, SearchInput, SelectInput } from "@/components/common/Field";
 import { MONTH_NAMES_ID } from "@/utils/constants";
 import type { SAFilterParams, SAStatus } from "../types";
+import { supplierLabel } from "@/lib/lexicon";
 
 const STATUSES: (SAStatus | "Semua")[] = ["Semua", "Draft", "Aktif", "Limit", "Selesai"];
 
@@ -23,7 +24,7 @@ export function SAFilterBar({
         <SearchInput
           value={filters.search ?? ""}
           onChange={(search) => patch({ search: search || undefined })}
-          placeholder="Nomor SA atau SPBE"
+          placeholder={`Nomor SA atau ${supplierLabel()}`}
         />
       </Field>
 

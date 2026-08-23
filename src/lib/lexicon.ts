@@ -37,14 +37,39 @@ const FALLBACK: Record<TermKey, string> = {
   pemasok: "pemasok",
 };
 
-const KEY = "sidistrib:istilah";
+/**
+ * The cache is keyed PER TENANT.
+ *
+ * It used to be one key for the whole console, which was harmless while a
+ * session had exactly one tenant. Once you can switch, it is not: the cache is
+ * read at module load to make the first paint right, so an LPG agency and a
+ * water depot sharing a key means the first screen after a switch renders the
+ * tenant you just left — "tabung" all over a depot's console, for as long as it
+ * takes settings to load. Briefly wrong and confidently wrong.
+ */
+const KEY_PREFIX = "sidistrib:istilah";
+
+function cacheKey(tenantId: string): string {
+  return tenantId ? `${KEY_PREFIX}:${tenantId}` : KEY_PREFIX;
+}
+
+/**
+ * Whose vocabulary is currently loaded.
+ *
+ * Tracked so a switch can be detected: setLexicon for a different tenant must
+ * REPLACE the terms rather than merge into them. Without this, a tenant that
+ * leaves a term unset would keep the previous tenant's word for it — the exact
+ * cross-tenant bleed the per-tenant key exists to stop, arriving through the
+ * in-memory copy instead of through storage.
+ */
+let loadedFor = "";
 
 /** Hydrated from the last session so the first paint after a reload is right. */
-const terms: Record<TermKey, string> = { ...FALLBACK, ...readCache() };
+const terms: Record<TermKey, string> = { ...FALLBACK };
 
-function readCache(): Partial<Record<TermKey, string>> {
+function readCache(tenantId: string): Partial<Record<TermKey, string>> {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(cacheKey(tenantId));
     return raw ? (JSON.parse(raw) as Partial<Record<TermKey, string>>) : {};
   } catch {
     // No storage, or a stale shape from an older build. Fallbacks stand.
@@ -52,18 +77,41 @@ function readCache(): Partial<Record<TermKey, string>> {
   }
 }
 
+/**
+ * Load a tenant's cached vocabulary, before its settings have arrived.
+ *
+ * Called from the layout as soon as the acting tenant is known, which is
+ * earlier than settings resolve. Falls back to neutral words rather than the
+ * previous tenant's.
+ */
+export function hydrateLexicon(tenantId: string): void {
+  if (tenantId === loadedFor) return;
+  const cached = readCache(tenantId);
+  for (const key of Object.keys(FALLBACK) as TermKey[]) {
+    terms[key] = cached[key]?.trim() || FALLBACK[key];
+  }
+  loadedFor = tenantId;
+}
+
 /** Called once settings land, from the layout that owns the session. */
-export function setLexicon(next: Partial<Record<TermKey, string>>): void {
+export function setLexicon(
+  next: Partial<Record<TermKey, string>>,
+  tenantId: string = loadedFor,
+): void {
+  // A different tenant replaces rather than merges: anything it leaves unset
+  // must fall back to a neutral word, never to the previous tenant's.
+  if (tenantId !== loadedFor) hydrateLexicon(tenantId);
+
   let changed = false;
   for (const key of Object.keys(FALLBACK) as TermKey[]) {
-    const value = next[key]?.trim();
-    if (!value || value === terms[key]) continue;
+    const value = next[key]?.trim() || FALLBACK[key];
+    if (value === terms[key]) continue;
     terms[key] = value;
     changed = true;
   }
   if (!changed) return;
   try {
-    localStorage.setItem(KEY, JSON.stringify(terms));
+    localStorage.setItem(cacheKey(tenantId), JSON.stringify(terms));
   } catch {
     // Private mode. The lexicon still holds for this session.
   }

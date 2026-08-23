@@ -26,6 +26,56 @@ export interface TenantEntity {
   kode: string;
   nama: string;
   aktif: boolean;
+
+  /**
+   * The tenant this one sits under. `null` for a root.
+   *
+   * A tenant may own sub-tenants running different businesses, which may in
+   * turn own sub-tenants and branches — an LPG holding with a water-depot
+   * subsidiary is the case the model exists for.
+   */
+  indukId: ID | null;
+
+  /**
+   * How deep in the tree, counted from the ROOT — not from whoever is looking.
+   *
+   * Also the number of ancestors it has. Absolute on purpose, so two people
+   * acting as different tenants describe the same tenant the same way. A
+   * switcher rendering indentation must subtract its own depth, or a
+   * subsidiary's tree draws off the left edge of the panel.
+   */
+  level: number;
+
+  /**
+   * What business this tenant runs, which decides its starting vocabulary and
+   * the product categories available to it.
+   *
+   * Deliberately does NOT inherit: a water-depot subsidiary of an LPG holding
+   * must not pick up "LPG" from its parent. Contrast with `SettingsEntity`,
+   * which does inherit.
+   */
+  jenisUsaha: string;
+
+  /** 'grup' owns others and runs nothing itself; 'operasional' does both. */
+  jenis: "grup" | "operasional";
+}
+
+/**
+ * A settings value, and where it came from.
+ *
+ * Settings inherit per FIELD: `null` means "not set here, ask my parent", so a
+ * subsidiary that renames only its lexicon still follows its group's working
+ * week. Rendering only the effective value loses that distinction — and a form
+ * that saved it back would turn every inherited value into an override the
+ * parent could never change again.
+ *
+ * So the shape carries both: what applies, and whether this tenant chose it.
+ */
+export interface Inherited<T> {
+  /** What applies, after inheritance. Never null once anything up the tree set it. */
+  nilai: T | null;
+  /** The tenant that supplied it, or `null` when this tenant set it itself. */
+  diwarisiDari: { id: ID; kode: string; nama: string } | null;
 }
 
 export interface BranchEntity {
@@ -697,7 +747,14 @@ export interface SettingsEntity {
 export interface Database {
   version: number;
   seededAt: string;
-  tenant: TenantEntity;
+  /**
+   * Every tenant in the tree, not one.
+   *
+   * Was `tenant: TenantEntity` while tenancy was flat and fixed by the session.
+   * The console now switches between them, so the store has to hold the shape
+   * the switcher renders.
+   */
+  tenants: TenantEntity[];
   branches: BranchEntity[];
   outlets: OutletEntity[];
   drivers: DriverEntity[];

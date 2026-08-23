@@ -28,7 +28,7 @@ import {
   sumRealisasi,
   sumTarget,
 } from "./lines";
-import { stampScope } from "./scope";
+import { getActiveScope, stampScope } from "./scope";
 import type {
   Database,
   DeliveryEntity,
@@ -845,7 +845,10 @@ export function validateReceipt(
     const pkl = db.outlets.find((p) => p.id === r.outletId);
     const seq = db.invoices.length + 1;
     const invoice: InvoiceEntity = {
-      tenantId: pkl?.tenantId ?? db.tenant.id,
+      // Falls back to the ACTING tenant, not to "the" tenant: with a hierarchy there
+    // is no single one, and stamping a row with the root's id while acting as a
+    // subsidiary is a cross-tenant write the backend's WITH CHECK would refuse.
+    tenantId: pkl?.tenantId ?? getActiveScope().actingTenantId,
       branchId: pkl?.branchId ?? db.branches[0]?.id ?? "",
       id: nextId("inv"),
       nomor: docNumber(db, "invoice", r.tanggalKwitansi, seq),

@@ -37,7 +37,7 @@ import type {
   UserEntity,
 } from "./types";
 
-export const DB_VERSION = 8;
+export const DB_VERSION = 9;
 
 /* ── deterministic RNG ─────────────────────────────────────────────────── */
 
@@ -178,12 +178,44 @@ const BANKS = ["BCA", "BNI", "Mandiri", "BRI", "BSI"] as const;
 /** The agency yard per branch. Routes start here between runs. */
 export const DEPOT = { lat: -6.2607, lng: 106.9756, nama: "Pool Bekasi" };
 
-export const TENANT: TenantEntity = {
-  id: "tnt-001",
-  kode: "sinar-distribusi",
-  nama: "PT Sinar Distribusi Nusantara",
-  aktif: true,
-};
+/**
+ * A group with two operating subsidiaries in different businesses.
+ *
+ * Two businesses, not one, and deliberately: a single-tenant seed lets the whole
+ * hierarchy look like it works while nothing has exercised it. With an LPG
+ * subsidiary beside a water depot, switching between them visibly changes the
+ * vocabulary on every screen — tabung/pangkalan/SPBE against galon/depot/pabrik
+ * — which is the feature, and it is the demo that proves it.
+ *
+ * `level` is absolute, counted from the root. The switcher subtracts its own
+ * depth before indenting.
+ */
+export const TENANTS: TenantEntity[] = [
+  {
+    id: "tnt-001", kode: "sinar-grup", nama: "Sinar Grup Nusantara",
+    indukId: null, level: 0, jenisUsaha: "holding", jenis: "grup", aktif: true,
+  },
+  {
+    id: "tnt-002", kode: "sinar-lpg", nama: "PT Sinar Distribusi Nusantara",
+    indukId: "tnt-001", level: 1, jenisUsaha: "lpg_distribution",
+    jenis: "operasional", aktif: true,
+  },
+  {
+    id: "tnt-003", kode: "sinar-air", nama: "PT Sinar Air Ungaran",
+    indukId: "tnt-001", level: 1, jenisUsaha: "water_depot",
+    jenis: "operasional", aktif: true,
+  },
+];
+
+/**
+ * The tenant everything else in this seed belongs to.
+ *
+ * The LPG subsidiary, not the group: a holding runs no operations, so hanging
+ * branches, outlets and deliveries off it would describe a company that does
+ * not exist. The water depot is seeded thin on purpose — enough to switch into
+ * and see a different vocabulary, not a second full dataset to maintain.
+ */
+export const TENANT: TenantEntity = TENANTS[1];
 
 /** Three branches, so consolidated views have something to consolidate. */
 export const BRANCHES: BranchEntity[] = [
@@ -1104,7 +1136,7 @@ export function createSeedDatabase(): Database {
   return {
     version: DB_VERSION,
     seededAt: new Date().toISOString(),
-    tenant: TENANT,
+    tenants: TENANTS,
     branches: BRANCHES,
     outlets,
     drivers,

@@ -1,4 +1,4 @@
-import { scopedDb } from "@/mocks/scope";
+import { getActiveScope, scopedDb } from "@/mocks/scope";
 import { latency, mutate, nextId, recordAudit } from "@/mocks/db";
 import { decideOrder, scheduleOrders } from "@/mocks/rules";
 import { exportCsv, timestampSuffix } from "@/lib/export";
@@ -122,7 +122,10 @@ export async function createOrder(input: {
       ? input.lines
       : [{ productId: defaultProduct(db.products)?.id ?? "", jumlah: input.jumlahUnit }];
     const order: OrderEntity = {
-      tenantId: pkl?.tenantId ?? db.tenant.id,
+      // Falls back to the ACTING tenant, not to "the" tenant: with a hierarchy there
+    // is no single one, and stamping a row with the root's id while acting as a
+    // subsidiary is a cross-tenant write the backend's WITH CHECK would refuse.
+    tenantId: pkl?.tenantId ?? getActiveScope().actingTenantId,
       branchId: pkl?.branchId ?? db.branches[0]?.id ?? "",
       id: nextId("ord"),
       kode: [

@@ -7,7 +7,7 @@ import { useOpsClock } from "@/hooks/useOpsClock";
 import { useSidebarShortcut, useSidebarStore } from "@/hooks/useSidebar";
 import { useScope } from "@/features/tenancy/useScope";
 import { getSettings } from "@/features/settings/api/settingsApi";
-import { setLexicon } from "@/lib/lexicon";
+import { hydrateLexicon, setLexicon } from "@/lib/lexicon";
 import { scopeKey } from "@/mocks/scope";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +16,8 @@ export function DashboardLayout() {
   const collapsed = useSidebarStore((s) => s.collapsed);
 
   // Establishes the active branch before any child query runs.
-  const { branchId } = useScope();
+  const scope = useScope();
+  const { branchId } = scope;
 
   // This tenant's vocabulary. Set during render rather than in an
   // effect, the same way useScope sets the active scope: print templates and
@@ -26,7 +27,10 @@ export function DashboardLayout() {
     queryFn: getSettings,
     staleTime: 5 * 60_000,
   });
-  if (settings.data) setLexicon(settings.data.istilah);
+  // Hydrate from this tenant's cache first, so the first paint after a switch
+  // shows neutral words rather than the tenant we just left.
+  hydrateLexicon(scope.tenant?.id ?? "");
+  if (settings.data) setLexicon(settings.data.istilah, scope.tenant?.id ?? "");
 
   // Keeps today's run moving while the console is open.
   useOpsClock();

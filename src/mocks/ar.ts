@@ -11,6 +11,7 @@
  */
 
 import { ApiError, nextId, recordAudit } from "./db";
+import { getActiveScope } from "./scope";
 import { accountByRole, postJournal } from "./ledger";
 import { isoDate, startOfToday } from "./seed";
 import {
@@ -34,7 +35,10 @@ const round = (n: number) => Math.round(n * 100) / 100;
 function scopeFromOutlet(db: Database, outletId: ID) {
   const pkl = db.outlets.find((p) => p.id === outletId);
   return {
-    tenantId: pkl?.tenantId ?? db.tenant.id,
+    // Falls back to the ACTING tenant, not to "the" tenant: with a hierarchy there
+  // is no single one, and stamping a row with the root's id while acting as a
+  // subsidiary is a cross-tenant write the backend's WITH CHECK would refuse.
+  tenantId: pkl?.tenantId ?? getActiveScope().actingTenantId,
     branchId: pkl?.branchId ?? db.branches[0]?.id ?? "",
   };
 }

@@ -27,16 +27,34 @@ import { Panel, PanelBody, PanelHeader, Skeleton } from "@/components/common/Pan
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import {
   Field,
+  SegmentedControl,
   SelectInput,
   TextInput,
   TextareaInput,
 } from "@/components/common/Field";
+import { SupplierSection } from "@/features/settings/components/SupplierSection";
+import { BankSection } from "@/features/settings/components/BankSection";
+import { NumberingSection } from "@/features/settings/components/NumberingSection";
+import { OperationsSection } from "@/features/settings/components/OperationsSection";
 import { Button } from "@/components/ui/button";
 import { cn, getInitials } from "@/lib/utils";
 import type { SettingsEntity } from "@/mocks/types";
-import { supplierLabel } from "@/lib/lexicon";
+
+/**
+ * Which group of settings is on screen.
+ *
+ * These were two pages — Pengaturan and Konfigurasi Sistem — and the split was
+ * never defensible: both edited operations (one owned opening hours, the other
+ * the geofence radius and lead time), and both now map to the single
+ * iam.tenant_settings row the backend resolves with per-column inheritance.
+ * "Which page do I change this on?" had no clean answer, and the old Pengaturan
+ * page carried a "Konfigurasi lain" panel linking to the other one, which is
+ * that awkwardness written down.
+ */
+type SettingsTab = "agen" | "operasi" | "istilah" | "master" | "sistem";
 
 export function SettingsPage() {
+  const [tab, setTab] = useState<SettingsTab>("agen");
   const { theme, setTheme } = useTheme();
   const user = useAuthStore((state) => state.user);
   const { toast } = useToast();
@@ -109,7 +127,20 @@ export function SettingsPage() {
     <div className="space-y-5">
       <PageHeader
         title="Pengaturan"
-        description="Akun Anda, profil agen, harga acuan, dan jam operasional. Data acuan dan aturan notifikasi diatur di halamannya sendiri."
+        description="Identitas agen, cara kerja harian, istilah yang dipakai, dan data acuan konsol."
+        meta={
+          <SegmentedControl
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: "agen" as const, label: "Profil agen" },
+              { value: "operasi" as const, label: "Operasional" },
+              { value: "istilah" as const, label: "Istilah" },
+              { value: "master" as const, label: "Data acuan" },
+              { value: "sistem" as const, label: "Sistem" },
+            ]}
+          />
+        }
         actions={
           dirty && (
             <>
@@ -176,6 +207,7 @@ export function SettingsPage() {
       </Panel>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        {tab === "agen" && (
         <Panel>
           <PanelHeader title="Profil agen" hint="Muncul pada surat jalan dan laporan cetak" />
           <PanelBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -221,7 +253,9 @@ export function SettingsPage() {
             </Field>
           </PanelBody>
         </Panel>
+        )}
 
+        {tab === "operasi" && (
         <Panel>
           <PanelHeader
             title="Operasional"
@@ -274,7 +308,14 @@ export function SettingsPage() {
             </Field>
           </PanelBody>
         </Panel>
+        )}
 
+        {/* The other half of "operational", which used to live on a separate
+            page: geofence radius, stop duration, planning lead time and whether
+            driver location is recorded. Same iam.tenant_settings row. */}
+        {tab === "operasi" && <OperationsSection />}
+
+        {tab === "istilah" && (
         <Panel className="lg:col-span-2">
           <PanelHeader
             title="Istilah"
@@ -334,7 +375,17 @@ export function SettingsPage() {
             </div>
           </PanelBody>
         </Panel>
+        )}
 
+        {tab === "master" && (
+          <div className="space-y-4 lg:col-span-2">
+            <SupplierSection />
+            <BankSection />
+            <NumberingSection />
+          </div>
+        )}
+
+        {tab === "sistem" && (
         <Panel>
           <PanelHeader title="Tampilan" />
           <PanelBody>
@@ -373,36 +424,11 @@ export function SettingsPage() {
             </p>
           </PanelBody>
         </Panel>
+        )}
 
       </div>
 
-      <Panel>
-        <PanelHeader
-          title="Konfigurasi lain"
-          hint="Data acuan dan aturan yang diatur di halaman tersendiri"
-        />
-        <PanelBody className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Link
-            to="/system"
-            className="rounded-md border border-line bg-panel-sunk p-4 transition-colors hover:border-line-strong"
-          >
-            <p className="text-sm font-semibold text-ink">Konfigurasi Sistem</p>
-            <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-              Mitra {supplierLabel()}, rekening penerimaan, penomoran dokumen, dan hari kerja.
-            </p>
-          </Link>
-          <Link
-            to="/notifications"
-            className="rounded-md border border-line bg-panel-sunk p-4 transition-colors hover:border-line-strong"
-          >
-            <p className="text-sm font-semibold text-ink">Aturan notifikasi</p>
-            <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-              Kapan peringatan dibuat, siapa penerimanya, dan kanal pengirimannya.
-            </p>
-          </Link>
-        </PanelBody>
-      </Panel>
-
+      {tab === "sistem" && (
       <Panel>
         <PanelHeader
           title="Data & simulasi"
@@ -450,6 +476,7 @@ export function SettingsPage() {
           />
         </PanelBody>
       </Panel>
+      )}
 
       <ConfirmDialog
         isOpen={resetting}

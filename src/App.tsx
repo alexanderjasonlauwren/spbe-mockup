@@ -23,7 +23,6 @@ import { DriverDetailPage } from "./pages/drivers/DriverDetailPage";
 import { ProductListPage } from "./pages/products/ProductListPage";
 import { ProductFormPage } from "./pages/products/ProductFormPage";
 import { UserListPage } from "./pages/users/UserListPage";
-import { SystemConfigPage } from "./pages/system/SystemConfigPage";
 import { NotificationPage } from "./pages/notifications/NotificationPage";
 import { SettingsPage } from "./pages/settings/SettingsPage";
 import { NotFoundPage } from "./pages/errors/NotFoundPage";
@@ -172,11 +171,7 @@ const router = createBrowserRouter([
           <UserListPage />
         </RequirePermission>
       ) },
-      { path: "system", element: (
-        <RequirePermission permission={PERMISSIONS.SETTINGS_VIEW}>
-          <SystemConfigPage />
-        </RequirePermission>
-      ) },
+      { path: "system", element: <Navigate to="/settings" replace /> },
 
       { path: "notifications", element: <NotificationPage /> },
       { path: "settings", element: <SettingsPage /> },

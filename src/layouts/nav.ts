@@ -1,5 +1,7 @@
 import type { LucideIcon } from "lucide-react";
+import type { UserRole } from "@/types/auth";
 import {
+  Network,
   Bell,
   BookOpen,
   ClipboardList,
@@ -9,14 +11,15 @@ import {
   Map,
   Receipt,
   ReceiptText,
+  Route,
   Settings,
-  SlidersHorizontal,
   Store,
   Table2,
   Truck,
   Users,
   Wallet,
 } from "lucide-react";
+import { outletLabel, outletLabelTitle, supplierLabel, unitLabel } from "@/lib/lexicon";
 
 export interface NavItem {
   name: string;
@@ -43,7 +46,7 @@ export const NAV_GROUPS: NavGroup[] = [
         hint: "Papan berangkat hari ini dan angka kunci",
       },
       {
-        name: "Pesanan Pangkalan",
+        name: `Pesanan ${outletLabelTitle()}`,
         href: "/orders",
         icon: ClipboardList,
         hint: "Permintaan masuk yang menunggu persetujuan",
@@ -52,7 +55,7 @@ export const NAV_GROUPS: NavGroup[] = [
         name: "Schedule Agreement",
         href: "/sa",
         icon: FileText,
-        hint: "Kuota dari SPBE dan sisa yang bisa ditarik",
+        hint: `Kuota dari ${supplierLabel()} dan sisa yang bisa ditarik`,
       },
       {
         name: "Perencanaan Distribusi",
@@ -113,10 +116,10 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Data induk",
     items: [
       {
-        name: "Pangkalan",
-        href: "/pangkalan",
+        name: outletLabelTitle(),
+        href: "/outlet",
         icon: Store,
-        hint: "Daftar outlet, kuota, dan penanggung jawab",
+        hint: `Daftar ${outletLabel()}, kuota, dan penanggung jawab`,
       },
       {
         name: "Armada & Driver",
@@ -128,7 +131,15 @@ export const NAV_GROUPS: NavGroup[] = [
         name: "Produk",
         href: "/products",
         icon: Fuel,
-        hint: "Katalog tabung, harga, dan stok gudang",
+        hint: `Katalog ${unitLabel()}, harga, dan stok gudang`,
+      },
+      {
+        // Above Pengguna & Akses on purpose: a user belongs to a tenant, so the
+        // structure reads before the people in it.
+        name: "Tenant",
+        href: "/tenants",
+        icon: Network,
+        hint: "Struktur perusahaan, sub-tenant, dan cabang pertamanya",
       },
       {
         name: "Pengguna & Akses",
@@ -136,11 +147,27 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Users,
         hint: "Akun tim dan jejak aktivitas sistem",
       },
+    ],
+  },
+];
+
+/**
+ * The sopir's console.
+ *
+ * A separate tree rather than a filtered one: a driver does not need a smaller
+ * version of the dispatcher's menu, they need a different menu. Hiding twenty
+ * items they can never use would still leave the console shaped like somebody
+ * else's job.
+ */
+export const DRIVER_NAV_GROUPS: NavGroup[] = [
+  {
+    label: "Tugas saya",
+    items: [
       {
-        name: "Konfigurasi Sistem",
-        href: "/system",
-        icon: SlidersHorizontal,
-        hint: "Mitra SPBE, rekening, penomoran dokumen, jadwal operasi",
+        name: "Rute Saya",
+        href: "/sopir",
+        icon: Route,
+        hint: "Pemberhentian hari ini dan pencatatan penerimaan",
       },
     ],
   },
@@ -161,10 +188,28 @@ export const BOTTOM_NAV: NavItem[] = [
   },
 ];
 
+/** Every group in the application, whichever console it belongs to. */
+export const ALL_NAV_GROUPS: NavGroup[] = [...NAV_GROUPS, ...DRIVER_NAV_GROUPS];
+
 export const ALL_NAV_ITEMS: NavItem[] = [
-  ...NAV_GROUPS.flatMap((g) => g.items),
+  ...ALL_NAV_GROUPS.flatMap((g) => g.items),
   ...BOTTOM_NAV,
 ];
+
+/** The menu this role actually works from. */
+export function navGroupsFor(role?: UserRole): NavGroup[] {
+  return role === "driver" ? DRIVER_NAV_GROUPS : NAV_GROUPS;
+}
+
+/**
+ * Where a role belongs after signing in.
+ *
+ * A sopir landing on the dashboard would open the console on a dispatch rail of
+ * trucks that are not theirs, with their own run two taps away.
+ */
+export function landingPathFor(role?: UserRole): string {
+  return role === "driver" ? "/sopir" : "/dashboard";
+}
 
 /** Title shown in the header for a given path. */
 export function titleFor(pathname: string): string {
@@ -178,7 +223,7 @@ export function titleFor(pathname: string): string {
 
 /** The group a path belongs to, used as the header eyebrow. */
 export function sectionFor(pathname: string): string | undefined {
-  return NAV_GROUPS.find((g) =>
+  return ALL_NAV_GROUPS.find((g) =>
     g.items.some((i) => pathname === i.href || pathname.startsWith(`${i.href}/`)),
   )?.label;
 }

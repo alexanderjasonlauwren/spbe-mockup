@@ -7,7 +7,7 @@ import { useAuthStore } from "@/features/auth/store/authStore";
 import { getUnreadCount } from "@/features/notification/api/notificationApi";
 import { useRevealActiveGroup, useSidebarStore } from "@/hooks/useSidebar";
 import { APP_NAME, APP_SUBTITLE } from "@/utils/constants";
-import { BOTTOM_NAV, NAV_GROUPS, type NavItem } from "./nav";
+import { BOTTOM_NAV, navGroupsFor, type NavItem } from "./nav";
 
 interface SidebarProps {
   onClose?: () => void;
@@ -50,6 +50,8 @@ export function Sidebar({ onClose }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const logout = useAuthStore((state) => state.logout);
+  const role = useAuthStore((state) => state.user?.role);
+  const navGroups = navGroupsFor(role);
 
   const collapsed = useSidebarStore((s) => s.collapsed);
   const openGroups = useSidebarStore((s) => s.openGroups);
@@ -209,7 +211,7 @@ export function Sidebar({ onClose }: SidebarProps) {
 
       {/* Accordion navigation */}
       <nav className="flex-1 overflow-y-auto overflow-x-hidden pb-4">
-        {NAV_GROUPS.map((group) => {
+        {navGroups.map((group) => {
           const open = openGroups.includes(group.label);
           const hasActive = group.items.some(
             (i) =>

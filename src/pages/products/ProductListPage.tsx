@@ -29,6 +29,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatNumber, formatPercentId, formatRupiah, formatRupiahShort } from "@/lib/format";
+import { supplierLabel, unitLabel } from "@/lib/lexicon";
 
 type Filter = "Semua" | "Aktif" | "Stok rendah";
 
@@ -211,7 +212,7 @@ export function ProductListPage() {
       <PageHeader
         eyebrow="Data induk"
         title="Produk"
-        description="Katalog tabung dan perlengkapan, harga jual, serta stok yang tersimpan di gudang agen."
+        description={`Katalog ${unitLabel()} dan perlengkapan, harga jual, serta stok yang tersimpan di gudang agen.`}
         actions={
           <>
             <Button
@@ -340,7 +341,7 @@ export function ProductListPage() {
               <TextInput
                 id="alasan"
                 value={alasan}
-                placeholder="Contoh: penerimaan dari SPBE"
+                placeholder={`Contoh: penerimaan dari ${supplierLabel()}`}
                 onChange={(e) => setAlasan(e.target.value)}
               />
             </Field>

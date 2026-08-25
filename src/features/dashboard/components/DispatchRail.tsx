@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/common/Panel";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/button";
 import type { DispatchRail as RailData, DispatchStop } from "../types";
+import { outletLabelTitle } from "@/lib/lexicon";
 
 /**
  * The dispatch rail — today's working day as one lane per truck.
@@ -170,11 +171,15 @@ export function DispatchRail({
 }
 
 /**
- * Blocks are narrow, and every outlet here is a "Pangkalan"/"Toko"/"UD" — the
+ * Blocks are narrow, and every outlet here is a "Outlet"/"Toko"/"UD" — the
  * prefix costs the characters that would tell them apart.
  */
 function shortName(nama: string): string {
-  return nama.replace(/^(Pangkalan|Toko Gas|Toko|UD|Mitra)\s+/i, "");
+  // The tenant's own word for the thing, plus the generic shop prefixes a
+  // name might carry. Hardcoding "Pangkalan" here would strip nothing once
+  // the console is pointed at another trade.
+  const prefix = new RegExp(`^(${outletLabelTitle()}|Toko|UD|Mitra)\\s+`, "i");
+  return nama.replace(prefix, "");
 }
 
 function StopBlock({
@@ -214,7 +219,7 @@ function StopBlock({
     >
       <Link
         to="/monitoring"
-        aria-label={`${stop.kode} ke ${stop.pangkalan}, ${stop.stage}`}
+        aria-label={`${stop.kode} ke ${stop.outlet}, ${stop.stage}`}
         // The block itself shows only a truncated name, so on a touch device
         // the stop code, its window and its load were unreachable — hover is
         // the only thing that revealed them. Focus and a first tap now do too.
@@ -231,7 +236,7 @@ function StopBlock({
           tone,
         )}
       >
-        <span className="truncate">{shortName(stop.pangkalan)}</span>
+        <span className="truncate">{shortName(stop.outlet)}</span>
       </Link>
 
       {isHovered && (
@@ -240,7 +245,7 @@ function StopBlock({
         <div className="absolute bottom-[calc(100%+6px)] left-0 z-30 w-56 max-w-[min(14rem,calc(100vw-2rem))] rounded-md border border-line bg-panel p-3 shadow-pop">
           <p className="data text-2xs text-ink-muted">{stop.kode}</p>
           <p className="mt-0.5 text-sm font-semibold leading-snug text-ink">
-            {stop.pangkalan}
+            {stop.outlet}
           </p>
           <p className="text-xs text-ink-muted">Kec. {stop.kecamatan}</p>
           <dl className="mt-2 space-y-1 border-t border-line pt-2 text-xs">

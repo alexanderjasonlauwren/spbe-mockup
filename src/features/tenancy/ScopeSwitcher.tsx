@@ -1,17 +1,26 @@
 import { useEffect, useRef, useState } from "react";
-import { Building2, Check, ChevronDown, Layers } from "lucide-react";
+import { Building2, Check, ChevronDown, Layers, Network } from "lucide-react";
 import { useScope } from "./useScope";
+import { businessTypeLabel } from "./businessType";
 import { cn } from "@/lib/utils";
 
 /**
- * Current branch, and how to change it.
+ * Current tenant and branch, and how to change either.
  *
  * Deliberately prominent: verifying a payment or confirming a dispatch in the
- * wrong branch is the expensive mistake this control exists to prevent, so the
- * active scope is always on screen rather than hidden in a menu.
+ * wrong scope is the expensive mistake this control exists to prevent, so the
+ * active scope is always on screen rather than hidden in a menu. That argument
+ * only got stronger with a tenant tree — the wrong branch is one depot, the
+ * wrong tenant is a different company's books.
+ *
+ * Was BranchSwitcher. Extended rather than replaced: it already handled the
+ * consolidated "Semua" mode, which is the same idea one level up.
  */
-export function BranchSwitcher() {
-  const { branches, branch, branchId, isConsolidated, canSeeAll, setBranch } = useScope();
+export function ScopeSwitcher() {
+  const {
+    branches, branch, branchId, isConsolidated, canSeeAll, setBranch,
+    tenant, tenants, canSwitchTenant, setTenant,
+  } = useScope();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -23,8 +32,9 @@ export function BranchSwitcher() {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
-  // Nothing to switch between: state the scope without offering a choice.
-  if (branches.length <= 1 && !canSeeAll) {
+  // Nothing to switch between at either level: state the scope without
+  // offering a choice.
+  if (branches.length <= 1 && !canSeeAll && !canSwitchTenant) {
     return (
       <span className="hidden items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 text-xs text-ink-muted sm:flex">
         <Building2 className="h-3.5 w-3.5" />
@@ -32,6 +42,12 @@ export function BranchSwitcher() {
       </span>
     );
   }
+
+  // Indentation is RELATIVE. `level` counts from the root, so rendering it
+  // directly would indent a subsidiary's own subtree off the left edge of a
+  // 16rem panel. Subtracting the acting tenant's level makes the tree read the
+  // same wherever in it you happen to be standing.
+  const baseLevel = tenant?.level ?? 0;
 
   return (
     <div className="relative" ref={ref}>
@@ -57,14 +73,60 @@ export function BranchSwitcher() {
         <span className="sm:hidden">
           {isConsolidated ? "Semua" : (branch?.kode ?? "—")}
         </span>
-        <span className="hidden max-w-[9rem] truncate sm:inline">
+        <span className="hidden max-w-[12rem] truncate sm:inline">
+          {/* Tenant first, because it is the coarser mistake. Only shown when
+              there is more than one — a single-tenant install should not carry
+              a permanent reminder of a hierarchy it does not have. */}
+          {canSwitchTenant && tenant ? `${tenant.nama} · ` : ""}
           {isConsolidated ? "Semua cabang" : (branch?.nama ?? "Pilih cabang")}
         </span>
         <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
       </button>
 
       {open && (
-        <div className="animate-in-up absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-md border border-line bg-panel shadow-pop">
+        <div className="animate-in-up absolute right-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-md border border-line bg-panel shadow-pop">
+          {canSwitchTenant && (
+            <>
+              <p className="label border-b border-line px-4 py-2 text-2xs text-ink-muted">
+                Tenant
+              </p>
+              <ul className="max-h-56 overflow-y-auto border-b border-line">
+                {tenants.map((t) => {
+                  const active = t.id === tenant?.id;
+                  const indent = Math.max(0, t.level - baseLevel);
+                  return (
+                    <li key={t.id}>
+                      <button
+                        onClick={() => {
+                          setTenant(t.id);
+                          setOpen(false);
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-panel-sunk",
+                          active && "bg-panel-sunk",
+                        )}
+                        style={{ paddingLeft: `${1 + indent * 0.875}rem` }}
+                      >
+                        <Network className="h-4 w-4 shrink-0 text-ink-muted" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-ink">
+                            {t.nama}
+                          </span>
+                          <span className="block truncate text-2xs text-ink-muted">
+                            {/* A holding runs no operations, so say so rather
+                                than showing an industry it does not have. */}
+                            {t.jenis === "grup" ? "Grup" : businessTypeLabel(t.jenisUsaha)}
+                          </span>
+                        </span>
+                        {active && <Check className="h-3.5 w-3.5 shrink-0 text-ink" />}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+
           <p className="label border-b border-line px-4 py-2 text-2xs text-ink-muted">
             Cabang
           </p>

@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatNumber, formatPercentId, formatTime } from "@/lib/format";
 import type { MonitoringRow } from "@/features/monitoring/types";
+import { outletLabel, unitLabel } from "@/lib/lexicon";
 
 const STATUS_TABS = ["Semua", "Antrian", "Proses", "Selesai", "Tertunda"] as const;
 
@@ -63,7 +64,7 @@ export function MonitoringPage() {
       <PageHeader
         eyebrow="Operasi harian"
         title="Monitoring Distribusi"
-        description="Setiap surat jalan yang sudah terbit, posisinya, dan apa yang benar-benar diterima pangkalan."
+        description={`Setiap surat jalan yang sudah terbit, posisinya, dan apa yang benar-benar diterima ${outletLabel()}.`}
         actions={<DateRangeFilter dateRange={dateRange} onChange={setDateRange} />}
       />
 
@@ -84,7 +85,7 @@ export function MonitoringPage() {
         <Stat
           label="Realisasi periode"
           value={formatNumber(totals?.realisasi ?? 0)}
-          unit="tabung"
+          unit={unitLabel()}
           hint={`${formatPercentId(capaian)} dari ${formatNumber(totals?.target ?? 0)} target`}
         />
         <Stat
@@ -131,7 +132,7 @@ export function MonitoringPage() {
           hint={
             driverFilter
               ? "Menampilkan satu armada. Klik peta atau kartu armada untuk melihat semuanya."
-              : "Titik pangkalan dan posisi armada yang sedang berjalan"
+              : `Titik ${outletLabel()} dan posisi armada yang sedang berjalan`
           }
           actions={
             <div className="flex items-center gap-3">
@@ -227,7 +228,7 @@ export function MonitoringPage() {
           <DialogHeader>
             <DialogTitle>Tutup {completing?.kode}</DialogTitle>
             <DialogDescription>
-              Catat jumlah tabung yang benar-benar diterima {completing?.pangkalan}.
+              Catat jumlah {unitLabel()} yang benar-benar diterima {completing?.outlet}.
               Angka ini menjadi dasar tagihan.
             </DialogDescription>
           </DialogHeader>
@@ -237,7 +238,7 @@ export function MonitoringPage() {
             htmlFor="realisasi"
             hint={
               completing
-                ? `Target pada surat jalan: ${formatNumber(completing.target)} tabung.`
+                ? `Target pada surat jalan: ${formatNumber(completing.target)} ${unitLabel()}.`
                 : undefined
             }
           >
@@ -255,7 +256,7 @@ export function MonitoringPage() {
           {completing && realisasi < completing.target && (
             <p className="rounded-md border border-line bg-signal-soft px-3 py-2 text-xs text-ink">
               Kurang <span className="data">{formatNumber(completing.target - realisasi)}</span>{" "}
-              tabung dari target. Selisih tercatat pada surat jalan dan laporan periode.
+              {unitLabel()} dari target. Selisih tercatat pada surat jalan dan laporan periode.
             </p>
           )}
 
@@ -282,7 +283,7 @@ export function MonitoringPage() {
       <ConfirmDialog
         isOpen={!!holding}
         title={`Tandai ${holding?.kode} tertunda?`}
-        message={`Pengiriman ke ${holding?.pangkalan} dicatat gagal diselesaikan hari ini.`}
+        message={`Pengiriman ke ${holding?.outlet} dicatat gagal diselesaikan hari ini.`}
         details="Surat jalan tetap terbuka dan tidak menerbitkan tagihan. Jadwalkan ulang lewat rencana distribusi berikutnya."
         confirmLabel="Tandai tertunda"
         isPending={statusMutation.isPending}

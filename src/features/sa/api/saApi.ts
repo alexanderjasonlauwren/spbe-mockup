@@ -13,6 +13,7 @@ import type {
   SAFilterParams,
   UploadSAPayload,
 } from "../types";
+import { supplierLabelTitle, unitLabelTitle } from "@/lib/lexicon";
 
 function daysUntil(iso: string): number {
   const target = new Date(iso).getTime();
@@ -23,7 +24,7 @@ function toView(sa: SAEntity, planCount: number): ScheduleAgreement {
   return {
     id: sa.id,
     nomorSA: sa.nomorSA,
-    spbe: sa.spbe,
+    supplier: sa.supplier,
     periodeMulai: sa.periodeMulai,
     periodeBerakhir: sa.periodeBerakhir,
     totalKuota: sa.totalKuota,
@@ -64,7 +65,7 @@ export async function getSAList(
         const q = filters.search.toLowerCase();
         if (
           !sa.nomorSA.toLowerCase().includes(q) &&
-          !sa.spbe.toLowerCase().includes(q)
+          !sa.supplier.toLowerCase().includes(q)
         )
           return false;
       }
@@ -87,7 +88,7 @@ export async function uploadSA(
   await latency("upload");
   const sa = createScheduleAgreement({
     nomorSA: payload.nomorSA,
-    spbe: payload.spbe,
+    supplier: payload.supplier,
     periodeMulai: payload.periodeMulai,
     periodeBerakhir: payload.periodeBerakhir,
     totalKuota: payload.totalKuota,
@@ -108,15 +109,15 @@ export async function deleteSA(id: string): Promise<void> {
 }
 
 /**
- * SPBE partners available when registering a new agreement. Comes from the
+ * Supply sources available when registering a new agreement. Comes from the
  * master list in Konfigurasi Sistem, falling back to whatever historical
  * agreements reference so nothing disappears from an existing database.
  */
-export async function getSpbeOptions(): Promise<string[]> {
+export async function getSupplierOptions(): Promise<string[]> {
   await latency("read");
   const db = scopedDb();
-  const master = db.spbe.filter((s) => s.aktif).map((s) => s.nama);
-  const historical = db.scheduleAgreements.map((s) => s.spbe);
+  const master = db.suppliers.filter((s) => s.aktif).map((s) => s.nama);
+  const historical = db.scheduleAgreements.map((s) => s.supplier);
   return [...new Set([...master, ...historical])].sort();
 }
 
@@ -144,12 +145,12 @@ export async function printSA(id: string): Promise<void> {
     <hr class="rule" />
     <div class="meta">
       <div>Nomor SA<strong class="code">${sa.nomorSA}</strong></div>
-      <div>SPBE<strong>${sa.spbe}</strong></div>
+      <div>${supplierLabelTitle()}<strong>${sa.supplier}</strong></div>
       <div>Periode<strong>${tanggal(sa.periodeMulai)} – ${tanggal(sa.periodeBerakhir)}</strong></div>
       <div>Status<strong>${sa.status}</strong></div>
     </div>
     <table>
-      <thead><tr><th>Uraian</th><th style="text-align:right">Tabung</th></tr></thead>
+      <thead><tr><th>Uraian</th><th style="text-align:right">${unitLabelTitle()}</th></tr></thead>
       <tbody>
         <tr><td>Total kuota</td><td class="num">${fmt(sa.totalKuota)}</td></tr>
         <tr><td>Sudah dialokasikan</td><td class="num">${fmt(sa.terpakai)}</td></tr>
@@ -173,7 +174,7 @@ export async function printSA(id: string): Promise<void> {
     </table>
     <div class="sign">
       <div>Dicetak oleh<span>${db.settings.namaPerusahaan}</span></div>
-      <div>Mengetahui<span>${sa.spbe}</span></div>
+      <div>Mengetahui<span>${sa.supplier}</span></div>
     </div>`,
   );
 }

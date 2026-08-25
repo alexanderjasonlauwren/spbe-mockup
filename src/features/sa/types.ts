@@ -3,7 +3,7 @@ export type SAStatus = "Aktif" | "Selesai" | "Draft" | "Limit";
 export interface ScheduleAgreement {
   id: string;
   nomorSA: string;
-  spbe: string;
+  supplier: string;
   /** ISO date — formatted at the point of display. */
   periodeMulai: string;
   periodeBerakhir: string;
@@ -30,7 +30,7 @@ export interface SAFilterParams {
 
 export interface UploadSAPayload {
   nomorSA: string;
-  spbe: string;
+  supplier: string;
   periodeMulai: string;
   periodeBerakhir: string;
   totalKuota: number;

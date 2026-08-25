@@ -3,11 +3,11 @@ export interface KpiSummary {
   dailyTarget: number;
   monthlyQuotaRemaining: number;
   monthlyQuotaTotal: number;
-  activePangkalan: number;
-  totalPangkalan: number;
+  activeOutlet: number;
+  totalOutlet: number;
   pendingPayments: number;
   pendingPaymentValue: number;
-  /** Money owed by pangkalan that has not been collected. */
+  /** Money owed by outlet that has not been collected. */
   piutangOutstanding: number;
   piutangJatuhTempo: number;
   /** Yesterday's realised tonnage, for the day-on-day comparison. */
@@ -22,7 +22,7 @@ export interface MonthlyChartPoint {
   realisasi: number;
 }
 
-export interface PangkalanShare {
+export interface OutletShare {
   name: string;
   value: number;
   percentage: number;
@@ -37,9 +37,9 @@ export type ActivityStatus =
 export interface RecentActivity {
   id: string;
   tanggal: string;
-  pangkalan: string;
+  outlet: string;
   driver: string;
-  jumlahTabung: number;
+  jumlahUnit: number;
   status: ActivityStatus;
 }
 
@@ -51,7 +51,7 @@ export type StopStage = "Antrian" | "Proses" | "Selesai" | "Tertunda";
 export interface DispatchStop {
   id: string;
   kode: string;
-  pangkalan: string;
+  outlet: string;
   kecamatan: string;
   /** Minutes from midnight — the rail positions stops on this. */
   startMinute: number;

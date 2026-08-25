@@ -7,6 +7,7 @@
  */
 
 import { seedAccounts } from "./ledger";
+import { applyScalarRealisasi, costOfGoods, priceLines } from "./lines";
 import type {
   BranchEntity,
   TenantEntity,
@@ -17,25 +18,27 @@ import type {
   DeliveryEntity,
   DriverEntity,
   NotificationEntity,
-  PangkalanEntity,
+  OutletEntity,
   PaymentEntity,
   PlanEntity,
   PlanRowEntity,
   BankAccountEntity,
   BankNameEntity,
   NotificationSettings,
+  LexiconEntity,
   NumberingEntity,
   OperationsEntity,
   OrderEntity,
   ProductEntity,
-  SpbeEntity,
+  SupplierEntity,
   ReceiptEntity,
   SAEntity,
   SettingsEntity,
+  TenantSettingsEntity,
   UserEntity,
 } from "./types";
 
-export const DB_VERSION = 3;
+export const DB_VERSION = 12;
 
 /* ── deterministic RNG ─────────────────────────────────────────────────── */
 
@@ -87,51 +90,54 @@ function atTime(date: Date, hhmm: string): string {
 /* ── source vocabulary ─────────────────────────────────────────────────── */
 
 const SPBE = [
-  "SPBE Bekasi Utama",
-  "SPBE Tambun Mandiri",
-  "SPBE Cikarang Raya",
-  "SPBE Jatiasih Sejahtera",
+  "SPBE Salatiga Utama",
+  "SPBE Ungaran Mandiri",
+  "SPBE Boyolali Raya",
+  "SPBE Ambarawa Sejahtera",
 ];
 
 const KECAMATAN = [
-  "Bekasi Selatan",
-  "Bekasi Timur",
-  "Bekasi Utara",
-  "Bekasi Barat",
-  "Rawalumbu",
-  "Medan Satria",
-  "Bantargebang",
-  "Jatiasih",
-  "Pondok Gede",
-  "Tambun Selatan",
-  "Cikarang Barat",
-  "Cibitung",
+  // Salatiga's four kecamatan, then the surrounding Kab. Semarang districts an
+  // agency there actually serves. Salatiga city is small — four districts does
+  // not fill a round — so the ring around it is where the volume is.
+  "Sidorejo",
+  "Sidomukti",
+  "Tingkir",
+  "Argomulyo",
+  "Getasan",
+  "Tengaran",
+  "Suruh",
+  "Pabelan",
+  "Tuntang",
+  "Banyubiru",
+  "Bringin",
+  "Susukan",
 ];
 
-const PANGKALAN_NAMA = [
-  "Pangkalan Jaya Abadi",
+const OUTLET_NAMA = [
+  "Outlet Jaya Abadi",
   "Mitra Sejahtera Gas",
-  "Pangkalan Berkah Rejeki",
+  "Outlet Berkah Rejeki",
   "Toko Gas Utama Mandiri",
-  "Pangkalan Sinar Baru",
+  "Outlet Sinar Baru",
   "UD Maju Terus",
-  "Pangkalan Berkah Jaya",
+  "Outlet Berkah Jaya",
   "Toko Gas Sejahtera",
-  "Pangkalan Ibu Ani",
+  "Outlet Ibu Ani",
   "Sumber Gas Rejeki",
-  "Pangkalan Maju Jaya",
-  "Pangkalan Sumber Gas",
-  "Pangkalan Berkah Elpiji",
+  "Outlet Maju Jaya",
+  "Outlet Sumber Gas",
+  "Outlet Berkah Elpiji",
   "UD Cahaya Gas",
-  "Pangkalan Amanah",
+  "Outlet Amanah",
   "Toko Gas Barokah",
-  "Pangkalan Rukun Santosa",
+  "Outlet Rukun Santosa",
   "Mitra Gas Nusantara",
-  "Pangkalan Karya Mandiri",
+  "Outlet Karya Mandiri",
   "UD Sumber Makmur",
-  "Pangkalan Tirta Jaya",
+  "Outlet Tirta Jaya",
   "Toko Gas Harapan",
-  "Pangkalan Sejahtera Abadi",
+  "Outlet Sejahtera Abadi",
   "UD Bintang Gas",
 ];
 
@@ -172,65 +178,135 @@ const ARMADA = [
 
 const BANKS = ["BCA", "BNI", "Mandiri", "BRI", "BSI"] as const;
 
-const HARGA_PER_TABUNG = 12_000;
 
 /** The agency yard per branch. Routes start here between runs. */
-export const DEPOT = { lat: -6.2607, lng: 106.9756, nama: "Pool Bekasi" };
+export const DEPOT = { lat: -7.3305, lng: 110.5084, nama: "Pool Salatiga" };
 
-export const TENANT: TenantEntity = {
-  id: "tnt-001",
-  kode: "sinar-distribusi",
-  nama: "PT Sinar Distribusi Nusantara",
-  aktif: true,
-};
+/**
+ * A group with two operating subsidiaries in different businesses.
+ *
+ * Two businesses, not one, and deliberately: a single-tenant seed lets the whole
+ * hierarchy look like it works while nothing has exercised it. With an LPG
+ * subsidiary beside a water depot, switching between them visibly changes the
+ * vocabulary on every screen — tabung/pangkalan/SPBE against galon/depot/pabrik
+ * — which is the feature, and it is the demo that proves it.
+ *
+ * `level` is absolute, counted from the root. The switcher subtracts its own
+ * depth before indenting.
+ */
+export const TENANTS: TenantEntity[] = [
+  {
+    id: "tnt-001", kode: "bimbo-holdings", nama: "Bimbo Holdings",
+    indukId: null, level: 0, jenisUsaha: "holding", jenis: "grup", aktif: true,
+  },
+  {
+    id: "tnt-002", kode: "pt-salatiga", nama: "PT Bimbo Salatiga",
+    indukId: "tnt-001", level: 1, jenisUsaha: "lpg_distribution",
+    jenis: "operasional", aktif: true,
+  },
+  {
+    id: "tnt-003", kode: "pt-pati", nama: "PT Bimbo Pati",
+    indukId: "tnt-001", level: 1, jenisUsaha: "lpg_distribution",
+    jenis: "operasional", aktif: true,
+  },
+  {
+    // Kept deliberately. Salatiga and Pati are both LPG, so switching between
+    // them proves tenant isolation but not the business-agnostic lexicon — the
+    // nouns would be identical either way. A third tenant in a different trade
+    // is the only way "the console is not an LPG console" is demonstrable on
+    // screen rather than merely claimed.
+    id: "tnt-004", kode: "pt-tirta", nama: "PT Bimbo Tirta",
+    indukId: "tnt-001", level: 1, jenisUsaha: "water_depot",
+    jenis: "operasional", aktif: true,
+  },
+];
+
+/**
+ * The tenant the operational seed hangs off.
+ *
+ * PT Salatiga, not the holding: a `grup` tenant owns others and runs nothing
+ * itself, so hanging outlets and deliveries off it would describe a company that
+ * does not exist. Pati and Tirta are seeded thin — enough to switch into and see
+ * a different scope and vocabulary, not a second full dataset to maintain.
+ */
+export const TENANT: TenantEntity = TENANTS[1];
 
 /** Three branches, so consolidated views have something to consolidate. */
 export const BRANCHES: BranchEntity[] = [
+  // One branch per operating tenant, and exactly one: neither PT has
+  // organisational branches, but branch_id is NOT NULL on every operational
+  // table in the backend and document number series are issued per branch, so
+  // the single default row IS the pool where vehicles load. More can be added
+  // later with no migration.
   {
-    id: "brc-001", tenantId: TENANT.id, kode: "BKS", nama: "Cabang Bekasi",
-    kota: "Kota Bekasi", provinsi: "Jawa Barat",
-    alamat: "Jl. Raya Industri No. 42, Bekasi Selatan",
-    penanggungJawab: "Alex Lawrence", telepon: "021-8899-4210",
-    lat: -6.2607, lng: 106.9756, utama: true, aktif: true,
+    id: "brc-001", tenantId: "tnt-002", kode: "SLT", nama: "Pool Salatiga",
+    kota: "Kota Salatiga", provinsi: "Jawa Tengah",
+    alamat: "Jl. Lingkar Selatan No. 42, Sidorejo",
+    penanggungJawab: "Alex Lawrence", telepon: "0298-321-4210",
+    lat: -7.3305, lng: 110.5084, utama: true, aktif: true,
   },
   {
-    id: "brc-002", tenantId: TENANT.id, kode: "CKR", nama: "Cabang Cikarang",
-    kota: "Kab. Bekasi", provinsi: "Jawa Barat",
-    alamat: "Jl. Jababeka Raya Blok C No. 8, Cikarang",
-    penanggungJawab: "Siti Nurhaliza", telepon: "021-8934-7720",
-    lat: -6.2797, lng: 107.1425, utama: false, aktif: true,
+    id: "brc-002", tenantId: "tnt-003", kode: "PTI", nama: "Pool Pati",
+    kota: "Kab. Pati", provinsi: "Jawa Tengah",
+    alamat: "Jl. Raya Pati-Juwana Km. 4, Margorejo",
+    penanggungJawab: "Siti Nurhaliza", telepon: "0295-381-7720",
+    lat: -6.7559, lng: 111.0388, utama: true, aktif: true,
   },
   {
-    id: "brc-003", tenantId: TENANT.id, kode: "KRW", nama: "Cabang Karawang",
-    kota: "Kab. Karawang", provinsi: "Jawa Barat",
-    alamat: "Jl. Ahmad Yani No. 117, Karawang Barat",
-    penanggungJawab: "Joko Prasetyo", telepon: "0267-641-880",
-    lat: -6.3227, lng: 107.3376, utama: false, aktif: true,
+    id: "brc-003", tenantId: "tnt-004", kode: "TRT", nama: "Depot Tirta Ungaran",
+    kota: "Kab. Semarang", provinsi: "Jawa Tengah",
+    alamat: "Jl. Diponegoro No. 118, Ungaran Barat",
+    penanggungJawab: "Joko Prasetyo", telepon: "024-692-1880",
+    lat: -7.1389, lng: 110.4058, utama: true, aktif: true,
   },
 ];
 
 /** Round-robin assignment, so every branch has a working day of its own. */
-function branchFor(index: number): { tenantId: string; branchId: string } {
-  const b = BRANCHES[index % BRANCHES.length];
-  return { tenantId: TENANT.id, branchId: b.id };
+/**
+ * Which branch — and therefore which tenant — a generated row belongs to.
+ *
+ * The tenant comes from the BRANCH, not from a constant. Branches used to all
+ * sit under one tenant, so `TENANT.id` was right; now each pool belongs to a
+ * different PT, and stamping every row with the same tenant would put Pati's
+ * outlets inside Salatiga.
+ *
+ * Operational data is seeded for Salatiga only — see TENANT — so this returns
+ * its pool, and takes no index. It used to round-robin across three branches of
+ * one tenant; each pool now belongs to a different PT, so spreading rows across
+ * them would put Pati's outlets inside Salatiga.
+ *
+ * Pati and Tirta exist to be switched into. A tenant whose console is empty is
+ * the honest demonstration that scope filtering works — data that appeared
+ * everywhere would prove nothing.
+ */
+function branchFor(): { tenantId: string; branchId: string } {
+  const b = BRANCHES[0];
+  return { tenantId: b.tenantId, branchId: b.id };
 }
 
 /* ── generators ────────────────────────────────────────────────────────── */
 
-function seedPangkalan(): PangkalanEntity[] {
-  return PANGKALAN_NAMA.map((nama, i) => {
+function seedOutlet(): OutletEntity[] {
+  return OUTLET_NAMA.map((nama, i) => {
     const kecamatan = KECAMATAN[i % KECAMATAN.length];
     const statusRoll = rand();
     return {
-      ...branchFor(i),
+      ...branchFor(),
       id: `pkl-${String(i + 1).padStart(3, "0")}`,
       kode: `PKL-${String(i + 1).padStart(4, "0")}`,
       nama,
       alamat: `Jl. ${pick(["Melati", "Kenanga", "Raya Industri", "Pahlawan", "Merdeka", "Cempaka", "Diponegoro", "Sudirman"])} No. ${randInt(1, 180)}`,
       kecamatan,
-      kota: i % 5 === 0 ? "Kab. Bekasi" : "Kota Bekasi",
-      lat: -6.2 - rand() * 0.09,
-      lng: 106.96 + rand() * 0.09,
+      kota: i % 5 === 0 ? "Kab. Semarang" : "Kota Salatiga",
+      // A box south and east of the pool.
+      //
+      // The direction is not decorative. Salatiga sits on the slope between
+      // Merbabu and Telomoyo, and the served districts — Getasan, Tengaran,
+      // Suruh, Tuntang — lie south and east of the city. A symmetric jitter
+      // would scatter pins onto the mountains to the west, and MonitoringPage
+      // renders these on a real Leaflet map where that is immediately visible.
+      lat: DEPOT.lat - rand() * 0.09,
+      lng: DEPOT.lng + rand() * 0.09,
       penanggungJawab: ORANG[(i * 3 + 5) % ORANG.length],
       telepon: `08${randInt(11, 99)}${randInt(1000000, 9999999)}`,
       status:
@@ -253,7 +329,7 @@ function seedDrivers(): DriverEntity[] {
   return Array.from({ length: 8 }, (_, i) => {
     const unit = ARMADA[i % ARMADA.length];
     return {
-      ...branchFor(i),
+      ...branchFor(),
       id: `drv-${String(i + 1).padStart(3, "0")}`,
       nama: ORANG[i],
       telepon: `08${randInt(11, 99)}${randInt(1000000, 9999999)}`,
@@ -287,10 +363,10 @@ function seedScheduleAgreements(): SAEntity[] {
     const berakhir = new Date(y, m + p.offset + 1, 0);
     const totalKuota = randInt(12, 60) * 10_000;
     return {
-      ...branchFor(i),
+      ...branchFor(),
       id: `sa-${String(i + 1).padStart(3, "0")}`,
       nomorSA: `SA-${mulai.getFullYear()}-${pad(mulai.getMonth() + 1)}-${pad(randInt(1, 99))}`,
-      spbe: SPBE[i % SPBE.length],
+      supplier: SPBE[i % SPBE.length],
       periodeMulai: isoDate(mulai),
       periodeBerakhir: isoDate(berakhir),
       totalKuota,
@@ -309,10 +385,19 @@ function seedScheduleAgreements(): SAEntity[] {
  * Past days are finished, today is mid-run, the next two days are drafts.
  */
 function seedOperations(
-  pangkalan: PangkalanEntity[],
+  outlet: OutletEntity[],
   drivers: DriverEntity[],
   sas: SAEntity[],
+  products: ProductEntity[],
 ) {
+  /**
+   * Most drops are the subsidised 3 kg staple; roughly one in five also carries
+   * a few 12 kg for restaurants and households on the same round. That mix is
+   * the point — it is what makes per-product pricing observable rather than
+   * theoretical.
+   */
+  const staple = products[0];
+  const bulk = products[2];
   const today = startOfToday();
   const plans: PlanEntity[] = [];
   const planRows: PlanRowEntity[] = [];
@@ -328,13 +413,13 @@ function seedOperations(
   // exactly one branch — the same shape as core.plans.branch_id.
   for (const branch of BRANCHES) {
   const scope = { tenantId: TENANT.id, branchId: branch.id };
-  const aktifPangkalan = pangkalan.filter(
+  const aktifOutlet = outlet.filter(
     (p) => p.status === "Aktif" && p.branchId === branch.id,
   );
   const aktifDrivers = drivers.filter(
     (d) => d.status !== "Cuti" && d.branchId === branch.id,
   );
-  if (aktifPangkalan.length === 0 || aktifDrivers.length === 0) continue;
+  if (aktifOutlet.length === 0 || aktifDrivers.length === 0) continue;
 
   for (let offset = -14; offset <= 2; offset++) {
     const date = addDays(today, offset);
@@ -360,7 +445,7 @@ function seedOperations(
     });
 
     const stopCount = randInt(6, 9);
-    const chosen = [...aktifPangkalan]
+    const chosen = [...aktifOutlet]
       .sort(() => rand() - 0.5)
       .slice(0, stopCount);
 
@@ -377,14 +462,21 @@ function seedOperations(
       const jam = `${String(7 + slot * 3 + (idx % crew.length)).padStart(2, "0")}:${
         idx % 2 === 0 ? "00" : "30"
       }`;
-      const target = randInt(6, 18) * 10;
+      const pokok = randInt(6, 18) * 10;
+      const tambahan = rand() > 0.8 ? randInt(1, 4) * 5 : 0;
+      const lines = [
+        { productId: staple.id, jumlah: pokok },
+        ...(tambahan > 0 ? [{ productId: bulk.id, jumlah: tambahan }] : []),
+      ];
+      const target = pokok + tambahan;
 
       planRows.push({
         id: rowId,
         planId,
-        pangkalanId: pkl.id,
+        outletId: pkl.id,
         driverId: status === "Draft" && idx === stopCount - 1 ? null : driver.id,
-        jumlahTabung: target,
+        lines,
+        jumlahUnit: target,
         jamPengiriman: jam,
       });
 
@@ -411,13 +503,26 @@ function seedOperations(
         realisasi = 0;
       }
 
+      // Split through the same helper the runtime uses, so seeded history can
+      // never disagree with a drop filed in the session. Hand-rolling this put
+      // a fully-delivered bulk line on drops where nothing arrived at all.
+      const deliveryLines = applyScalarRealisasi(
+        lines.map((l) => ({ productId: l.productId, target: l.jumlah, realisasi: 0 })),
+        realisasi,
+      ).map((l) => ({
+        ...l,
+        // Empties come back against what was actually dropped, not what was loaded.
+        kembali: dStatus === "Selesai" ? l.realisasi : undefined,
+      }));
+
       deliveries.push({
         ...scope,
+        lines: deliveryLines,
         id: `dlv-${String(deliverySeq).padStart(4, "0")}`,
         kode: `SJ-${isoDate(date).replace(/-/g, "")}-${String(idx + 1).padStart(2, "0")}`,
         planId,
         planRowId: rowId,
-        pangkalanId: pkl.id,
+        outletId: pkl.id,
         driverId: driver.id,
         tanggal: isoDate(date),
         jamRencana: jam,
@@ -431,7 +536,7 @@ function seedOperations(
             : undefined,
         driverLat: dStatus === "Proses" ? pkl.lat + (rand() - 0.5) * 0.03 : undefined,
         driverLng: dStatus === "Proses" ? pkl.lng + (rand() - 0.5) * 0.03 : undefined,
-        catatan: dStatus === "Tertunda" ? "Pangkalan tutup saat armada tiba." : undefined,
+        catatan: dStatus === "Tertunda" ? "Outlet tutup saat armada tiba." : undefined,
       });
     });
   }
@@ -464,9 +569,8 @@ function seedOperations(
  */
 function seedReceivables(
   deliveries: DeliveryEntity[],
-  pangkalan: PangkalanEntity[],
+  outlet: OutletEntity[],
   products: ProductEntity[],
-  settings: SettingsEntity,
 ) {
   const invoices: InvoiceEntity[] = [];
   const payments: PaymentEntity[] = [];
@@ -475,8 +579,6 @@ function seedReceivables(
   const journals: JournalEntity[] = [];
 
   const acc = (role: string) => accounts.find((a) => a.role === role)!.id;
-  const harga = settings.hargaPerTabung;
-  const hargaBeli = products[0]?.hargaBeli ?? Math.round(harga * 0.85);
   const today = startOfToday();
 
   let jSeq = 0;
@@ -510,22 +612,29 @@ function seedReceivables(
     .sort((a, b) => a.tanggal.localeCompare(b.tanggal));
 
   settled.forEach((d, i) => {
-    const pkl = pangkalan.find((p) => p.id === d.pangkalanId);
+    const pkl = outlet.find((p) => p.id === d.outletId);
     // Everything raised from a delivery lives in that delivery's branch.
     const scope = { tenantId: d.tenantId, branchId: d.branchId };
-    const subtotal = d.realisasi * harga;
+    // Same pricing path the live rules use, so seeded history and anything
+    // raised in the session are directly comparable.
+    const invLines = priceLines(
+      products,
+      d.lines.map((l) => ({ productId: l.productId, jumlah: l.realisasi })),
+    );
+    const subtotal = invLines.reduce((sum, l) => sum + l.subtotal, 0);
     const jatuhTempo = isoDate(addDays(new Date(d.tanggal), pkl?.termin ?? 7));
 
     const inv: InvoiceEntity = {
       ...scope,
       id: `inv-${String(i + 1).padStart(4, "0")}`,
       nomor: `INV-${d.tanggal.replace(/-/g, "")}-${String(i + 1).padStart(3, "0")}`,
-      pangkalanId: d.pangkalanId,
+      outletId: d.outletId,
       deliveryId: d.id,
       tanggal: d.tanggal,
       jatuhTempo,
-      jumlahTabung: d.realisasi,
-      hargaSatuan: harga,
+      lines: invLines,
+      jumlahUnit: d.realisasi,
+      hargaSatuan: d.realisasi > 0 ? Math.round(subtotal / d.realisasi) : 0,
       subtotal,
       pajak: 0,
       total: subtotal,
@@ -537,8 +646,8 @@ function seedReceivables(
     };
     invoices.push(inv);
 
-    const hpp = d.realisasi * hargaBeli;
-    post(inv.tanggal, `${inv.nomor} — penjualan ke ${pkl?.nama ?? "pangkalan"}`,
+    const hpp = costOfGoods(products, d.lines);
+    post(inv.tanggal, `${inv.nomor} — penjualan ke ${pkl?.nama ?? "outlet"}`,
       { tipe: "invoice", id: inv.id },
       [
         { akunId: acc("piutang"), debit: inv.total, kredit: 0 },
@@ -562,7 +671,7 @@ function seedReceivables(
         ...scope,
         id: `pay-${String(payments.length + 1).padStart(4, "0")}`,
         nomor: `BKM-${tanggalBayar.replace(/-/g, "")}-${String(payments.length + 1).padStart(3, "0")}`,
-        pangkalanId: d.pangkalanId,
+        outletId: d.outletId,
         tanggal: tanggalBayar,
         jumlah: bayar,
         bank: pick(BANKS),
@@ -580,7 +689,7 @@ function seedReceivables(
       // the AR sub-ledger reconciles to the control account.
       if (p.status === "Terverifikasi") {
         inv.terbayar = bayar;
-        post(p.tanggal, `${p.nomor} — penerimaan dari ${pkl?.nama ?? "pangkalan"}`,
+        post(p.tanggal, `${p.nomor} — penerimaan dari ${pkl?.nama ?? "outlet"}`,
           { tipe: "payment", id: p.id },
           [
             { akunId: acc("bank"), debit: bayar, kredit: 0 },
@@ -590,13 +699,14 @@ function seedReceivables(
     }
 
     // A couple of returns, so the credit-note path has history.
-    if (rand() > 0.94 && inv.total - inv.terbayar > harga * 5) {
-      const jumlah = Math.round(harga * randInt(2, 5));
+    const hargaRata = d.realisasi > 0 ? subtotal / d.realisasi : 0;
+    if (rand() > 0.94 && inv.total - inv.terbayar > hargaRata * 5) {
+      const jumlah = Math.round(hargaRata * randInt(2, 5));
       const note: CreditNoteEntity = {
         ...scope,
         id: `cn-${String(creditNotes.length + 1).padStart(3, "0")}`,
         nomor: `NK-${d.tanggal.replace(/-/g, "")}-${String(creditNotes.length + 1).padStart(3, "0")}`,
-        pangkalanId: d.pangkalanId,
+        outletId: d.outletId,
         invoiceId: inv.id,
         tanggal: isoDate(addDays(new Date(d.tanggal), 1)),
         jumlah,
@@ -637,20 +747,42 @@ function seedReceivables(
   return { invoices, payments, creditNotes, accounts, journals };
 }
 
-function seedReceipts(pangkalan: PangkalanEntity[]): ReceiptEntity[] {
+function seedReceipts(
+  outlet: OutletEntity[],
+  products: ProductEntity[],
+): ReceiptEntity[] {
   return Array.from({ length: 9 }, (_, i) => {
-    const pkl = pangkalan[randInt(0, pangkalan.length - 1)];
-    const jumlah = randInt(4, 16) * 10;
+    const pkl = outlet[randInt(0, outlet.length - 1)];
     const confident = rand();
+
+    // A scan matches a catalogue product only when it read the text cleanly.
+    // Below that the line keeps what it saw and waits for a human.
+    const dipakai = [products[0], ...(rand() > 0.7 ? [products[2]] : [])];
+    const lines = dipakai.map((prod) => {
+      const jumlah = randInt(2, 12) * 5;
+      return {
+        productId: confident > 0.35 ? prod.id : null,
+        namaTerbaca:
+          confident > 0.6 ? prod.nama : prod.nama.toUpperCase().replace(/ /g, ""),
+        jumlah,
+        hargaSatuan: prod.hargaJual,
+      };
+    });
+    const jumlah = lines.reduce((sum, l) => sum + l.jumlah, 0);
+    const dariLines = lines.reduce((sum, l) => sum + l.jumlah * l.hargaSatuan, 0);
+
     return {
-      ...branchFor(i),
+      lines,
+      jumlahUnit: jumlah,
+      ...branchFor(),
       id: `ocr-${String(i + 1).padStart(3, "0")}`,
       namaBerkas: `kwitansi-${isoDate(addDays(startOfToday(), -randInt(0, 5)))}-${i + 1}.jpg`,
-      pangkalanId: confident > 0.25 ? pkl.id : null,
+      outletId: confident > 0.25 ? pkl.id : null,
       nomorKwitansi: `KW/${randInt(1000, 9999)}/${new Date().getFullYear()}`,
       tanggalKwitansi: isoDate(addDays(startOfToday(), -randInt(0, 5))),
-      jumlahTabung: jumlah,
-      nominal: jumlah * HARGA_PER_TABUNG,
+      // Usually the printed total agrees with the items. Occasionally it does
+      // not — a smudged digit — and that is what the reviewer is there to catch.
+      nominal: rand() > 0.85 ? Math.round(dariLines * 0.9) : dariLines,
       bank: confident > 0.3 ? pick(BANKS) : null,
       keyakinan: 0.55 + confident * 0.44,
       status: i < 5 ? "Menunggu Review" : rand() > 0.75 ? "Ditolak" : "Tervalidasi",
@@ -659,10 +791,15 @@ function seedReceipts(pangkalan: PangkalanEntity[]): ReceiptEntity[] {
   });
 }
 
-function seedOrders(pangkalan: PangkalanEntity[]): OrderEntity[] {
-  const aktif = pangkalan.filter((p) => p.status === "Aktif");
+function seedOrders(
+  outlet: OutletEntity[],
+  products: ProductEntity[],
+): OrderEntity[] {
+  const aktif = outlet.filter((p) => p.status === "Aktif");
+  const stapleId = products[0].id;
   return Array.from({ length: 22 }, (_, i) => {
     const pkl = aktif[randInt(0, aktif.length - 1)];
+    const diminta = randInt(4, 20) * 10;
     const masuk = addDays(startOfToday(), -randInt(0, 9));
     const status: OrderEntity["status"] =
       i < 6
@@ -675,17 +812,18 @@ function seedOrders(pangkalan: PangkalanEntity[]): OrderEntity[] {
               ? "Ditolak"
               : "Selesai";
     return {
-      ...branchFor(i),
+      ...branchFor(),
       id: `ord-${String(i + 1).padStart(3, "0")}`,
       kode: `PO-${isoDate(masuk).replace(/-/g, "")}-${String(i + 1).padStart(3, "0")}`,
-      pangkalanId: pkl.id,
-      jumlahTabung: randInt(4, 20) * 10,
+      outletId: pkl.id,
+      lines: [{ productId: stapleId, jumlah: diminta }],
+      jumlahUnit: diminta,
       tanggalMasuk: atTime(masuk, `${randInt(7, 17)}:${pick(["05", "20", "41", "55"])}`),
       tanggalDiminta: isoDate(addDays(masuk, randInt(1, 4))),
       status,
       catatan:
         status === "Ditolak"
-          ? "Melebihi kuota bulanan pangkalan."
+          ? "Melebihi kuota bulanan outlet."
           : rand() > 0.75
             ? "Mohon kirim pagi hari."
             : undefined,
@@ -695,7 +833,7 @@ function seedOrders(pangkalan: PangkalanEntity[]): OrderEntity[] {
   }).sort((a, b) => b.tanggalMasuk.localeCompare(a.tanggalMasuk));
 }
 
-function seedUsers(): UserEntity[] {
+function seedUsers(drivers: DriverEntity[]): UserEntity[] {
   const roles: UserEntity["role"][] = [
     "admin",
     "manager",
@@ -706,7 +844,7 @@ function seedUsers(): UserEntity[] {
     "finance",
     "staff",
   ];
-  return roles.map((role, i) => ({
+  const staf: UserEntity[] = roles.map((role, i) => ({
     id: `usr-${String(i + 1).padStart(3, "0")}`,
     nama: i === 0 ? "Alex Lawrence" : ORANG[(i * 5 + 2) % ORANG.length],
     email:
@@ -724,22 +862,50 @@ function seedUsers(): UserEntity[] {
       i === 7 ? undefined : atTime(addDays(startOfToday(), -randInt(0, 9)), "08:32"),
     dibuatPada: isoDate(addDays(startOfToday(), -randInt(60, 800))),
   }));
+
+  // Two of the fleet carry console accounts, so the sopir view has someone to
+  // be. They are pinned to their own branch and linked to their truck: a driver
+  // signing in must resolve to exactly one run, never to a branch-wide list.
+  const berakun = drivers
+    .filter((d) => d.branchId === BRANCHES[0].id && d.status !== "Cuti")
+    .slice(0, 2);
+
+  const sopir: UserEntity[] = berakun.map((d, i) => ({
+    id: `usr-sopir-${String(i + 1).padStart(3, "0")}`,
+    nama: d.nama,
+    email: `${d.nama.toLowerCase().split(" ")[0]}.sopir@sidistrib.id`,
+    role: "driver" as const,
+    telepon: d.telepon,
+    driverId: d.id,
+    cabang: BRANCHES[0].nama,
+    branchIds: [d.branchId],
+    scopeType: "branch" as const,
+    status: "Aktif" as const,
+    terakhirMasuk: atTime(startOfToday(), "06:12"),
+    dibuatPada: isoDate(addDays(startOfToday(), -randInt(60, 400))),
+  }));
+
+  return [...staf, ...sopir];
 }
 
 function seedProducts(): ProductEntity[] {
+  // `returnable` marks the products where the customer hands back an empty in
+  // exchange — cylinders do, accessories do not.
   const catalog = [
-    { nama: "LPG 3 kg Subsidi", ukuran: "3 kg", jual: 12_000, beli: 10_200 },
-    { nama: "LPG 5,5 kg Bright Gas", ukuran: "5,5 kg", jual: 88_000, beli: 79_500 },
-    { nama: "LPG 12 kg", ukuran: "12 kg", jual: 192_000, beli: 175_000 },
-    { nama: "LPG 50 kg", ukuran: "50 kg", jual: 810_000, beli: 742_000 },
-    { nama: "Segel Tabung", ukuran: "1 lusin", jual: 24_000, beli: 18_000 },
-    { nama: "Selang Regulator SNI", ukuran: "1 set", jual: 95_000, beli: 71_000 },
+    { nama: "LPG 3 kg Subsidi", ukuran: "3 kg", satuan: "tabung", returnable: true, jual: 12_000, beli: 10_200 },
+    { nama: "LPG 5,5 kg Bright Gas", ukuran: "5,5 kg", satuan: "tabung", returnable: true, jual: 88_000, beli: 79_500 },
+    { nama: "LPG 12 kg", ukuran: "12 kg", satuan: "tabung", returnable: true, jual: 192_000, beli: 175_000 },
+    { nama: "LPG 50 kg", ukuran: "50 kg", satuan: "tabung", returnable: true, jual: 810_000, beli: 742_000 },
+    { nama: "Segel Tabung", ukuran: "1 lusin", satuan: "lusin", returnable: false, jual: 24_000, beli: 18_000 },
+    { nama: "Selang Regulator SNI", ukuran: "1 set", satuan: "set", returnable: false, jual: 95_000, beli: 71_000 },
   ];
   return catalog.map((c, i) => ({
     id: `prd-${String(i + 1).padStart(3, "0")}`,
     kode: `SKU-${String(i + 1).padStart(4, "0")}`,
     nama: c.nama,
     ukuran: c.ukuran,
+    satuan: c.satuan,
+    returnable: c.returnable,
     hargaJual: c.jual,
     hargaBeli: c.beli,
     stok: randInt(20, 900),
@@ -749,6 +915,16 @@ function seedProducts(): ProductEntity[] {
 }
 
 /** Defaults for every configurable block, also used when migrating old data. */
+/**
+ * The colourless fallback, for a database stored before the lexicon existed.
+ * Seeded tenants override it; see `seedSettings`.
+ */
+export const DEFAULT_LEXICON: LexiconEntity = {
+  satuan: "unit",
+  outlet: "outlet",
+  pemasok: "pemasok",
+};
+
 export const DEFAULT_NUMBERING: NumberingEntity = {
   suratJalan: "SJ",
   invoice: "INV",
@@ -758,6 +934,10 @@ export const DEFAULT_NUMBERING: NumberingEntity = {
 };
 
 export const DEFAULT_OPERATIONS: OperationsEntity = {
+  rekamLokasi: true,
+  // Wide enough for a forecourt and ordinary phone GPS error, tight enough that
+  // a drop filed from the next kecamatan still stands out.
+  radiusGeofenceMeter: 150,
   // Six-day week: the agency does not dispatch on Sunday.
   hariKerja: [1, 2, 3, 4, 5, 6],
   durasiSinggahMenit: 90,
@@ -813,17 +993,17 @@ export const DEFAULT_NOTIFICATIONS: NotificationSettings = {
     aktif: true,
     nomorPengirim: "0811-9000-142",
     templatePengingat:
-      "Halo {pangkalan}, pengiriman {jumlah} tabung dijadwalkan {tanggal} pukul {jam}. Mohon siapkan penerimaan.",
+      "Halo {outlet}, pengiriman {jumlah} tabung dijadwalkan {tanggal} pukul {jam}. Mohon siapkan penerimaan.",
   },
   email: { aktif: true, pengirim: "ops@sidistrib.id" },
 };
 
-function seedSpbe(): SpbeEntity[] {
+function seedSupplier(): SupplierEntity[] {
   return SPBE.map((nama, i) => ({
-    id: `spbe-${String(i + 1).padStart(3, "0")}`,
+    id: `supplier-${String(i + 1).padStart(3, "0")}`,
     kode: `SPBE-${String(i + 1).padStart(3, "0")}`,
     nama,
-    alamat: `Jl. ${pick(["Industri Raya", "Bypass", "Cikarang Utama", "Raya Tambun"])} No. ${randInt(1, 90)}`,
+    alamat: `Jl. ${pick(["Lingkar Selatan", "Fatmawati", "Soekarno-Hatta", "Raya Kopeng"])} No. ${randInt(1, 90)}`,
     penanggungJawab: ORANG[(i * 7 + 3) % ORANG.length],
     telepon: `021-${randInt(700, 899)}-${randInt(1000, 9999)}`,
     aktif: true,
@@ -832,32 +1012,151 @@ function seedSpbe(): SpbeEntity[] {
 
 function seedBankAccounts(): BankAccountEntity[] {
   const rows: Array<[BankNameEntity, string]> = [
-    ["BCA", "Bekasi Timur"],
-    ["Mandiri", "Bekasi Cyber Park"],
+    ["BCA", "Salatiga"],
+    ["Mandiri", "Ungaran"],
     ["BRI", "Tambun"],
   ];
   return rows.map(([bank, cabang], i) => ({
     id: `bank-${String(i + 1).padStart(3, "0")}`,
     bank,
     nomorRekening: `${randInt(100, 999)}-${randInt(100000, 999999)}-${randInt(10, 99)}`,
-    atasNama: "PT Sinar Distribusi Nusantara",
+    atasNama: "PT Bimbo Salatiga",
     cabang,
     utama: i === 0,
     aktif: true,
   }));
 }
 
-function seedSettings(): SettingsEntity {
+/**
+ * What each tenant sets for itself.
+ *
+ * Partial by design: a field absent here is inherited from the parent, which is
+ * the browser's mirror of iam.tenant_settings where NULL means "ask my parent".
+ *
+ * The shape of this seed is the demonstration. The group sets the working day
+ * and the holding's identity once; Salatiga and Pati override only what is
+ * genuinely theirs — their own legal name and agent number — and follow the
+ * group on everything else. Tirta overrides its LEXICON, which is what makes
+ * switching into it visibly re-label every screen: galon, depot, pabrik instead
+ * of tabung, pangkalan, SPBE.
+ *
+ * If a subsidiary here restated the working day, the demo would still look
+ * right and would prove nothing — inheritance is only observable where a value
+ * is absent.
+ */
+function seedSettingsByTenant(): TenantSettingsEntity[] {
+  return [
+    {
+      // The group. Sets the operating window and the notification rules once,
+      // for everyone beneath it.
+      tenantId: "tnt-001",
+      values: {
+        namaPerusahaan: "Bimbo Holdings",
+        namaLegal: "PT Bimbo Holdings Indonesia",
+        alamat: "Jl. Pemuda No. 118, Semarang Tengah, Kota Semarang 50139",
+        zonaWaktu: "Asia/Jakarta",
+        jamOperasionalMulai: "06:00",
+        jamOperasionalSelesai: "18:00",
+        istilah: { satuan: "tabung", outlet: "pangkalan", pemasok: "SPBE" },
+      },
+    },
+    {
+      // Its own legal identity, and nothing else. Hours and lexicon come from
+      // the group — which is the point.
+      tenantId: "tnt-002",
+      values: {
+        namaPerusahaan: "PT Bimbo Salatiga",
+        namaLegal: "PT Bimbo Salatiga Sejahtera",
+        nomorAgen: "AG-3373-0142",
+        nomorRegistrasi: "NIB-3373-0001-2024",
+        npwp: "01.234.567.8-508.000",
+        pkp: true,
+        tarifPajakDefault: 11,
+        kantorLat: -7.3305,
+        kantorLng: 110.5084,
+        alamat: "Jl. Lingkar Selatan No. 42, Sidorejo, Kota Salatiga 50711",
+        telepon: "0298-321-4210",
+        email: "ops@bimbo.co.id",
+      },
+    },
+    {
+      tenantId: "tnt-003",
+      values: {
+        namaPerusahaan: "PT Bimbo Pati",
+        namaLegal: "PT Bimbo Pati Makmur",
+        nomorAgen: "AG-3318-0207",
+        nomorRegistrasi: "NIB-3318-0004-2024",
+        npwp: "02.345.678.9-507.000",
+        pkp: true,
+        tarifPajakDefault: 11,
+        kantorLat: -6.7559,
+        kantorLng: 111.0388,
+        alamat: "Jl. Raya Pati-Juwana Km. 4, Margorejo, Kab. Pati 59163",
+        telepon: "0295-381-7720",
+        email: "pati@bimbo.co.id",
+      },
+    },
+    {
+      // A different trade under the same holding. The lexicon override is the
+      // whole reason this tenant is seeded.
+      tenantId: "tnt-004",
+      values: {
+        namaPerusahaan: "PT Bimbo Tirta",
+        namaLegal: "PT Bimbo Tirta Nusantara",
+        nomorAgen: "AG-3322-0311",
+        nomorRegistrasi: "NIB-3322-0009-2025",
+        npwp: "03.456.789.0-506.000",
+        // Deliberately not PKP: a tenant below the threshold is the case the
+        // ck_tenant_profiles_pkp_tax constraint exists for, and the seed should
+        // contain one so the rule is exercised rather than assumed.
+        pkp: false,
+        tarifPajakDefault: 0,
+        alamat: "Jl. Diponegoro No. 118, Ungaran Barat, Kab. Semarang 50517",
+        telepon: "024-692-1880",
+        email: "tirta@bimbo.co.id",
+        istilah: { satuan: "galon", outlet: "depot", pemasok: "pabrik" },
+      },
+    },
+  ];
+}
+
+/**
+ * The console's own defaults — the last resort beneath every tenant.
+ *
+ * Exported because getDb() resolves against it on every read and must start
+ * from a PRISTINE base each time. Resolving against the previously resolved
+ * object instead lets one tenant's values become the next tenant's defaults for
+ * any field neither of them sets, which is a cross-tenant leak that looks like
+ * inheritance working.
+ */
+export function seedSettings(): SettingsEntity {
   return {
-    namaPerusahaan: "PT Sinar Distribusi Nusantara",
-    nomorAgen: "AG-3275-0142",
-    alamat: "Jl. Raya Industri No. 42, Bekasi Selatan, Kota Bekasi 17147",
-    telepon: "021-8899-4210",
-    email: "ops@sidistrib.id",
+    // The LAST-RESORT default, not any tenant's identity.
+    //
+    // Every tenant supplies its own legal identity through settingsByTenant, so
+    // these are only reached when nothing up the chain has set them. Putting a
+    // real agent number here made the holding company display its subsidiary's
+    // — inherited from a fallback rather than from a parent, which is not a
+    // thing the hierarchy should be able to express.
+    namaPerusahaan: "—",
+    nomorAgen: "—",
+    alamat: "—",
+    telepon: "—",
+    email: "—",
+    namaLegal: "—",
+    nomorRegistrasi: "—",
+    npwp: "—",
+    // Not PKP by default, and therefore no tax rate. The safe direction: a
+    // tenant that has not told us it is registered must not be issuing invoices
+    // with PPN on them.
+    pkp: false,
+    tarifPajakDefault: 0,
     zonaWaktu: "Asia/Jakarta",
     jamOperasionalMulai: "06:00",
     jamOperasionalSelesai: "18:00",
-    hargaPerTabung: HARGA_PER_TABUNG,
+    // The pilot vertical's vocabulary, seeded as data. Changing these three
+    // words in Pengaturan re-labels the whole console for another trade.
+    istilah: { satuan: "tabung", outlet: "pangkalan", pemasok: "SPBE" },
     targetHarian: 1400,
     notifikasi: structuredClone(DEFAULT_NOTIFICATIONS),
     penomoran: { ...DEFAULT_NUMBERING },
@@ -969,23 +1268,23 @@ function seedNotifications(
 /* ── entry point ───────────────────────────────────────────────────────── */
 
 export function createSeedDatabase(): Database {
-  const pangkalan = seedPangkalan();
+  const outlets = seedOutlet();
   const drivers = seedDrivers();
   const scheduleAgreements = seedScheduleAgreements();
+  const products = seedProducts();
   const { plans, planRows, deliveries } = seedOperations(
-    pangkalan,
+    outlets,
     drivers,
     scheduleAgreements,
+    products,
   );
-  const products = seedProducts();
   const settings = seedSettings();
   const { invoices, payments, creditNotes, accounts, journals } = seedReceivables(
     deliveries,
-    pangkalan,
+    outlets,
     products,
-    settings,
   );
-  const receipts = seedReceipts(pangkalan);
+  const receipts = seedReceipts(outlets, products);
   const notifications = seedNotifications(
     scheduleAgreements,
     payments,
@@ -997,27 +1296,30 @@ export function createSeedDatabase(): Database {
   return {
     version: DB_VERSION,
     seededAt: new Date().toISOString(),
-    tenant: TENANT,
+    tenants: TENANTS,
     branches: BRANCHES,
-    pangkalan,
+    outlets,
     drivers,
     scheduleAgreements,
     plans,
     planRows,
     deliveries,
+    // Filed by drivers in the browser, so the seeded day starts with none.
+    deliveryEvents: [],
     payments,
     receipts,
     notifications,
     audit: [],
-    users: seedUsers(),
+    users: seedUsers(drivers),
     products,
-    orders: seedOrders(pangkalan),
-    spbe: seedSpbe(),
+    orders: seedOrders(outlets, products),
+    suppliers: seedSupplier(),
     bankAccounts: seedBankAccounts(),
     accounts,
     journals,
     invoices,
     creditNotes,
     settings,
+    settingsByTenant: seedSettingsByTenant(),
   };
 }

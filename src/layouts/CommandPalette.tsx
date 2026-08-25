@@ -7,6 +7,7 @@ import { CornerDownLeft, Search, Store, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDb } from "@/mocks/db";
 import { ALL_NAV_ITEMS } from "./nav";
+import { outletLabel, outletLabelTitle } from "@/lib/lexicon";
 
 interface Entry {
   id: string;
@@ -39,7 +40,7 @@ export function CommandPalette({
     queryFn: async () => {
       const db = getDb();
       return {
-        pangkalan: db.pangkalan.map((p) => ({
+        outlet: db.outlets.map((p) => ({
           id: p.id,
           nama: p.nama,
           kecamatan: p.kecamatan,
@@ -66,12 +67,12 @@ export function CommandPalette({
       icon: i.icon,
     }));
 
-    const pangkalan: Entry[] = (records.data?.pangkalan ?? []).map((p) => ({
+    const outlet: Entry[] = (records.data?.outlet ?? []).map((p) => ({
       id: `pkl-${p.id}`,
       label: p.nama,
       hint: `${p.kode} · Kec. ${p.kecamatan}`,
-      group: "Pangkalan",
-      href: `/pangkalan/${p.id}`,
+      group: outletLabelTitle(),
+      href: `/outlet/${p.id}`,
       icon: Store,
     }));
 
@@ -84,7 +85,7 @@ export function CommandPalette({
       icon: Truck,
     }));
 
-    return [...nav, ...pangkalan, ...drivers];
+    return [...nav, ...outlet, ...drivers];
   }, [records.data]);
 
   const results = useMemo(() => {
@@ -132,7 +133,7 @@ export function CommandPalette({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Cari halaman, pangkalan, atau armada"
+        aria-label={`Cari halaman, ${outletLabel()}, atau armada`}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === "Escape") onClose();
@@ -160,7 +161,7 @@ export function CommandPalette({
               setQuery(e.target.value);
               setCursor(0);
             }}
-            placeholder="Cari halaman, pangkalan, atau nomor plat"
+            placeholder={`Cari halaman, ${outletLabel()}, atau nomor plat`}
             className="h-12 w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-muted"
           />
           <kbd className="label rounded-sm border border-line px-1.5 py-0.5 text-[0.625rem] text-ink-muted">
@@ -171,7 +172,7 @@ export function CommandPalette({
         <div ref={listRef} className="max-h-80 overflow-y-auto py-1.5">
           {results.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-ink-muted">
-              Tidak ada yang cocok dengan “{query}”. Coba nama pangkalan, nomor
+              Tidak ada yang cocok dengan “{query}”. Coba nama {outletLabel()}, nomor
               plat, atau nama halaman.
             </p>
           ) : (

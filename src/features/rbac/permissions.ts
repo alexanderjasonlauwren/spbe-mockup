@@ -5,7 +5,7 @@ export const PERMISSIONS = {
   USERS_EDIT: "users:edit",
   USERS_DELETE: "users:delete",
 
-  // Pangkalan (Distribution Partners)
+  // Outlet (Distribution Partners)
   PRODUCTS_VIEW: "products:view",
   PRODUCTS_CREATE: "products:create",
   PRODUCTS_EDIT: "products:edit",
@@ -27,6 +27,10 @@ export const PERMISSIONS = {
   PAYMENTS_VIEW: "payments:view",
   PAYMENTS_CREATE: "payments:create",
   PAYMENTS_VERIFY: "payments:verify",
+
+  // Delivery execution — what happens at the drop, recorded by whoever is there
+  DELIVERIES_VIEW: "deliveries:view",
+  DELIVERIES_EXECUTE: "deliveries:execute",
 
   // Drivers
   DRIVERS_VIEW: "drivers:view",

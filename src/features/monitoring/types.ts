@@ -1,3 +1,5 @@
+import type { GeoVerdict } from "@/lib/geo";
+
 export type DriverStatus =
   | "Dalam Perjalanan"
   | "Bongkar Muat"
@@ -24,7 +26,7 @@ export interface DriverCard {
   status: DriverStatus;
   /** Cylinders loaded for the selected window. */
   muatan: number;
-  tujuanPangkalan?: string;
+  tujuanOutlet?: string;
   eta?: string;
   lokasi?: string;
   durasi?: string;
@@ -33,12 +35,18 @@ export interface DriverCard {
   total: number;
 }
 
+/** How well the sopir's filing corroborated being at the outlet. */
+export interface FilingLocation {
+  verdict: GeoVerdict;
+  jarakMeter?: number;
+}
+
 /** One surat jalan on the monitoring board. */
 export interface MonitoringRow {
   id: string;
   kode: string;
-  pangkalanId: string;
-  pangkalan: string;
+  outletId: string;
+  outlet: string;
   alamat: string;
   driverId: string;
   driver: string;
@@ -48,6 +56,8 @@ export interface MonitoringRow {
   pencapaianPersen: number;
   status: "Selesai" | "Proses" | "Antrian" | "Tertunda";
   coord: GeoPoint;
+  /** From the most recent filing, when the driver's device supplied one. */
+  lokasi?: FilingLocation;
   catatan?: string;
 }
 
@@ -60,7 +70,7 @@ export interface MonitoringAssignment {
   id: string;
   driverId: string;
   /** Next stop — the one the truck is heading for. */
-  pangkalanId: string;
+  outletId: string;
   driverCoord: GeoPoint;
   /** Remaining stops in delivery order, starting with the next one. */
   stops: GeoPoint[];

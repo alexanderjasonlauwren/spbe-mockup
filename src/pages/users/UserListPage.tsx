@@ -11,6 +11,7 @@ import {
   ROLE_LABEL,
   ROLE_SUMMARY,
 } from "@/features/users/api/userApi";
+import { getDrivers } from "@/features/drivers/api/driverApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelHeader, Skeleton } from "@/components/common/Panel";
@@ -32,7 +33,7 @@ import { formatDateTimeId, relativeTime } from "@/lib/format";
 import type { UserEntity } from "@/mocks/types";
 
 type Role = UserEntity["role"];
-const ROLES: Role[] = ["admin", "manager", "finance", "staff", "viewer"];
+const ROLES: Role[] = ["admin", "manager", "finance", "staff", "viewer", "driver"];
 
 interface FormState {
   id?: string;
@@ -41,6 +42,8 @@ interface FormState {
   role: Role;
   telepon: string;
   cabang: string;
+  /** Which truck a `driver` account drives. */
+  driverId?: string;
 }
 
 const EMPTY: FormState = {
@@ -48,7 +51,7 @@ const EMPTY: FormState = {
   email: "",
   role: "staff",
   telepon: "",
-  cabang: "Bekasi Pusat",
+  cabang: "Pool Salatiga",
 };
 
 export function UserListPage() {
@@ -65,6 +68,12 @@ export function UserListPage() {
   const audit = useQuery({
     queryKey: [...scopeKey(), "audit-trail"],
     queryFn: () => getAuditTrail({ limit: 40 }),
+  });
+  // Only needed while assigning a sopir, so it is not fetched until then.
+  const fleet = useQuery({
+    queryKey: [...scopeKey(), "drivers", "", "Semua"],
+    queryFn: () => getDrivers(),
+    enabled: editing?.role === "driver",
   });
 
   const saveMutation = useDeskMutation({
@@ -107,6 +116,8 @@ export function UserListPage() {
     if (!editing.nama.trim()) next.nama = "Nama wajib diisi.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editing.email))
       next.email = "Masukkan alamat email yang valid.";
+    if (editing.role === "driver" && !editing.driverId)
+      next.driverId = "Pilih armada yang dikemudikan akun ini.";
     setErrors(next);
     if (Object.keys(next).length > 0) return;
     saveMutation.mutate(editing);
@@ -189,6 +200,7 @@ export function UserListPage() {
                 role: row.role,
                 telepon: row.telepon,
                 cabang: row.cabang,
+                driverId: row.driverId,
               })
             }
           >
@@ -371,6 +383,33 @@ export function UserListPage() {
                     ))}
                   </SelectInput>
                 </Field>
+
+                {editing.role === "driver" && (
+                  <Field
+                    label="Armada yang dikemudikan"
+                    htmlFor="u-armada"
+                    error={errors.driverId}
+                    hint="Menentukan rute siapa yang dibuka akun ini di halaman Rute Saya."
+                    required
+                    className="sm:col-span-2"
+                  >
+                    <SelectInput
+                      id="u-armada"
+                      value={editing.driverId ?? ""}
+                      invalid={!!errors.driverId}
+                      onChange={(e) =>
+                        setEditing({ ...editing, driverId: e.target.value || undefined })
+                      }
+                    >
+                      <option value="">Pilih armada</option>
+                      {(fleet.data ?? []).map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.nama} — {d.plat}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  </Field>
+                )}
 
                 <Field label="Telepon" htmlFor="u-telp">
                   <TextInput

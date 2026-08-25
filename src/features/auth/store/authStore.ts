@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 import { latency, mutate } from "@/mocks/db";
 import { PERMISSIONS } from "@/features/rbac/permissions";
 import type { User, UserRole } from "@/types/auth";
+import { clearSessionTokens } from "@/lib/tokens";
 
 /**
  * What each role may do. The console reads these to hide actions a user cannot
@@ -51,6 +52,8 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.DISTRIBUTION_EDIT,
     PERMISSIONS.DRIVERS_VIEW,
     PERMISSIONS.DRIVERS_ASSIGN,
+    PERMISSIONS.DELIVERIES_VIEW,
+    PERMISSIONS.DELIVERIES_EXECUTE,
     PERMISSIONS.ORDERS_VIEW,
     PERMISSIONS.ORDERS_CREATE,
     PERMISSIONS.ORDERS_EDIT,
@@ -67,7 +70,15 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.DRIVERS_VIEW,
     PERMISSIONS.REPORTS_VIEW,
   ],
-  driver: [PERMISSIONS.DISTRIBUTION_VIEW, PERMISSIONS.ORDERS_VIEW],
+  /**
+   * A sopir sees one thing: their own run, and what they must record on it.
+   *
+   * Deliberately the narrowest set in the table. Read permissions that look
+   * harmless are not — DELIVERIES_VIEW opens the whole fleet board, and
+   * DISTRIBUTION_VIEW opens the planner with every outlet's credit position on
+   * it. Neither is anything a driver at a gate can act on.
+   */
+  driver: [PERMISSIONS.DELIVERIES_EXECUTE],
 };
 
 /** Stand-in for the password a real deployment would check against a hash. */
@@ -128,6 +139,7 @@ export const useAuthStore = create<AuthState>()(
           branchIds: account.branchIds ?? [],
           scopeType: account.scopeType ?? "tenant",
           phone: account.telepon,
+          driverId: account.driverId,
         };
 
         const token = `mock-jwt-${account.id}-${Date.now()}`;
@@ -147,7 +159,14 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        localStorage.removeItem("auth_token");
+        // Both tokens. Clearing only the access token strands the refresh
+        // token, and the next login would leave a usable session behind that
+        // nobody can see or revoke from the UI.
+        //
+        // This does not yet tell the server. POST /auth/logout revokes the
+        // refresh token so it cannot be replayed after the user walks away;
+        // wire it in when this store stops using the mock database.
+        clearSessionTokens();
         set({ user: null, token: null, isAuthenticated: false });
       },
 

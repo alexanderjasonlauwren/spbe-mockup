@@ -1,5 +1,5 @@
 import { scopeKey } from "@/mocks/scope";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -12,10 +12,15 @@ import {
 } from "lucide-react";
 import {
   exportData,
-  getSettings,
+  getSettingsDetail,
+  clearSettingOverride,
   resetData,
   updateSettings,
 } from "@/features/settings/api/settingsApi";
+import {
+  INHERITABLE_FIELDS,
+  type InheritableFieldKey,
+} from "@/features/settings/api/fields";
 import { advanceOperations } from "@/mocks/rules";
 import { useAuthStore } from "@/features/auth/store/authStore";
 import { ROLE_LABEL, ROLE_SUMMARY } from "@/features/users/api/userApi";
@@ -23,41 +28,146 @@ import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/hooks/useToast";
 import { PageHeader } from "@/components/common/PageHeader";
+import { InheritableField } from "@/features/settings/components/InheritableField";
 import { Panel, PanelBody, PanelHeader, Skeleton } from "@/components/common/Panel";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import {
   Field,
+  SegmentedControl,
   SelectInput,
   TextInput,
   TextareaInput,
+  Toggle,
 } from "@/components/common/Field";
+import { SupplierSection } from "@/features/settings/components/SupplierSection";
+import { BankSection } from "@/features/settings/components/BankSection";
+import { NumberingSection } from "@/features/settings/components/NumberingSection";
+import { OperationsSection } from "@/features/settings/components/OperationsSection";
 import { Button } from "@/components/ui/button";
 import { cn, getInitials } from "@/lib/utils";
-import { formatRupiah } from "@/lib/format";
 import type { SettingsEntity } from "@/mocks/types";
 
+/**
+ * Which group of settings is on screen.
+ *
+ * These were two pages — Pengaturan and Konfigurasi Sistem — and the split was
+ * never defensible: both edited operations (one owned opening hours, the other
+ * the geofence radius and lead time), and both now map to the single
+ * iam.tenant_settings row the backend resolves with per-column inheritance.
+ * "Which page do I change this on?" had no clean answer, and the old Pengaturan
+ * page carried a "Konfigurasi lain" panel linking to the other one, which is
+ * that awkwardness written down.
+ */
+type SettingsTab = "agen" | "operasi" | "istilah" | "master" | "sistem";
+
 export function SettingsPage() {
+  const [tab, setTab] = useState<SettingsTab>("agen");
   const { theme, setTheme } = useTheme();
   const user = useAuthStore((state) => state.user);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const settings = useQuery({ queryKey: [...scopeKey(), "settings"], queryFn: getSettings });
+  const settings = useQuery({
+    queryKey: [...scopeKey(), "settings", "detail"],
+    queryFn: getSettingsDetail,
+  });
   const [form, setForm] = useState<SettingsEntity | null>(null);
   const [resetting, setResetting] = useState(false);
 
+  /**
+   * Fields this tenant has taken ownership of during THIS edit.
+   *
+   * Seeded from what it already owns, and added to when someone clicks "Ubah di
+   * sini". It is what the save sends — and that is the whole point: sending the
+   * full form would write an override for every inherited field the form merely
+   * displayed, so changing a phone number would quietly pin the working day, the
+   * timezone and the lexicon, and the parent could never change them for this
+   * tenant again. The screen would look identical throughout.
+   */
+  const [owned, setOwned] = useState<Set<keyof SettingsEntity>>(new Set());
+
   useEffect(() => {
-    if (settings.data) setForm(structuredClone(settings.data));
+    if (!settings.data) return;
+    setForm(structuredClone(settings.data.effective));
+    setOwned(new Set(Object.keys(settings.data.own) as (keyof SettingsEntity)[]));
   }, [settings.data]);
 
+  /**
+   * Whether there is anything to save.
+   *
+   * Two ways there can be. The obvious one is an edited value. The other is a
+   * field the tenant has just CLAIMED without changing — "Ubah di sini" on a
+   * value it wants to keep at today's number but stop following the parent on.
+   * Comparing forms alone missed that: the badge flipped, Save stayed disabled,
+   * and the claim was lost on reload.
+   */
+  const claimed = settings.data
+    ? [...owned].some((f) => !(f in settings.data!.own))
+    : false;
+
   const dirty =
-    !!form && !!settings.data && JSON.stringify(form) !== JSON.stringify(settings.data);
+    !!form &&
+    !!settings.data &&
+    (claimed || JSON.stringify(form) !== JSON.stringify(settings.data.effective));
+
+  /** The ancestor a field came from, when it is inherited. */
+  const sourceOf = (field: InheritableFieldKey) =>
+    owned.has(field) ? null : (settings.data?.inheritedFrom[field] ?? null);
+
+  /** Take ownership of a field without changing its value yet. */
+  const takeOver = (field: keyof SettingsEntity) =>
+    setOwned((prev) => new Set(prev).add(field));
 
   const saveMutation = useDeskMutation({
-    mutationFn: (patch: Partial<SettingsEntity>) => updateSettings(patch),
+    // Only what this tenant owns. Identity fields are never inheritable, so they
+    // always travel; the rest travel only once someone has claimed them.
+    mutationFn: (full: SettingsEntity) => {
+      const patch: Partial<SettingsEntity> = {};
+      for (const key of Object.keys(full) as (keyof SettingsEntity)[]) {
+        const inheritable = (INHERITABLE_FIELDS as readonly string[]).includes(key);
+        if (!inheritable || owned.has(key)) {
+          (patch[key] as unknown) = full[key];
+        }
+      }
+      return updateSettings(patch);
+    },
     errorTitle: "Pengaturan tidak tersimpan",
     success: "Pengaturan disimpan",
   });
+
+  const inheritMutation = useDeskMutation({
+    mutationFn: (field: InheritableFieldKey) => clearSettingOverride(field),
+    errorTitle: "Gagal mengembalikan ke warisan",
+    success: "Kembali mengikuti pengaturan induk",
+  });
+
+
+  /**
+   * Renders an inheritable field with its badge and both escape hatches.
+   *
+   * A closure rather than a component so the input inside keeps its identity
+   * across renders — a component defined inline would remount on every keystroke
+   * and the field would lose focus mid-word.
+   */
+  const inheritable = (
+    field: InheritableFieldKey,
+    label: string,
+    htmlFor: string,
+    input: ReactNode,
+    className?: string,
+  ) => (
+    <InheritableField
+      label={label}
+      htmlFor={htmlFor}
+      className={className}
+      isOwn={owned.has(field)}
+      inheritedFrom={sourceOf(field)}
+      onOverride={() => takeOver(field)}
+      onInherit={() => inheritMutation.mutate(field)}
+    >
+      {input}
+    </InheritableField>
+  );
 
   const exportMutation = useDeskMutation({
     mutationFn: () => exportData(),
@@ -109,13 +219,26 @@ export function SettingsPage() {
     <div className="space-y-5">
       <PageHeader
         title="Pengaturan"
-        description="Akun Anda, profil agen, harga acuan, dan jam operasional. Data acuan dan aturan notifikasi diatur di halamannya sendiri."
+        description="Identitas agen, cara kerja harian, istilah yang dipakai, dan data acuan konsol."
+        meta={
+          <SegmentedControl
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: "agen" as const, label: "Profil agen" },
+              { value: "operasi" as const, label: "Operasional" },
+              { value: "istilah" as const, label: "Istilah" },
+              { value: "master" as const, label: "Data acuan" },
+              { value: "sistem" as const, label: "Sistem" },
+            ]}
+          />
+        }
         actions={
           dirty && (
             <>
               <Button
                 variant="outline"
-                onClick={() => settings.data && setForm(structuredClone(settings.data))}
+                onClick={() => settings.data && setForm(structuredClone(settings.data.effective))}
               >
                 Urungkan
               </Button>
@@ -176,6 +299,7 @@ export function SettingsPage() {
       </Panel>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        {tab === "agen" && (
         <Panel>
           <PanelHeader title="Profil agen" hint="Muncul pada surat jalan dan laporan cetak" />
           <PanelBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -221,46 +345,173 @@ export function SettingsPage() {
             </Field>
           </PanelBody>
         </Panel>
+        )}
 
+        {tab === "agen" && (
+        <Panel>
+          <PanelHeader
+            title="Identitas hukum"
+            hint="Tidak diwarisi — setiap badan hukum punya miliknya sendiri"
+          />
+          <PanelBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field
+              label="Nama legal"
+              htmlFor="legal"
+              hint="Sesuai akta. Berbeda dari nama dagang di atas."
+              className="sm:col-span-2"
+            >
+              <TextInput
+                id="legal"
+                value={form.namaLegal}
+                onChange={(e) => set("namaLegal", e.target.value)}
+              />
+            </Field>
+            <Field label="Nomor registrasi" htmlFor="nib" hint="NIB / SIUP">
+              <TextInput
+                id="nib"
+                mono
+                value={form.nomorRegistrasi}
+                onChange={(e) => set("nomorRegistrasi", e.target.value)}
+              />
+            </Field>
+            <Field label="NPWP" htmlFor="npwp" hint="Muncul pada faktur pajak">
+              <TextInput
+                id="npwp"
+                mono
+                value={form.npwp}
+                onChange={(e) => set("npwp", e.target.value)}
+              />
+            </Field>
+            {/* Timezone sits with the legal identity, not with operations: it is
+                iam.tenant_profiles.timezone, and profiles never inherit. A legal
+                entity's timezone belongs with its registered address. */}
+            <Field label="Zona waktu" htmlFor="tz">
+              <SelectInput
+                id="tz"
+                value={form.zonaWaktu}
+                onChange={(e) => set("zonaWaktu", e.target.value)}
+              >
+                {/* Asia/Jakarta is the IANA identifier for WIB, which covers
+                    Central Java. It names a timezone, not a city. */}
+                <option value="Asia/Jakarta">WIB — Asia/Jakarta</option>
+                <option value="Asia/Makassar">WITA — Asia/Makassar</option>
+                <option value="Asia/Jayapura">WIT — Asia/Jayapura</option>
+              </SelectInput>
+            </Field>
+            <div className="sm:col-span-2">
+              <Toggle
+                checked={form.pkp}
+                onChange={(next) => {
+                  set("pkp", next);
+                  // Mirrors ck_tenant_profiles_pkp_tax. A non-PKP entity must
+                  // not carry a rate at all, so clearing it here means the form
+                  // cannot submit a combination the database already refuses.
+                  if (!next) set("tarifPajakDefault", 0);
+                }}
+                label="Terdaftar sebagai PKP"
+                description="Hanya PKP yang boleh memungut PPN pada faktur."
+              />
+            </div>
+            {form.pkp && (
+              <Field label="Tarif PPN default (%)" htmlFor="ppn">
+                <TextInput
+                  id="ppn"
+                  type="number"
+                  mono
+                  min={0}
+                  max={100}
+                  value={form.tarifPajakDefault}
+                  onChange={(e) => set("tarifPajakDefault", Number(e.target.value))}
+                />
+              </Field>
+            )}
+          </PanelBody>
+        </Panel>
+        )}
+
+        {tab === "agen" && (
+        <Panel className="xl:col-span-2">
+          <PanelHeader
+            title="Kantor terdaftar"
+            hint="Alamat resmi badan hukum — bukan titik awal distribusi"
+          />
+          <PanelBody className="space-y-3">
+            <p className="text-xs leading-relaxed text-ink-muted">
+              Armada memuat dari <span className="font-medium text-ink">cabang</span>,
+              dan satu PT bisa punya beberapa. Koordinat di sini dipakai untuk
+              menampilkan tenant di peta dan sebagai titik awal cabang pertama
+              yang dibuat tanpa koordinat sendiri.
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Lintang (latitude)" htmlFor="lat">
+                <TextInput
+                  id="lat"
+                  type="number"
+                  mono
+                  step="0.0001"
+                  value={form.kantorLat ?? ""}
+                  onChange={(e) =>
+                    set("kantorLat", e.target.value === "" ? undefined : Number(e.target.value))
+                  }
+                />
+              </Field>
+              <Field label="Bujur (longitude)" htmlFor="lng">
+                <TextInput
+                  id="lng"
+                  type="number"
+                  mono
+                  step="0.0001"
+                  value={form.kantorLng ?? ""}
+                  onChange={(e) =>
+                    set("kantorLng", e.target.value === "" ? undefined : Number(e.target.value))
+                  }
+                />
+              </Field>
+            </div>
+          </PanelBody>
+        </Panel>
+        )}
+
+        {tab === "operasi" && (
         <Panel>
           <PanelHeader
             title="Operasional"
             hint="Menentukan rentang papan berangkat dan nilai tagihan"
           />
           <PanelBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Jam buka" htmlFor="buka">
+            {inheritable(
+              "jamOperasionalMulai",
+              "Jam buka",
+              "buka",
               <TextInput
                 id="buka"
                 type="time"
                 mono
                 value={form.jamOperasionalMulai}
-                onChange={(e) => set("jamOperasionalMulai", e.target.value)}
-              />
-            </Field>
-            <Field label="Jam tutup" htmlFor="tutup">
+                onChange={(e) => {
+                  takeOver("jamOperasionalMulai");
+                  set("jamOperasionalMulai", e.target.value);
+                }}
+              />,
+            )}
+            {inheritable(
+              "jamOperasionalSelesai",
+              "Jam tutup",
+              "tutup",
               <TextInput
                 id="tutup"
                 type="time"
                 mono
                 value={form.jamOperasionalSelesai}
-                onChange={(e) => set("jamOperasionalSelesai", e.target.value)}
-              />
-            </Field>
-            <Field
-              label="Harga per tabung"
-              htmlFor="harga"
-              hint={`Tagihan otomatis dihitung dengan harga ini — kini ${formatRupiah(form.hargaPerTabung)}.`}
-            >
-              <TextInput
-                id="harga"
-                type="number"
-                min={1}
-                step={100}
-                mono
-                value={form.hargaPerTabung}
-                onChange={(e) => set("hargaPerTabung", Number(e.target.value))}
-              />
-            </Field>
+                onChange={(e) => {
+                  takeOver("jamOperasionalSelesai");
+                  set("jamOperasionalSelesai", e.target.value);
+                }}
+              />,
+            )}
+            {/* No badge: a daily commercial target is the console's own, with
+                no column behind it in iam.tenant_settings, so it cannot inherit
+                against the API. */}
             <Field
               label="Target harian"
               htmlFor="target"
@@ -276,20 +527,87 @@ export function SettingsPage() {
                 onChange={(e) => set("targetHarian", Number(e.target.value))}
               />
             </Field>
-            <Field label="Zona waktu" htmlFor="tz" className="sm:col-span-2">
-              <SelectInput
-                id="tz"
-                value={form.zonaWaktu}
-                onChange={(e) => set("zonaWaktu", e.target.value)}
-              >
-                <option value="Asia/Jakarta">WIB — Asia/Jakarta</option>
-                <option value="Asia/Makassar">WITA — Asia/Makassar</option>
-                <option value="Asia/Jayapura">WIT — Asia/Jayapura</option>
-              </SelectInput>
-            </Field>
+
           </PanelBody>
         </Panel>
+        )}
 
+        {/* The other half of "operational", which used to live on a separate
+            page: geofence radius, stop duration, planning lead time and whether
+            driver location is recorded. Same iam.tenant_settings row. */}
+        {tab === "operasi" && <OperationsSection />}
+
+        {tab === "istilah" && (
+        <Panel className="lg:col-span-2">
+          <PanelHeader
+            title="Istilah"
+            hint="Sebutan yang dipakai di seluruh konsol — ubah untuk bidang usaha lain"
+          />
+          <PanelBody className="space-y-4">
+            <p className="text-xs leading-relaxed text-ink-muted">
+              Konsol ini menangani distribusi apa pun. Yang membedakan satu bidang
+              usaha dari yang lain hanyalah sebutannya, jadi tiga kata di bawah ini
+              adalah data, bukan bagian dari aplikasi. Mengubahnya mengganti label
+              di seluruh halaman, kolom tabel, surat jalan, dan berkas ekspor —
+              tanpa menyentuh satu pun angka atau riwayat.
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Field
+                label="Satuan"
+                htmlFor="istilah-satuan"
+                hint="Satu unit yang Anda antar — tabung, galon, dus, sak. Dipakai pada angka gabungan lintas produk."
+              >
+                <TextInput
+                  id="istilah-satuan"
+                  value={form.istilah.satuan}
+                  placeholder="tabung"
+                  onChange={(e) =>
+                    set("istilah", { ...form.istilah, satuan: e.target.value })
+                  }
+                />
+              </Field>
+              <Field
+                label="Titik antar"
+                htmlFor="istilah-outlet"
+                hint="Tempat tujuan pengiriman — pangkalan, depot, toko, gerai."
+              >
+                <TextInput
+                  id="istilah-outlet"
+                  value={form.istilah.outlet}
+                  placeholder="outlet"
+                  onChange={(e) =>
+                    set("istilah", { ...form.istilah, outlet: e.target.value })
+                  }
+                />
+              </Field>
+              <Field
+                label="Pemasok"
+                htmlFor="istilah-pemasok"
+                hint="Sumber pasokan yang kuotanya Anda tarik — SPBE, pabrik, distributor pusat."
+              >
+                <TextInput
+                  id="istilah-pemasok"
+                  value={form.istilah.pemasok}
+                  placeholder="SPBE"
+                  onChange={(e) =>
+                    set("istilah", { ...form.istilah, pemasok: e.target.value })
+                  }
+                />
+              </Field>
+            </div>
+          </PanelBody>
+        </Panel>
+        )}
+
+        {tab === "master" && (
+          <div className="space-y-4 lg:col-span-2">
+            <SupplierSection />
+            <BankSection />
+            <NumberingSection />
+          </div>
+        )}
+
+        {tab === "sistem" && (
         <Panel>
           <PanelHeader title="Tampilan" />
           <PanelBody>
@@ -328,36 +646,11 @@ export function SettingsPage() {
             </p>
           </PanelBody>
         </Panel>
+        )}
 
       </div>
 
-      <Panel>
-        <PanelHeader
-          title="Konfigurasi lain"
-          hint="Data acuan dan aturan yang diatur di halaman tersendiri"
-        />
-        <PanelBody className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Link
-            to="/system"
-            className="rounded-md border border-line bg-panel-sunk p-4 transition-colors hover:border-line-strong"
-          >
-            <p className="text-sm font-semibold text-ink">Konfigurasi Sistem</p>
-            <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-              Mitra SPBE, rekening penerimaan, penomoran dokumen, dan hari kerja.
-            </p>
-          </Link>
-          <Link
-            to="/notifications"
-            className="rounded-md border border-line bg-panel-sunk p-4 transition-colors hover:border-line-strong"
-          >
-            <p className="text-sm font-semibold text-ink">Aturan notifikasi</p>
-            <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-              Kapan peringatan dibuat, siapa penerimanya, dan kanal pengirimannya.
-            </p>
-          </Link>
-        </PanelBody>
-      </Panel>
-
+      {tab === "sistem" && (
       <Panel>
         <PanelHeader
           title="Data & simulasi"
@@ -405,6 +698,7 @@ export function SettingsPage() {
           />
         </PanelBody>
       </Panel>
+      )}
 
       <ConfirmDialog
         isOpen={resetting}

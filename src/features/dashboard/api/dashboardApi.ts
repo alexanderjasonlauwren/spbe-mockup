@@ -14,7 +14,7 @@ import type {
   DispatchRail,
   KpiSummary,
   MonthlyChartPoint,
-  PangkalanShare,
+  OutletShare,
   RecentActivity,
 } from "../types";
 
@@ -39,8 +39,8 @@ export async function getKpiSummary(): Promise<KpiSummary> {
     dailyTarget,
     monthlyQuotaRemaining: quota.sisa,
     monthlyQuotaTotal: quota.total,
-    activePangkalan: db.pangkalan.filter((p) => p.status === "Aktif").length,
-    totalPangkalan: db.pangkalan.length,
+    activeOutlet: db.outlets.filter((p) => p.status === "Aktif").length,
+    totalOutlet: db.outlets.length,
     pendingPayments: pending.length,
     pendingPaymentValue: pending.reduce((s, p) => s + p.jumlah, 0),
     piutangOutstanding: outstanding.reduce(
@@ -63,7 +63,7 @@ export async function getMonthlyChart(): Promise<MonthlyChartPoint[]> {
   return monthlyProgress();
 }
 
-export async function getPangkalanShares(): Promise<PangkalanShare[]> {
+export async function getOutletShares(): Promise<OutletShare[]> {
   await latency("read");
   return shareByKecamatan();
 }
@@ -88,9 +88,9 @@ export async function getRecentActivities(): Promise<RecentActivity[]> {
         day: "numeric",
         month: "short",
       })}, ${d.jamRencana}`,
-      pangkalan: db.pangkalan.find((p) => p.id === d.pangkalanId)?.nama ?? "—",
+      outlet: db.outlets.find((p) => p.id === d.outletId)?.nama ?? "—",
       driver: db.drivers.find((x) => x.id === d.driverId)?.nama ?? "—",
-      jumlahTabung: d.realisasi || d.target,
+      jumlahUnit: d.realisasi || d.target,
       status: stageLabel[d.status] ?? "Pending",
     }));
 }
@@ -132,10 +132,10 @@ export async function getDispatchRail(): Promise<DispatchRail> {
           return {
             id: d.id,
             kode: d.kode,
-            pangkalan:
-              db.pangkalan.find((p) => p.id === d.pangkalanId)?.nama ?? "—",
+            outlet:
+              db.outlets.find((p) => p.id === d.outletId)?.nama ?? "—",
             kecamatan:
-              db.pangkalan.find((p) => p.id === d.pangkalanId)?.kecamatan ?? "—",
+              db.outlets.find((p) => p.id === d.outletId)?.kecamatan ?? "—",
             startMinute: start,
             // Travel plus unloading, from Konfigurasi Sistem.
             endMinute: start + db.settings.operasi.durasiSinggahMenit,

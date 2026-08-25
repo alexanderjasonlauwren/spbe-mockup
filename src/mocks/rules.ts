@@ -13,19 +13,31 @@ import {
   issueCreditNote as issueCreditNoteAr,
   applyAllocation,
   issueInvoiceForDelivery,
-  pangkalanExposure,
+  outletExposure,
   recordPayment as recordPaymentAr,
   refreshOverdue,
   verifyPaymentRecord,
 } from "./ar";
 import { isoDate, startOfToday } from "./seed";
-import { stampScope } from "./scope";
+import { distanceMeters, type GeoStamp } from "@/lib/geo";
+import {
+  applyScalarRealisasi,
+  productOf,
+  sumJumlah,
+  sumKembali,
+  sumRealisasi,
+  sumTarget,
+} from "./lines";
+import { getActiveScope, stampScope } from "./scope";
 import type {
   Database,
   DeliveryEntity,
+  DeliveryEventEntity,
+  DeliveryEventType,
   DriverEntity,
   ID,
-  PangkalanEntity,
+  DeliveryLine,
+  OutletEntity,
   PaymentEntity,
   PlanEntity,
   PlanRowEntity,
@@ -35,6 +47,7 @@ import type {
   SAEntity,
   UserEntity,
 } from "./types";
+import { outletLabel, outletLabelTitle, unitLabel } from "@/lib/lexicon";
 
 const fmt = (n: number) => n.toLocaleString("id-ID");
 
@@ -85,7 +98,7 @@ function refreshSaStatus(sa: SAEntity) {
 
 export function createScheduleAgreement(input: {
   nomorSA: string;
-  spbe: string;
+  supplier: string;
   periodeMulai: string;
   periodeBerakhir: string;
   totalKuota: number;
@@ -107,7 +120,7 @@ export function createScheduleAgreement(input: {
       ...stampScope({}),
       id: nextId("sa"),
       nomorSA: input.nomorSA,
-      spbe: input.spbe,
+      supplier: input.supplier,
       periodeMulai: input.periodeMulai,
       periodeBerakhir: input.periodeBerakhir,
       totalKuota: input.totalKuota,
@@ -122,7 +135,7 @@ export function createScheduleAgreement(input: {
       action: "sa.upload",
       entity: "ScheduleAgreement",
       entityId: sa.id,
-      summary: `Mengunggah ${sa.nomorSA} (${fmt(sa.totalKuota)} tabung) dari ${sa.spbe}.`,
+      summary: `Mengunggah ${sa.nomorSA} (${fmt(sa.totalKuota)} ${unitLabel()}) dari ${sa.supplier}.`,
     });
     sa.diunggahOleh = entry.actor;
     db.scheduleAgreements.unshift(sa);
@@ -160,7 +173,7 @@ export function deleteScheduleAgreement(saId: ID) {
     const sa = requireSa(db, saId);
     if (sa.terpakai > 0) {
       throw new ApiError(
-        `${sa.nomorSA} sudah terpakai ${fmt(sa.terpakai)} tabung dan tidak dapat dihapus.`,
+        `${sa.nomorSA} sudah terpakai ${fmt(sa.terpakai)} ${unitLabel()} dan tidak dapat dihapus.`,
       );
     }
     db.scheduleAgreements = db.scheduleAgreements.filter((s) => s.id !== saId);
@@ -219,20 +232,26 @@ export function savePlanRows(
       throw new ApiError("Rencana yang sudah dikonfirmasi tidak dapat diubah.");
     }
     for (const row of rows) {
-      if (row.jumlahTabung <= 0) {
-        throw new ApiError("Jumlah tabung setiap pangkalan harus lebih dari nol.");
+      if (row.jumlahUnit <= 0) {
+        throw new ApiError(`Jumlah ${unitLabel()} setiap ${outletLabel()} harus lebih dari nol.`);
       }
     }
     db.planRows = db.planRows.filter((r) => r.planId !== planId);
-    const saved = rows.map((r) => ({ ...r, planId }));
+    // Lines are authoritative; the scalar beside them is recomputed, never
+    // trusted from the caller.
+    const saved = rows.map((r) => ({
+      ...r,
+      planId,
+      jumlahUnit: r.lines.length > 0 ? sumJumlah(r.lines) : r.jumlahUnit,
+    }));
     db.planRows.push(...saved);
     recordAudit(db, {
       action: "plan.save_draft",
       entity: "DistributionPlan",
       entityId: planId,
-      summary: `Menyimpan draf ${plan.kode}: ${saved.length} pangkalan, ${fmt(
-        saved.reduce((s, r) => s + r.jumlahTabung, 0),
-      )} tabung.`,
+      summary: `Menyimpan draf ${plan.kode}: ${saved.length} outlet, ${fmt(
+        saved.reduce((s, r) => s + r.jumlahUnit, 0),
+      )} ${unitLabel()}.`,
     });
     return saved;
   });
@@ -251,48 +270,48 @@ export function confirmPlan(planId: ID): { deliveries: number; total: number } {
 
     const rows = db.planRows.filter((r) => r.planId === planId);
     if (rows.length === 0) {
-      throw new ApiError("Tambahkan minimal satu pangkalan sebelum konfirmasi.");
+      throw new ApiError(`Tambahkan minimal satu ${outletLabel()} sebelum konfirmasi.`);
     }
     const unassigned = rows.filter((r) => !r.driverId);
     if (unassigned.length > 0) {
       throw new ApiError(
-        `${unassigned.length} pangkalan belum punya driver. Tetapkan driver sebelum konfirmasi.`,
+        `${unassigned.length} ${outletLabel()} belum punya driver. Tetapkan driver sebelum konfirmasi.`,
       );
     }
 
     // Credit control belongs here — refusing to load a truck for an outlet that
     // is over its limit is the only moment the block actually saves money.
     const diblokir = rows
-      .map((r) => ({ row: r, exp: pangkalanExposure(db, r.pangkalanId) }))
+      .map((r) => ({ row: r, exp: outletExposure(db, r.outletId) }))
       .filter((x) => x.exp.terblokir);
     if (diblokir.length > 0) {
       const names = diblokir
-        .map((x) => db.pangkalan.find((p) => p.id === x.row.pangkalanId)?.nama)
+        .map((x) => db.outlets.find((p) => p.id === x.row.outletId)?.nama)
         .filter(Boolean);
       throw new ApiError(
-        `${names.join(", ")} diblokir karena kredit. ${diblokir[0].exp.alasan} Selesaikan tagihan atau naikkan plafon di data pangkalan.`,
+        `${names.join(", ")} diblokir karena kredit. ${diblokir[0].exp.alasan} Selesaikan tagihan atau naikkan plafon di data ${outletLabel()}.`,
       );
     }
 
-    const total = rows.reduce((s, r) => s + r.jumlahTabung, 0);
+    const total = rows.reduce((s, r) => s + r.jumlahUnit, 0);
     const sa = requireSa(db, plan.saId);
     const sisa = sa.totalKuota - sa.terpakai;
     if (total > sisa) {
       throw new ApiError(
-        `Kuota ${sa.nomorSA} tidak mencukupi. Tersisa ${fmt(sisa)} tabung, rencana ini butuh ${fmt(total)}.`,
+        `Kuota ${sa.nomorSA} tidak mencukupi. Tersisa ${fmt(sisa)} ${unitLabel()}, rencana ini butuh ${fmt(total)}.`,
       );
     }
 
     // Check truck capacity per driver.
     const perDriver = new Map<ID, number>();
     for (const r of rows) {
-      perDriver.set(r.driverId!, (perDriver.get(r.driverId!) ?? 0) + r.jumlahTabung);
+      perDriver.set(r.driverId!, (perDriver.get(r.driverId!) ?? 0) + r.jumlahUnit);
     }
     for (const [driverId, muatan] of perDriver) {
       const driver = db.drivers.find((d) => d.id === driverId);
       if (driver && muatan > driver.kapasitas) {
         throw new ApiError(
-          `Muatan ${driver.nama} ${fmt(muatan)} tabung melebihi kapasitas ${driver.armada} (${fmt(driver.kapasitas)}).`,
+          `Muatan ${driver.nama} ${fmt(muatan)} ${unitLabel()} melebihi kapasitas ${driver.armada} (${fmt(driver.kapasitas)}).`,
         );
       }
     }
@@ -304,7 +323,7 @@ export function confirmPlan(planId: ID): { deliveries: number; total: number } {
       action: "plan.confirm",
       entity: "DistributionPlan",
       entityId: plan.id,
-      summary: `Mengonfirmasi ${plan.kode}: ${rows.length} surat jalan, ${fmt(total)} tabung dari ${sa.nomorSA}.`,
+      summary: `Mengonfirmasi ${plan.kode}: ${rows.length} surat jalan, ${fmt(total)} ${unitLabel()} dari ${sa.nomorSA}.`,
     }).actor;
 
     plan.status = "Terkonfirmasi";
@@ -323,11 +342,16 @@ export function confirmPlan(planId: ID): { deliveries: number; total: number } {
           kode: docNumber(db, "suratJalan", plan.tanggal, idx + 1, 2),
           planId: plan.id,
           planRowId: row.id,
-          pangkalanId: row.pangkalanId,
+          outletId: row.outletId,
           driverId: row.driverId!,
           tanggal: plan.tanggal,
           jamRencana: row.jamPengiriman,
-          target: row.jumlahTabung,
+          lines: row.lines.map((l) => ({
+            productId: l.productId,
+            target: l.jumlah,
+            realisasi: 0,
+          })),
+          target: row.jumlahUnit,
           realisasi: 0,
           status: "Antrian",
         });
@@ -336,7 +360,7 @@ export function confirmPlan(planId: ID): { deliveries: number; total: number } {
     notify(db, {
       type: "Sistem",
       title: `Rencana ${plan.kode} dikonfirmasi`,
-      message: `${rows.length} surat jalan terbit, ${fmt(total)} tabung dialokasikan dari ${sa.nomorSA}.`,
+      message: `${rows.length} surat jalan terbit, ${fmt(total)} ${unitLabel()} dialokasikan dari ${sa.nomorSA}.`,
       href: "/monitoring",
     });
 
@@ -344,7 +368,7 @@ export function confirmPlan(planId: ID): { deliveries: number; total: number } {
       notify(db, {
         type: "Alert",
         title: "Kuota SA hampir habis",
-        message: `${sa.nomorSA} tersisa ${fmt(sa.totalKuota - sa.terpakai)} tabung setelah konfirmasi ini.`,
+        message: `${sa.nomorSA} tersisa ${fmt(sa.totalKuota - sa.terpakai)} ${unitLabel()} setelah konfirmasi ini.`,
         href: "/sa",
       rule: "quotaLow",
       });
@@ -384,7 +408,7 @@ export function cancelPlan(planId: ID) {
   });
 }
 
-/* ── pangkalan orders ──────────────────────────────────────────────────── */
+/* ── outlet orders ──────────────────────────────────────────────────── */
 
 export function decideOrder(
   orderId: ID,
@@ -407,7 +431,7 @@ export function decideOrder(
       action: `order.${action}`,
       entity: "Order",
       entityId: o.id,
-      summary: `${action === "approve" ? "Menyetujui" : "Menolak"} ${o.kode} (${fmt(o.jumlahTabung)} tabung).`,
+      summary: `${action === "approve" ? "Menyetujui" : "Menolak"} ${o.kode} (${fmt(o.jumlahUnit)} ${unitLabel()}).`,
     });
     o.diprosesOleh = entry.actor;
     return o;
@@ -432,18 +456,24 @@ export function scheduleOrders(planId: ID, orderIds: ID[]) {
 
     orders.forEach((o, i) => {
       const existing = db.planRows.find(
-        (r) => r.planId === planId && r.pangkalanId === o.pangkalanId,
+        (r) => r.planId === planId && r.outletId === o.outletId,
       );
       if (existing) {
-        existing.jumlahTabung += o.jumlahTabung;
+        for (const line of o.lines) {
+          const same = existing.lines.find((l) => l.productId === line.productId);
+          if (same) same.jumlah += line.jumlah;
+          else existing.lines.push({ ...line });
+        }
+        existing.jumlahUnit = sumJumlah(existing.lines);
       } else {
         const count = db.planRows.filter((r) => r.planId === planId).length;
         db.planRows.push({
           id: nextId("row"),
           planId,
-          pangkalanId: o.pangkalanId,
+          outletId: o.outletId,
           driverId: null,
-          jumlahTabung: o.jumlahTabung,
+          lines: [...o.lines],
+          jumlahUnit: o.jumlahUnit,
           jamPengiriman: `${String(Math.min(17, 7 + count + i)).padStart(2, "0")}:00`,
         });
       }
@@ -463,22 +493,83 @@ export function scheduleOrders(planId: ID, orderIds: ID[]) {
 
 /* ── delivery execution ────────────────────────────────────────────────── */
 
+/** What the sopir records at the drop, beyond the status itself. */
+export interface DeliveryReport {
+  /** Empty cylinders collected. */
+  unitKembali?: number;
+  /** Who signed for the load. */
+  diterimaOleh?: string;
+  catatan?: string;
+  /** Where the sopir was when they filed this, if the device could say. */
+  posisi?: GeoStamp;
+  /**
+   * Per-product outcome, when whoever filed it knew the breakdown.
+   *
+   * The sopir always does — they unloaded it. The desk close does not, and
+   * falls back to spreading the scalar total across the loaded lines.
+   */
+  lines?: { productId: ID; realisasi: number; kembali?: number }[];
+}
+
 export function updateDeliveryStatus(
   deliveryId: ID,
   status: DeliveryEntity["status"],
   realisasi?: number,
+  report?: DeliveryReport,
 ) {
   return mutate((db) => {
     const d = db.deliveries.find((x) => x.id === deliveryId);
     if (!d) throw new ApiError("Surat jalan tidak ditemukan.", 404);
 
+    // The surat jalan is the authority on what left the yard, so a drop cannot
+    // report more than was loaded — that is a paperwork error, not a delivery.
+    if (realisasi !== undefined) {
+      if (realisasi < 0) throw new ApiError(`Jumlah ${unitLabel()} tidak boleh negatif.`);
+      if (realisasi > d.target) {
+        throw new ApiError(
+          `${d.kode} hanya memuat ${fmt(d.target)} ${unitLabel()}, tidak bisa mencatat ${fmt(realisasi)} diterima.`,
+        );
+      }
+    }
+    if (report?.unitKembali != null && report.unitKembali < 0) {
+      throw new ApiError(`Jumlah ${unitLabel()} kembali tidak boleh negatif.`);
+    }
+
     d.status = status;
-    if (realisasi !== undefined) d.realisasi = realisasi;
+
+    if (report?.lines?.length) {
+      // Filed per product: the authoritative case.
+      const byProduct = new Map(report.lines.map((l) => [l.productId, l]));
+      d.lines = d.lines.map((l) => {
+        const filed = byProduct.get(l.productId);
+        if (!filed) return l;
+        return {
+          ...l,
+          realisasi: Math.min(l.target, Math.max(0, filed.realisasi)),
+          kembali: filed.kembali,
+        } satisfies DeliveryLine;
+      });
+      d.realisasi = sumRealisasi(d.lines);
+      d.unitKembali = sumKembali(d.lines);
+    } else if (realisasi !== undefined) {
+      d.lines = applyScalarRealisasi(d.lines, realisasi);
+      d.realisasi = realisasi;
+    }
+
+    if (report?.unitKembali != null) d.unitKembali = report.unitKembali;
+    if (report?.diterimaOleh?.trim()) d.diterimaOleh = report.diterimaOleh.trim();
+    if (report?.catatan?.trim()) d.catatan = report.catatan.trim();
 
     if (status === "Proses" && !d.mulaiPada) d.mulaiPada = new Date().toISOString();
     if (status === "Selesai") {
       d.selesaiPada = new Date().toISOString();
-      if (realisasi === undefined && d.realisasi === 0) d.realisasi = d.target;
+      if (realisasi === undefined && !report?.lines?.length && d.realisasi === 0) {
+        d.lines = d.lines.map((l) => ({ ...l, realisasi: l.target }));
+        d.realisasi = sumTarget(d.lines);
+      }
+      // The truck is at the outlet, so it is no longer somewhere on the road.
+      d.driverLat = undefined;
+      d.driverLng = undefined;
       raiseInvoice(db, d);
     }
 
@@ -486,8 +577,14 @@ export function updateDeliveryStatus(
       action: "delivery.status",
       entity: "Delivery",
       entityId: d.id,
-      summary: `${d.kode} → ${status}${realisasi !== undefined ? ` (${fmt(realisasi)} tabung)` : ""}.`,
+      summary: `${d.kode} → ${status}${realisasi !== undefined ? ` (${fmt(realisasi)} ${unitLabel()})` : ""}.`,
     });
+
+    if (report?.posisi) recordDeliveryEvent(db, d, status, report.posisi, report.catatan);
+
+    // The board reads driver status, so a drop moved by hand has to update it
+    // too — otherwise a truck the sopir just despatched still shows Standby.
+    refreshDriverStatus(db, d.driverId);
 
     // A plan is done once every surat jalan under it is settled.
     const siblings = db.deliveries.filter((x) => x.planId === d.planId);
@@ -502,6 +599,90 @@ export function updateDeliveryStatus(
     }
     return d;
   });
+}
+
+const EVENT_TYPE: Partial<Record<DeliveryEntity["status"], DeliveryEventType>> = {
+  Proses: "berangkat",
+  Selesai: "selesai",
+  Tertunda: "tertunda",
+};
+
+/**
+ * Appends what the sopir filed, and where from.
+ *
+ * The distance is computed here, once, against the outlet's coordinates as they
+ * stand at the moment of filing — see the note on DeliveryEventEntity.
+ */
+function recordDeliveryEvent(
+  db: Database,
+  d: DeliveryEntity,
+  status: DeliveryEntity["status"],
+  posisi: GeoStamp,
+  catatan?: string,
+) {
+  const tipe = EVENT_TYPE[status];
+  if (!tipe) return;
+
+  const pkl = db.outlets.find((p) => p.id === d.outletId);
+  const jarakMeter =
+    posisi.status === "ok" && posisi.lat != null && posisi.lng != null && pkl
+      ? distanceMeters({ lat: posisi.lat, lng: posisi.lng }, { lat: pkl.lat, lng: pkl.lng })
+      : undefined;
+
+  const event: DeliveryEventEntity = {
+    // Follows the delivery, not the active scope: the event belongs where the
+    // goods went, exactly as its invoice does.
+    tenantId: d.tenantId,
+    branchId: d.branchId,
+    id: nextId("evt"),
+    deliveryId: d.id,
+    driverId: d.driverId,
+    tipe,
+    at: posisi.at,
+    aktor: currentActor(),
+    posisi,
+    jarakMeter,
+    catatan,
+  };
+  db.deliveryEvents.unshift(event);
+  if (db.deliveryEvents.length > 2000) db.deliveryEvents.length = 2000;
+
+  // A real fix is better than the simulated position the ops clock invents, so
+  // it takes over as the truck's last known whereabouts while the run is live.
+  if (posisi.status === "ok" && status !== "Selesai") {
+    d.driverLat = posisi.lat;
+    d.driverLng = posisi.lng;
+  }
+  return event;
+}
+
+/**
+ * Recomputes one driver's runtime status from today's surat jalan.
+ *
+ * Status is derived, never set directly: two screens and a timer all move
+ * deliveries, and any of them setting the driver by hand would drift.
+ */
+function refreshDriverStatus(db: Database, driverId: ID) {
+  const driver = db.drivers.find((x) => x.id === driverId);
+  if (!driver || driver.status === "Cuti") return;
+
+  const today = isoDate(startOfToday());
+  const mine = db.deliveries.filter(
+    (x) => x.tanggal === today && x.driverId === driverId,
+  );
+  if (mine.length === 0) return;
+
+  if (mine.some((x) => x.status === "Proses")) {
+    // Keep whichever of the two running states it already had; they differ only
+    // in what the truck is doing at the stop, which only the sopir knows.
+    if (driver.status !== "Dalam Perjalanan" && driver.status !== "Bongkar Muat") {
+      driver.status = "Dalam Perjalanan";
+    }
+  } else if (mine.every((x) => x.status === "Selesai" || x.status === "Tertunda")) {
+    driver.status = "Selesai";
+  } else {
+    driver.status = "Standby";
+  }
 }
 
 /** A completed drop raises the invoice finance will later collect. */
@@ -519,7 +700,7 @@ export function decidePayment(
   return mutate((db) => {
     const actor = currentActor();
     const p = verifyPaymentRecord(db, paymentId, action, keterangan, actor);
-    const pkl = db.pangkalan.find((x) => x.id === p.pangkalanId);
+    const pkl = db.outlets.find((x) => x.id === p.outletId);
 
     recordAudit(db, {
       action: `payment.${action}`,
@@ -532,7 +713,7 @@ export function decidePayment(
       notify(db, {
         type: "Alert",
         title: "Penerimaan ditolak",
-        message: `${p.nomor} dari ${pkl?.nama ?? "pangkalan"} ditolak: ${p.keterangan}`,
+        message: `${p.nomor} dari ${pkl?.nama ?? "${outletLabel()}"} ditolak: ${p.keterangan}`,
         href: "/payments",
         rule: "paymentPending",
       });
@@ -543,7 +724,7 @@ export function decidePayment(
 
 /** Records cash received, optionally applying it to invoices in one step. */
 export function createPayment(input: {
-  pangkalanId: ID;
+  outletId: ID;
   jumlah: number;
   tanggal: string;
   bank: PaymentEntity["bank"];
@@ -574,7 +755,7 @@ export function allocatePayment(
 }
 
 export function createCreditNote(input: {
-  pangkalanId: ID;
+  outletId: ID;
   invoiceId: ID | null;
   jumlah: number;
   alasan: string;
@@ -602,7 +783,17 @@ export function syncReceivables() {
 /** Accepting a scanned receipt turns it into a payment awaiting verification. */
 export function validateReceipt(
   receiptId: ID,
-  edits: Partial<Pick<ReceiptEntity, "pangkalanId" | "nomorKwitansi" | "tanggalKwitansi" | "jumlahTabung" | "nominal" | "bank">>,
+  edits: Partial<
+    Pick<
+      ReceiptEntity,
+      | "outletId"
+      | "nomorKwitansi"
+      | "tanggalKwitansi"
+      | "lines"
+      | "nominal"
+      | "bank"
+    >
+  >,
 ): ReceiptEntity {
   return mutate((db) => {
     const r = db.receipts.find((x) => x.id === receiptId);
@@ -611,28 +802,76 @@ export function validateReceipt(
       throw new ApiError(`${r.nomorKwitansi} sudah ditinjau.`);
     }
     Object.assign(r, edits);
-    if (!r.pangkalanId) {
-      throw new ApiError("Pilih pangkalan sebelum memvalidasi kwitansi.");
+    if (!r.outletId) {
+      throw new ApiError(`Pilih ${outletLabel()} sebelum memvalidasi kwitansi.`);
+    }
+    if (r.lines.length === 0) {
+      throw new ApiError("Kwitansi belum punya rincian barang.");
+    }
+
+    // Every line must name a real product. Billing an unmatched line against a
+    // default would put the wrong item at the wrong price on a real invoice.
+    const belumDikenali = r.lines.filter((l) => !l.productId);
+    if (belumDikenali.length > 0) {
+      throw new ApiError(
+        `${belumDikenali.length} baris belum dicocokkan ke produk: ${belumDikenali
+          .map((l) => l.namaTerbaca || "tanpa nama")
+          .join(", ")}.`,
+      );
+    }
+    if (r.lines.some((l) => l.jumlah <= 0 || l.hargaSatuan <= 0)) {
+      throw new ApiError("Jumlah dan harga setiap baris harus lebih dari nol.");
     }
     if (r.nominal <= 0) throw new ApiError("Nominal kwitansi harus lebih dari nol.");
+
+    // The printed total and the items are read independently. If they disagree,
+    // one of them was misread, and neither is safe to bill from until a human
+    // says which.
+    const dariRincian = r.lines.reduce((sum, l) => sum + l.jumlah * l.hargaSatuan, 0);
+    if (Math.abs(dariRincian - r.nominal) > 1) {
+      throw new ApiError(
+        `Rincian berjumlah Rp ${fmt(dariRincian)} tetapi kwitansi tertulis Rp ${fmt(
+          r.nominal,
+        )}. Perbaiki salah satunya sebelum memvalidasi.`,
+      );
+    }
+
+    r.jumlahUnit = r.lines.reduce((sum, l) => sum + l.jumlah, 0);
 
     r.status = "Tervalidasi";
     r.ditinjauPada = new Date().toISOString();
 
     // A validated scan is a billable event, so it raises a proper invoice.
-    const pkl = db.pangkalan.find((p) => p.id === r.pangkalanId);
+    const pkl = db.outlets.find((p) => p.id === r.outletId);
     const seq = db.invoices.length + 1;
     const invoice: InvoiceEntity = {
-      tenantId: pkl?.tenantId ?? db.tenant.id,
+      // Falls back to the ACTING tenant, not to "the" tenant: with a hierarchy there
+    // is no single one, and stamping a row with the root's id while acting as a
+    // subsidiary is a cross-tenant write the backend's WITH CHECK would refuse.
+    tenantId: pkl?.tenantId ?? getActiveScope().actingTenantId,
       branchId: pkl?.branchId ?? db.branches[0]?.id ?? "",
       id: nextId("inv"),
       nomor: docNumber(db, "invoice", r.tanggalKwitansi, seq),
-      pangkalanId: r.pangkalanId,
+      outletId: r.outletId,
       deliveryId: null,
       tanggal: r.tanggalKwitansi,
       jatuhTempo: addDaysIso(r.tanggalKwitansi, pkl?.termin ?? 0),
-      jumlahTabung: r.jumlahTabung,
-      hargaSatuan: r.jumlahTabung > 0 ? Math.round(r.nominal / r.jumlahTabung) : 0,
+      // Billed from the receipt's own items, at the prices the paper states
+      // rather than today's catalogue — the invoice has to match the document
+      // the customer is holding.
+      lines: r.lines.map((l) => {
+        const prod = productOf(db.products, l.productId!);
+        return {
+          productId: l.productId!,
+          nama: prod?.nama ?? l.namaTerbaca,
+          satuan: prod?.satuan ?? "unit",
+          jumlah: l.jumlah,
+          hargaSatuan: l.hargaSatuan,
+          subtotal: l.jumlah * l.hargaSatuan,
+        };
+      }),
+      jumlahUnit: r.jumlahUnit,
+      hargaSatuan: r.jumlahUnit > 0 ? Math.round(r.nominal / r.jumlahUnit) : 0,
       subtotal: r.nominal,
       pajak: 0,
       total: r.nominal,
@@ -687,34 +926,34 @@ export function rejectReceipt(receiptId: ID, alasan: string): ReceiptEntity {
 
 /* ── master data ───────────────────────────────────────────────────────── */
 
-export function savePangkalan(
-  input: Partial<PangkalanEntity> & { id?: ID },
-): PangkalanEntity {
+export function saveOutlet(
+  input: Partial<OutletEntity> & { id?: ID },
+): OutletEntity {
   return mutate((db) => {
-    if (!input.nama?.trim()) throw new ApiError("Nama pangkalan wajib diisi.");
+    if (!input.nama?.trim()) throw new ApiError(`Nama ${outletLabel()} wajib diisi.`);
 
     if (input.id) {
-      const existing = db.pangkalan.find((p) => p.id === input.id);
-      if (!existing) throw new ApiError("Pangkalan tidak ditemukan.", 404);
+      const existing = db.outlets.find((p) => p.id === input.id);
+      if (!existing) throw new ApiError(`${outletLabelTitle()} tidak ditemukan.`, 404);
       Object.assign(existing, input);
       recordAudit(db, {
-        action: "pangkalan.update",
-        entity: "Pangkalan",
+        action: "outlet.update",
+        entity: outletLabelTitle(),
         entityId: existing.id,
         summary: `Memperbarui data ${existing.nama}.`,
       });
       return existing;
     }
 
-    const seq = db.pangkalan.length + 1;
-    const created: PangkalanEntity = {
+    const seq = db.outlets.length + 1;
+    const created: OutletEntity = {
       ...stampScope({}),
       id: nextId("pkl"),
       kode: input.kode?.trim() || `PKL-${String(seq).padStart(4, "0")}`,
       nama: input.nama.trim(),
       alamat: input.alamat ?? "",
       kecamatan: input.kecamatan ?? "",
-      kota: input.kota ?? "Kota Bekasi",
+      kota: input.kota ?? "Kota Salatiga",
       lat: input.lat ?? -6.24,
       lng: input.lng ?? 107.0,
       penanggungJawab: input.penanggungJawab ?? "",
@@ -726,38 +965,38 @@ export function savePangkalan(
       blokirOtomatis: input.blokirOtomatis ?? true,
       terdaftarPada: isoDate(startOfToday()),
     };
-    if (db.pangkalan.some((p) => p.kode === created.kode)) {
-      throw new ApiError(`Kode ${created.kode} sudah dipakai pangkalan lain.`, 409);
+    if (db.outlets.some((p) => p.kode === created.kode)) {
+      throw new ApiError(`Kode ${created.kode} sudah dipakai ${outletLabel()} lain.`, 409);
     }
-    db.pangkalan.unshift(created);
+    db.outlets.unshift(created);
     recordAudit(db, {
-      action: "pangkalan.create",
-      entity: "Pangkalan",
+      action: "outlet.create",
+      entity: outletLabelTitle(),
       entityId: created.id,
-      summary: `Mendaftarkan pangkalan ${created.nama} (${created.kode}).`,
+      summary: `Mendaftarkan ${outletLabel()} ${created.nama} (${created.kode}).`,
     });
     return created;
   });
 }
 
-export function deletePangkalan(id: ID) {
+export function deleteOutlet(id: ID) {
   return mutate((db) => {
-    const pkl = db.pangkalan.find((p) => p.id === id);
-    if (!pkl) throw new ApiError("Pangkalan tidak ditemukan.", 404);
+    const pkl = db.outlets.find((p) => p.id === id);
+    if (!pkl) throw new ApiError(`${outletLabelTitle()} tidak ditemukan.`, 404);
     const open = db.deliveries.some(
-      (d) => d.pangkalanId === id && d.status !== "Selesai",
+      (d) => d.outletId === id && d.status !== "Selesai",
     );
     if (open) {
       throw new ApiError(
         `${pkl.nama} masih punya surat jalan berjalan. Selesaikan pengiriman sebelum menghapus.`,
       );
     }
-    db.pangkalan = db.pangkalan.filter((p) => p.id !== id);
+    db.outlets = db.outlets.filter((p) => p.id !== id);
     recordAudit(db, {
-      action: "pangkalan.delete",
-      entity: "Pangkalan",
+      action: "outlet.delete",
+      entity: outletLabelTitle(),
       entityId: id,
-      summary: `Menghapus pangkalan ${pkl.nama}.`,
+      summary: `Menghapus ${outletLabel()} ${pkl.nama}.`,
     });
   });
 }
@@ -854,6 +1093,7 @@ export function saveUser(input: Partial<UserEntity> & { id?: ID }): UserEntity {
       role: input.role ?? "staff",
       telepon: input.telepon ?? "",
       cabang: input.cabang ?? "Semua cabang",
+      driverId: input.driverId,
       branchIds: input.branchIds ?? [],
       scopeType: input.scopeType ?? "tenant",
       status: "Diundang",
@@ -919,6 +1159,8 @@ export function saveProduct(
       kode: input.kode?.trim() || `SKU-${String(seq).padStart(4, "0")}`,
       nama: input.nama.trim(),
       ukuran: input.ukuran ?? "",
+      satuan: input.satuan?.trim() || "unit",
+      returnable: input.returnable ?? false,
       hargaJual: input.hargaJual!,
       hargaBeli: input.hargaBeli ?? 0,
       stok: input.stok ?? 0,
@@ -980,7 +1222,23 @@ export function adjustStock(id: ID, delta: number, alasan: string) {
 
 export function saveSettings(patch: Partial<Database["settings"]>) {
   return mutate((db) => {
+    // Written to the ACTING tenant's own row, never to db.settings.
+    //
+    // db.settings is derived — the acting tenant's values resolved up the tree
+    // — so assigning to it would look like it worked and be discarded on the
+    // next getDb(). Worse, if it did persist, every inherited value the form
+    // rendered would become an override this tenant never chose, and its parent
+    // could not change it for them again. Writing only the patch keeps
+    // "inherited" and "set here" distinguishable.
+    const tenantId = getActiveScope().actingTenantId;
+    const own = db.settingsByTenant.find((r) => r.tenantId === tenantId);
+    if (own) {
+      own.values = { ...own.values, ...patch };
+    } else {
+      db.settingsByTenant.push({ tenantId, values: { ...patch } });
+    }
     db.settings = { ...db.settings, ...patch };
+
     recordAudit(db, {
       action: "settings.update",
       entity: "Settings",
@@ -1009,7 +1267,7 @@ export function advanceOperations(): boolean {
       if (d.status === "Antrian" && minutes >= planned - 20) {
         d.status = "Proses";
         d.mulaiPada = now.toISOString();
-        const pkl = db.pangkalan.find((p) => p.id === d.pangkalanId);
+        const pkl = db.outlets.find((p) => p.id === d.outletId);
         if (pkl) {
           d.driverLat = pkl.lat + (Math.random() - 0.5) * 0.03;
           d.driverLng = pkl.lng + (Math.random() - 0.5) * 0.03;
@@ -1018,7 +1276,11 @@ export function advanceOperations(): boolean {
       } else if (d.status === "Proses") {
         const step = Math.ceil(d.target * (0.08 + Math.random() * 0.12));
         d.realisasi = Math.min(d.target, d.realisasi + step);
-        const pkl = db.pangkalan.find((p) => p.id === d.pangkalanId);
+        // Lines are what the invoice is priced from, so simulated progress has
+        // to move them too. Advancing only the headline total would leave a
+        // clock-completed drop invoicing against stale line quantities.
+        d.lines = applyScalarRealisasi(d.lines, d.realisasi);
+        const pkl = db.outlets.find((p) => p.id === d.outletId);
         if (pkl && d.driverLat != null && d.driverLng != null) {
           d.driverLat += (pkl.lat - d.driverLat) * 0.35;
           d.driverLng += (pkl.lng - d.driverLng) * 0.35;
@@ -1035,19 +1297,34 @@ export function advanceOperations(): boolean {
     }
 
     if (changed) {
-      for (const driver of db.drivers) {
-        if (driver.status === "Cuti") continue;
-        const mine = db.deliveries.filter(
-          (d) => d.tanggal === today && d.driverId === driver.id,
-        );
-        if (mine.length === 0) continue;
-        if (mine.some((d) => d.status === "Proses")) driver.status = "Dalam Perjalanan";
-        else if (mine.every((d) => d.status === "Selesai" || d.status === "Tertunda"))
-          driver.status = "Selesai";
-        else driver.status = "Standby";
-      }
+      for (const driver of db.drivers) refreshDriverStatus(db, driver.id);
     }
 
     return changed;
+  });
+}
+
+/**
+ * Removes a tenant's override so the field inherits again.
+ *
+ * Deletes the key rather than writing null or an empty string. An absent key is
+ * what "not set here, ask my parent" means in this shape — a null would be a
+ * value the tenant had chosen, and "" would pin an empty lexicon term that the
+ * parent could never correct.
+ */
+export function clearOverride(field: keyof Database["settings"]) {
+  return mutate((db) => {
+    const tenantId = getActiveScope().actingTenantId;
+    const own = db.settingsByTenant.find((r) => r.tenantId === tenantId);
+    if (own) delete own.values[field];
+
+    recordAudit(db, {
+      action: "settings.inherit",
+      entity: "Settings",
+      entityId: String(field),
+      summary: `Mengembalikan "${String(field)}" ke pengaturan induk.`,
+    });
+    // Re-resolved on the next getDb(), so the caller sees the parent's value.
+    return db.settingsByTenant;
   });
 }

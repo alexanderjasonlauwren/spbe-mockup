@@ -1,11 +1,12 @@
 import { scopedDb } from "@/mocks/scope";
 import { latency } from "@/mocks/db";
-import { deletePangkalan, savePangkalan } from "@/mocks/rules";
+import { deleteOutlet, saveOutlet } from "@/mocks/rules";
 import { exportCsv, timestampSuffix } from "@/lib/export";
 import { isoDate, startOfToday } from "@/mocks/seed";
-import type { PangkalanEntity, PangkalanStatus } from "@/mocks/types";
+import type { OutletEntity, OutletStatus } from "@/mocks/types";
+import { outletLabel, outletLabelTitle } from "@/lib/lexicon";
 
-export interface PangkalanView extends PangkalanEntity {
+export interface OutletView extends OutletEntity {
   /** Cylinders delivered to this outlet in the current month. */
   terpakaiBulanIni: number;
   sisaKuota: number;
@@ -20,16 +21,16 @@ function monthStart() {
   return isoDate(new Date(now.getFullYear(), now.getMonth(), 1));
 }
 
-function toView(p: PangkalanEntity): PangkalanView {
+function toView(p: OutletEntity): OutletView {
   const db = scopedDb();
   const from = monthStart();
-  const mine = db.deliveries.filter((d) => d.pangkalanId === p.id);
+  const mine = db.deliveries.filter((d) => d.outletId === p.id);
   const terpakai = mine
     .filter((d) => d.tanggal >= from)
     .reduce((s, d) => s + d.realisasi, 0);
   const tagihan = db.invoices.filter(
     (x) =>
-      x.pangkalanId === p.id &&
+      x.outletId === p.id &&
       x.status !== "Batal" &&
       x.total - x.terbayar - x.kredit > 0,
   );
@@ -46,14 +47,14 @@ function toView(p: PangkalanEntity): PangkalanView {
   };
 }
 
-export async function getPangkalanList(filters?: {
+export async function getOutletList(filters?: {
   search?: string;
-  status?: PangkalanStatus | "Semua";
+  status?: OutletStatus | "Semua";
   kecamatan?: string;
-}): Promise<PangkalanView[]> {
+}): Promise<OutletView[]> {
   await latency("read");
   return scopedDb()
-    .pangkalan.map(toView)
+    .outlets.map(toView)
     .filter((p) => {
       if (filters?.status && filters.status !== "Semua" && p.status !== filters.status)
         return false;
@@ -73,19 +74,19 @@ export async function getPangkalanList(filters?: {
     .sort((a, b) => a.nama.localeCompare(b.nama));
 }
 
-export async function getPangkalanDetail(id: string): Promise<PangkalanView> {
+export async function getOutletDetail(id: string): Promise<OutletView> {
   await latency("read");
-  const p = scopedDb().pangkalan.find((x) => x.id === id);
-  if (!p) throw new Error("Pangkalan tidak ditemukan.");
+  const p = scopedDb().outlets.find((x) => x.id === id);
+  if (!p) throw new Error(`${outletLabelTitle()} tidak ditemukan.`);
   return toView(p);
 }
 
 /** Recent surat jalan for one outlet, shown on its detail page. */
-export async function getPangkalanHistory(id: string, limit = 10) {
+export async function getOutletHistory(id: string, limit = 10) {
   await latency("read");
   const db = scopedDb();
   return db.deliveries
-    .filter((d) => d.pangkalanId === id)
+    .filter((d) => d.outletId === id)
     .sort((a, b) => b.tanggal.localeCompare(a.tanggal))
     .slice(0, limit)
     .map((d) => ({
@@ -100,26 +101,26 @@ export async function getPangkalanHistory(id: string, limit = 10) {
     }));
 }
 
-export async function createOrUpdatePangkalan(input: Partial<PangkalanEntity> & { id?: string }) {
+export async function createOrUpdateOutlet(input: Partial<OutletEntity> & { id?: string }) {
   await latency("write");
-  return toView(savePangkalan(input));
+  return toView(saveOutlet(input));
 }
 
-export async function removePangkalan(id: string) {
+export async function removeOutlet(id: string) {
   await latency("write");
-  deletePangkalan(id);
+  deleteOutlet(id);
 }
 
 export async function getKecamatanOptions(): Promise<string[]> {
   await latency("read");
-  return [...new Set(scopedDb().pangkalan.map((p) => p.kecamatan))].sort();
+  return [...new Set(scopedDb().outlets.map((p) => p.kecamatan))].sort();
 }
 
-export async function exportPangkalan() {
+export async function exportOutlet() {
   await latency("read");
-  const rows = await getPangkalanList();
+  const rows = await getOutletList();
   exportCsv(
-    `pangkalan-${timestampSuffix()}`,
+    `${outletLabel()}-${timestampSuffix()}`,
     [
       "Kode",
       "Nama",

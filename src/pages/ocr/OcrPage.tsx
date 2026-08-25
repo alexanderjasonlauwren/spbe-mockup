@@ -7,6 +7,8 @@ import {
   FileScan,
   Loader2,
   ScanLine,
+  Plus,
+  Trash2,
   TriangleAlert,
   XCircle,
 } from "lucide-react";
@@ -16,9 +18,11 @@ import {
   getOcrSummary,
   getReceipts,
   uploadReceipt,
+  type ReceiptLineView,
   type ReceiptView,
 } from "@/features/ocr/api/ocrApi";
-import { getPangkalanOptions } from "@/features/distribution/api/distributionApi";
+import { getProducts } from "@/features/products/api/productApi";
+import { getOutletOptions } from "@/features/distribution/api/distributionApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelBody, PanelHeader, Meter, Skeleton } from "@/components/common/Panel";
@@ -52,6 +56,7 @@ import {
   relativeTime,
 } from "@/lib/format";
 import type { BankNameEntity, ReceiptStatus } from "@/mocks/types";
+import { outletLabel, outletLabelTitle, unitLabel } from "@/lib/lexicon";
 
 const BANKS: BankNameEntity[] = ["BCA", "BNI", "Mandiri", "BRI", "BSI"];
 const TABS: (ReceiptStatus | "Semua")[] = [
@@ -70,13 +75,20 @@ export function OcrPage() {
   const [reviewing, setReviewing] = useState<ReceiptView | null>(null);
   const [rejecting, setRejecting] = useState<ReceiptView | null>(null);
   const [alasan, setAlasan] = useState("");
-  const [draft, setDraft] = useState({
-    pangkalanId: "",
+  const [draft, setDraft] = useState<{
+    outletId: string;
+    nomorKwitansi: string;
+    tanggalKwitansi: string;
+    lines: ReceiptLineView[];
+    nominal: number;
+    bank: BankNameEntity | "";
+  }>({
+    outletId: "",
     nomorKwitansi: "",
     tanggalKwitansi: "",
-    jumlahTabung: 0,
+    lines: [],
     nominal: 0,
-    bank: "" as BankNameEntity | "",
+    bank: "",
   });
 
   const receipts = useQuery({
@@ -84,18 +96,23 @@ export function OcrPage() {
     queryFn: () => getReceipts(tab === "Semua" ? undefined : tab),
   });
   const summary = useQuery({ queryKey: [...scopeKey(), "ocr-summary"], queryFn: getOcrSummary });
-  const pangkalan = useQuery({
-    queryKey: [...scopeKey(), "pangkalan-options"],
-    queryFn: getPangkalanOptions,
+  const outlet = useQuery({
+    queryKey: [...scopeKey(), "outlet-options"],
+    queryFn: getOutletOptions,
+  });
+  const katalog = useQuery({
+    queryKey: [...scopeKey(), "products", "", "Aktif"],
+    queryFn: () => getProducts({ onlyActive: true }),
+    enabled: !!reviewing,
   });
 
   useEffect(() => {
     if (!reviewing) return;
     setDraft({
-      pangkalanId: reviewing.pangkalanId ?? "",
+      outletId: reviewing.outletId ?? "",
       nomorKwitansi: reviewing.nomorKwitansi,
       tanggalKwitansi: reviewing.tanggalKwitansi,
-      jumlahTabung: reviewing.jumlahTabung,
+      lines: reviewing.lines.map((l) => ({ ...l })),
       nominal: reviewing.nominal,
       bank: reviewing.bank ?? "",
     });
@@ -150,7 +167,7 @@ export function OcrPage() {
       <PageHeader
         eyebrow="Keuangan"
         title="OCR Kwitansi"
-        description="Pindai bukti transfer dari pangkalan. Hasil yang divalidasi langsung menerbitkan tagihan untuk diverifikasi tim keuangan."
+        description={`Pindai bukti transfer dari ${outletLabel()}. Hasil yang divalidasi langsung menerbitkan tagihan untuk diverifikasi tim keuangan.`}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -199,8 +216,9 @@ export function OcrPage() {
               {/* Numbered because the steps are strictly sequential. */}
               <ol className="space-y-2">
                 {[
-                  "Sistem membaca nomor kwitansi, tanggal, jumlah tabung, dan nominal dari gambar.",
+                  "Sistem membaca nomor kwitansi, tanggal, rincian barang, dan nominal dari gambar.",
                   `Isian dengan keyakinan di bawah ${Math.round(TRUST_THRESHOLD * 100)}% dikosongkan agar diisi manual, bukan ditebak.`,
+                  "Setiap baris harus dicocokkan ke produk di katalog sebelum kwitansi dapat divalidasi.",
                   "Validasi menerbitkan tagihan yang menunggu verifikasi di halaman Pembayaran.",
                 ].map((text, i) => (
                   <li key={i} className="flex gap-2.5">
@@ -255,7 +273,7 @@ export function OcrPage() {
                     <div className="min-w-0 flex-1">
                       <p className="data truncate text-xs text-ink">{r.namaBerkas}</p>
                       <p className="mt-0.5 truncate text-sm font-medium text-ink">
-                        {r.pangkalan}
+                        {r.outlet}
                       </p>
                       <p className="text-2xs text-ink-muted">
                         {r.nomorKwitansi || "Nomor belum terbaca"} ·{" "}
@@ -269,8 +287,15 @@ export function OcrPage() {
                         {formatRupiah(r.nominal)}
                       </p>
                       <p className="data text-2xs text-ink-muted">
-                        {formatNumber(r.jumlahTabung)} tabung
+                        {r.lines.length === 1
+                          ? `${formatNumber(r.lines[0].jumlah)} ${r.lines[0].satuan}`
+                          : `${r.lines.length} jenis · ${formatNumber(r.jumlahUnit)} ${unitLabel()}`}
                       </p>
+                      {r.belumDicocokkan > 0 && (
+                        <p className="text-2xs font-semibold text-rust-ink">
+                          {r.belumDicocokkan} baris belum cocok
+                        </p>
+                      )}
                     </div>
 
                     <div className="w-28 shrink-0">
@@ -346,15 +371,15 @@ export function OcrPage() {
           )}
 
           <div className="space-y-4">
-            <Field label="Pangkalan" htmlFor="ocr-pkl" required>
+            <Field label={outletLabelTitle()} htmlFor="ocr-pkl" required>
               <SelectInput
                 id="ocr-pkl"
-                value={draft.pangkalanId}
-                invalid={!draft.pangkalanId}
-                onChange={(e) => setDraft({ ...draft, pangkalanId: e.target.value })}
+                value={draft.outletId}
+                invalid={!draft.outletId}
+                onChange={(e) => setDraft({ ...draft, outletId: e.target.value })}
               >
-                <option value="">Belum dikenali — pilih pangkalan</option>
-                {(pangkalan.data ?? []).map((p) => (
+                <option value="">Belum dikenali — pilih {outletLabel()}</option>
+                {(outlet.data ?? []).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
                   </option>
@@ -384,31 +409,89 @@ export function OcrPage() {
               </Field>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="Jumlah tabung" htmlFor="ocr-jml">
-                <TextInput
-                  id="ocr-jml"
-                  type="number"
-                  min={0}
-                  mono
-                  value={draft.jumlahTabung}
-                  onChange={(e) =>
-                    setDraft({ ...draft, jumlahTabung: Number(e.target.value) })
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="label text-2xs text-ink-muted">Rincian barang</p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={() =>
+                    setDraft((d) => ({
+                      ...d,
+                      lines: [
+                        ...d.lines,
+                        {
+                          productId: null,
+                          nama: "",
+                          namaTerbaca: "",
+                          satuan: "unit",
+                          jumlah: 0,
+                          hargaSatuan: 0,
+                          subtotal: 0,
+                        },
+                      ],
+                    }))
                   }
-                />
-              </Field>
-              <Field label="Nominal (Rp)" htmlFor="ocr-nom" required>
-                <TextInput
-                  id="ocr-nom"
-                  type="number"
-                  min={1}
-                  mono
-                  invalid={draft.nominal <= 0}
-                  value={draft.nominal}
-                  onChange={(e) => setDraft({ ...draft, nominal: Number(e.target.value) })}
-                />
-              </Field>
+                >
+                  <Plus className="h-3 w-3" />
+                  Tambah baris
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {draft.lines.map((line, i) => (
+                  <LineRow
+                    key={i}
+                    line={line}
+                    products={katalog.data ?? []}
+                    onChange={(patch) =>
+                      setDraft((d) => ({
+                        ...d,
+                        lines: d.lines.map((l, li) =>
+                          li === i ? { ...l, ...patch } : l,
+                        ),
+                      }))
+                    }
+                    onRemove={() =>
+                      setDraft((d) => ({
+                        ...d,
+                        lines: d.lines.filter((_, li) => li !== i),
+                      }))
+                    }
+                  />
+                ))}
+                {draft.lines.length === 0 && (
+                  <p className="rounded-sm border border-dashed border-line-strong px-3 py-4 text-center text-xs text-ink-muted">
+                    Pemindaian tidak menemukan rincian barang. Tambahkan baris
+                    sesuai kwitansi.
+                  </p>
+                )}
+              </div>
             </div>
+
+            <Field
+              label="Nominal tertulis di kwitansi (Rp)"
+              htmlFor="ocr-nom"
+              hint="Angka yang tercetak sebagai total, dibaca terpisah dari rincian."
+              required
+            >
+              <TextInput
+                id="ocr-nom"
+                type="number"
+                min={1}
+                mono
+                invalid={draft.nominal <= 0}
+                value={draft.nominal}
+                onChange={(e) => setDraft({ ...draft, nominal: Number(e.target.value) })}
+              />
+            </Field>
+
+            <Reconciliation
+              rincian={draft.lines.reduce((sum, l) => sum + l.jumlah * l.hargaSatuan, 0)}
+              nominal={draft.nominal}
+              onUseRincian={(v) => setDraft((d) => ({ ...d, nominal: v }))}
+            />
 
             <Field label="Bank pengirim" htmlFor="ocr-bank">
               <SelectInput
@@ -434,17 +517,26 @@ export function OcrPage() {
             </Button>
             <Button
               disabled={
-                !draft.pangkalanId || draft.nominal <= 0 || acceptMutation.isPending
+                !draft.outletId ||
+                draft.nominal <= 0 ||
+                draft.lines.length === 0 ||
+                draft.lines.some((l) => !l.productId || l.jumlah <= 0) ||
+                acceptMutation.isPending
               }
               onClick={() =>
                 reviewing &&
                 acceptMutation.mutate({
                   id: reviewing.id,
                   edits: {
-                    pangkalanId: draft.pangkalanId,
+                    outletId: draft.outletId,
                     nomorKwitansi: draft.nomorKwitansi,
                     tanggalKwitansi: draft.tanggalKwitansi,
-                    jumlahTabung: draft.jumlahTabung,
+                    lines: draft.lines.map((l) => ({
+                      productId: l.productId,
+                      namaTerbaca: l.namaTerbaca || l.nama,
+                      jumlah: l.jumlah,
+                      hargaSatuan: l.hargaSatuan,
+                    })),
                     nominal: draft.nominal,
                     bank: draft.bank || null,
                   },
@@ -494,6 +586,163 @@ export function OcrPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/**
+ * One scanned item, and the choice the reviewer has to make about it.
+ *
+ * The raw text sits above the picker rather than being replaced by it: the
+ * reviewer is checking a machine's guess against a photograph, and hiding what
+ * the machine actually read leaves them nothing to check against.
+ */
+function LineRow({
+  line,
+  products,
+  onChange,
+  onRemove,
+}: {
+  line: ReceiptLineView;
+  products: { id: string; nama: string; hargaJual: number; satuan: string }[];
+  onChange: (patch: Partial<ReceiptLineView>) => void;
+  onRemove: () => void;
+}) {
+  const unmatched = !line.productId;
+
+  return (
+    <div
+      className={cn(
+        "rounded-sm border p-3",
+        unmatched ? "border-rust bg-rust-soft/30" : "border-line bg-panel-sunk",
+      )}
+    >
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <p className="min-w-0 flex-1 text-2xs text-ink-muted">
+          Terbaca:{" "}
+          <span className="data text-ink">{line.namaTerbaca || "—"}</span>
+        </p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Hapus baris"
+          onClick={onRemove}
+          className="hover:bg-rust-soft hover:text-rust-ink"
+        >
+          <Trash2 className="h-3 w-3" />
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_5rem_7rem]">
+        <SelectInput
+          aria-label="Produk"
+          value={line.productId ?? ""}
+          invalid={unmatched}
+          onChange={(e) => {
+            const prod = products.find((p) => p.id === e.target.value);
+            onChange({
+              productId: e.target.value || null,
+              nama: prod?.nama ?? "",
+              satuan: prod?.satuan ?? "unit",
+              // Adopt the catalogue price only when the scan read none, so a
+              // genuine counter price is never overwritten by picking a product.
+              hargaSatuan: line.hargaSatuan > 0 ? line.hargaSatuan : (prod?.hargaJual ?? 0),
+            });
+          }}
+        >
+          <option value="">Belum dicocokkan — pilih produk</option>
+          {products.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.nama}
+            </option>
+          ))}
+        </SelectInput>
+
+        <TextInput
+          type="number"
+          min={0}
+          mono
+          aria-label="Jumlah"
+          placeholder="Qty"
+          value={line.jumlah || ""}
+          onChange={(e) => onChange({ jumlah: Number(e.target.value) })}
+        />
+
+        <TextInput
+          type="number"
+          min={0}
+          mono
+          aria-label="Harga satuan"
+          placeholder="Harga"
+          value={line.hargaSatuan || ""}
+          onChange={(e) => onChange({ hargaSatuan: Number(e.target.value) })}
+        />
+      </div>
+
+      <p className="mt-1.5 flex flex-wrap items-baseline justify-between gap-2 text-2xs">
+        <span className="text-ink-muted">
+          {line.hargaKatalog != null && (
+            <span className="text-signal-ink">
+              Harga katalog {formatRupiah(line.hargaKatalog)} — kwitansi berbeda.
+            </span>
+          )}
+        </span>
+        <span className="data font-semibold text-ink">
+          {formatRupiah(line.jumlah * line.hargaSatuan)}
+        </span>
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Whether the items add up to the printed total.
+ *
+ * Two independent readings of the same document; if they disagree the scan is
+ * wrong somewhere, and validation is blocked until a human resolves it.
+ */
+function Reconciliation({
+  rincian,
+  nominal,
+  onUseRincian,
+}: {
+  rincian: number;
+  nominal: number;
+  onUseRincian: (value: number) => void;
+}) {
+  const cocok = Math.abs(rincian - nominal) <= 1;
+
+  return (
+    <div
+      className={cn(
+        "spine rounded-md px-3.5 py-2.5",
+        cocok ? "bg-pine-soft text-pine" : "bg-rust-soft text-rust",
+      )}
+    >
+      <p className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-ink">
+        <span>Jumlah rincian</span>
+        <span className="data font-semibold">{formatRupiah(rincian)}</span>
+      </p>
+      {!cocok && (
+        <p className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-2xs leading-relaxed text-ink">
+          <span>
+            Selisih{" "}
+            <span className="data font-semibold">
+              {formatRupiah(Math.abs(rincian - nominal))}
+            </span>{" "}
+            dari nominal tertulis. Perbaiki rincian atau nominalnya.
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            onClick={() => onUseRincian(rincian)}
+          >
+            Pakai jumlah rincian
+          </Button>
+        </p>
+      )}
     </div>
   );
 }

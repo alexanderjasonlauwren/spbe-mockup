@@ -4,7 +4,7 @@ import {
   AGING_BUCKETS,
   agingBucket,
   invoiceSisa,
-  pangkalanExposure,
+  outletExposure,
   unallocated,
 } from "@/mocks/ar";
 import {
@@ -22,14 +22,15 @@ import {
 import { isoDate, startOfToday } from "@/mocks/seed";
 import { exportExcel, timestampSuffix, type ExcelColumn } from "@/lib/export";
 import type { InvoiceStatus } from "@/mocks/types";
+import { outletLabelTitle } from "@/lib/lexicon";
 
 /* ── invoices ──────────────────────────────────────────────────────────── */
 
 export interface InvoiceView {
   id: string;
   nomor: string;
-  pangkalanId: string;
-  pangkalan: string;
+  outletId: string;
+  outlet: string;
   kecamatan: string;
   suratJalan: string;
   tanggal: string;
@@ -37,7 +38,7 @@ export interface InvoiceView {
   /** Negative until due, positive once overdue. */
   umurHari: number;
   bucket: (typeof AGING_BUCKETS)[number];
-  jumlahTabung: number;
+  jumlahUnit: number;
   total: number;
   terbayar: number;
   kredit: number;
@@ -50,15 +51,15 @@ function toInvoiceView(id: string): InvoiceView | null {
   const db = scopedDb();
   const inv = db.invoices.find((i) => i.id === id);
   if (!inv) return null;
-  const pkl = db.pangkalan.find((p) => p.id === inv.pangkalanId);
+  const pkl = db.outlets.find((p) => p.id === inv.outletId);
   const delivery = db.deliveries.find((d) => d.id === inv.deliveryId);
   const today = isoDate(startOfToday());
 
   return {
     id: inv.id,
     nomor: inv.nomor,
-    pangkalanId: inv.pangkalanId,
-    pangkalan: pkl?.nama ?? "—",
+    outletId: inv.outletId,
+    outlet: pkl?.nama ?? "—",
     kecamatan: pkl?.kecamatan ?? "—",
     suratJalan: delivery?.kode ?? "—",
     tanggal: inv.tanggal,
@@ -67,7 +68,7 @@ function toInvoiceView(id: string): InvoiceView | null {
       (new Date(today).getTime() - new Date(inv.jatuhTempo).getTime()) / 86_400_000,
     ),
     bucket: agingBucket(inv, today),
-    jumlahTabung: inv.jumlahTabung,
+    jumlahUnit: inv.jumlahUnit,
     total: inv.total,
     terbayar: inv.terbayar,
     kredit: inv.kredit,
@@ -79,7 +80,7 @@ function toInvoiceView(id: string): InvoiceView | null {
 
 export interface InvoiceFilters {
   status?: InvoiceStatus | "Semua" | "Belum lunas";
-  pangkalanId?: string;
+  outletId?: string;
   bucket?: string;
   search?: string;
 }
@@ -97,8 +98,8 @@ export async function getInvoices(filters?: InvoiceFilters): Promise<InvoiceView
       } else if (filters?.status && filters.status !== "Semua") {
         if (inv.status !== filters.status) return false;
       }
-      if (filters?.pangkalanId && filters.pangkalanId !== "Semua") {
-        if (inv.pangkalanId !== filters.pangkalanId) return false;
+      if (filters?.outletId && filters.outletId !== "Semua") {
+        if (inv.outletId !== filters.outletId) return false;
       }
       if (filters?.bucket && filters.bucket !== "Semua" && inv.bucket !== filters.bucket)
         return false;
@@ -106,7 +107,7 @@ export async function getInvoices(filters?: InvoiceFilters): Promise<InvoiceView
         const q = filters.search.toLowerCase();
         return (
           inv.nomor.toLowerCase().includes(q) ||
-          inv.pangkalan.toLowerCase().includes(q) ||
+          inv.outlet.toLowerCase().includes(q) ||
           inv.suratJalan.toLowerCase().includes(q)
         );
       }
@@ -118,8 +119,8 @@ export async function getInvoices(filters?: InvoiceFilters): Promise<InvoiceView
 /* ── ageing ────────────────────────────────────────────────────────────── */
 
 export interface AgingRow {
-  pangkalanId: string;
-  pangkalan: string;
+  outletId: string;
+  outlet: string;
   termin: number;
   batasKredit: number;
   buckets: Record<string, number>;
@@ -134,7 +135,7 @@ export interface AgingReport {
   totals: Record<string, number>;
   grandTotal: number;
   jatuhTempoTotal: number;
-  pangkalanMenunggak: number;
+  outletMenunggak: number;
   buckets: readonly string[];
 }
 
@@ -144,7 +145,7 @@ export async function getAgingReport(): Promise<AgingReport> {
   const db = scopedDb();
   const today = isoDate(startOfToday());
 
-  const byPangkalan = new Map<string, AgingRow>();
+  const byOutlet = new Map<string, AgingRow>();
   const totals: Record<string, number> = Object.fromEntries(
     AGING_BUCKETS.map((b) => [b, 0]),
   );
@@ -153,13 +154,13 @@ export async function getAgingReport(): Promise<AgingReport> {
     const sisa = invoiceSisa(inv);
     if (inv.status === "Batal" || sisa <= 0) continue;
 
-    const pkl = db.pangkalan.find((p) => p.id === inv.pangkalanId);
-    let row = byPangkalan.get(inv.pangkalanId);
+    const pkl = db.outlets.find((p) => p.id === inv.outletId);
+    let row = byOutlet.get(inv.outletId);
     if (!row) {
-      const exp = pangkalanExposure(db, inv.pangkalanId);
+      const exp = outletExposure(db, inv.outletId);
       row = {
-        pangkalanId: inv.pangkalanId,
-        pangkalan: pkl?.nama ?? "—",
+        outletId: inv.outletId,
+        outlet: pkl?.nama ?? "—",
         termin: pkl?.termin ?? 0,
         batasKredit: pkl?.batasKredit ?? 0,
         buckets: Object.fromEntries(AGING_BUCKETS.map((b) => [b, 0])),
@@ -167,7 +168,7 @@ export async function getAgingReport(): Promise<AgingReport> {
         jatuhTempo: 0,
         terblokir: exp.terblokir,
       };
-      byPangkalan.set(inv.pangkalanId, row);
+      byOutlet.set(inv.outletId, row);
     }
 
     const bucket = agingBucket(inv, today);
@@ -177,36 +178,36 @@ export async function getAgingReport(): Promise<AgingReport> {
     totals[bucket] += sisa;
   }
 
-  const rows = [...byPangkalan.values()].sort((a, b) => b.total - a.total);
+  const rows = [...byOutlet.values()].sort((a, b) => b.total - a.total);
   return {
     rows,
     totals,
     grandTotal: rows.reduce((s, r) => s + r.total, 0),
     jatuhTempoTotal: rows.reduce((s, r) => s + r.jatuhTempo, 0),
-    pangkalanMenunggak: rows.filter((r) => r.jatuhTempo > 0).length,
+    outletMenunggak: rows.filter((r) => r.jatuhTempo > 0).length,
     buckets: AGING_BUCKETS,
   };
 }
 
 /** Everything owed by one outlet, for the statement of account. */
-export async function getStatement(pangkalanId: string) {
+export async function getStatement(outletId: string) {
   await latency("read");
   syncReceivables();
   const db = scopedDb();
-  const pkl = db.pangkalan.find((p) => p.id === pangkalanId);
-  const exposure = pangkalanExposure(db, pangkalanId);
+  const pkl = db.outlets.find((p) => p.id === outletId);
+  const exposure = outletExposure(db, outletId);
 
   return {
-    pangkalan: pkl,
+    outlet: pkl,
     exposure,
     invoices: db.invoices
-      .filter((i) => i.pangkalanId === pangkalanId)
+      .filter((i) => i.outletId === outletId)
       .map((i) => toInvoiceView(i.id)!)
       .sort((a, b) => b.tanggal.localeCompare(a.tanggal)),
     payments: db.payments
-      .filter((p) => p.pangkalanId === pangkalanId)
+      .filter((p) => p.outletId === outletId)
       .sort((a, b) => b.tanggal.localeCompare(a.tanggal)),
-    creditNotes: db.creditNotes.filter((c) => c.pangkalanId === pangkalanId),
+    creditNotes: db.creditNotes.filter((c) => c.outletId === outletId),
   };
 }
 
@@ -215,8 +216,8 @@ export async function getStatement(pangkalanId: string) {
 export interface PaymentView {
   id: string;
   nomor: string;
-  pangkalanId: string;
-  pangkalan: string;
+  outletId: string;
+  outlet: string;
   tanggal: string;
   jumlah: number;
   belumDialokasikan: number;
@@ -235,12 +236,12 @@ export async function getPayments(status?: string, search?: string): Promise<Pay
 
   return db.payments
     .map((p) => {
-      const pkl = db.pangkalan.find((x) => x.id === p.pangkalanId);
+      const pkl = db.outlets.find((x) => x.id === p.outletId);
       return {
         id: p.id,
         nomor: p.nomor,
-        pangkalanId: p.pangkalanId,
-        pangkalan: pkl?.nama ?? "—",
+        outletId: p.outletId,
+        outlet: pkl?.nama ?? "—",
         tanggal: p.tanggal,
         jumlah: p.jumlah,
         belumDialokasikan: unallocated(p),
@@ -263,7 +264,7 @@ export async function getPayments(status?: string, search?: string): Promise<Pay
         const q = search.toLowerCase();
         return (
           p.nomor.toLowerCase().includes(q) ||
-          p.pangkalan.toLowerCase().includes(q) ||
+          p.outlet.toLowerCase().includes(q) ||
           p.noRekening.includes(q)
         );
       }
@@ -273,11 +274,11 @@ export async function getPayments(status?: string, search?: string): Promise<Pay
 }
 
 /** Open invoices for the allocation picker. */
-export async function getOpenInvoices(pangkalanId: string): Promise<InvoiceView[]> {
+export async function getOpenInvoices(outletId: string): Promise<InvoiceView[]> {
   await latency("read");
   return scopedDb()
     .invoices.filter(
-      (i) => i.pangkalanId === pangkalanId && i.status !== "Batal" && invoiceSisa(i) > 0,
+      (i) => i.outletId === outletId && i.status !== "Batal" && invoiceSisa(i) > 0,
     )
     .map((i) => toInvoiceView(i.id)!)
     .sort((a, b) => a.jatuhTempo.localeCompare(b.jatuhTempo));
@@ -345,7 +346,7 @@ export async function exportAging() {
   await latency("read");
   const report = await getAgingReport();
   const columns: ExcelColumn<AgingRow>[] = [
-    { header: "Pangkalan", value: (r) => r.pangkalan, width: 26 },
+    { header: outletLabelTitle(), value: (r) => r.outlet, width: 26 },
     { header: "Termin (hari)", value: (r) => r.termin, type: "number", width: 12 },
     { header: "Plafon", value: (r) => r.batasKredit, type: "currency", width: 16 },
     ...report.buckets.map((b) => ({

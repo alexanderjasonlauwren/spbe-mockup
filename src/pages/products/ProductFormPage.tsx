@@ -131,7 +131,7 @@ export function ProductFormPage() {
                   id="nama"
                   value={form.nama}
                   invalid={!!errors.nama}
-                  placeholder="LPG 3 kg Subsidi"
+                  placeholder="Nama produk"
                   onChange={(e) => set("nama", e.target.value)}
                 />
               </Field>

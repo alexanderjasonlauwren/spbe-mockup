@@ -35,6 +35,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatDateId, formatNumber, formatRupiah, formatRupiahShort } from "@/lib/format";
+import { outletLabel, outletLabelTitle, unitLabel } from "@/lib/lexicon";
 
 type Tab = "umur" | "tagihan";
 
@@ -46,7 +47,7 @@ export function ReceivablesPage() {
       <PageHeader
         eyebrow="Keuangan"
         title="Piutang"
-        description="Siapa berutang berapa, dan sejak kapan. Tagihan yang lewat jatuh tempo memblokir pengiriman berikutnya ke pangkalan tersebut."
+        description={`Siapa berutang berapa, dan sejak kapan. Tagihan yang lewat jatuh tempo memblokir pengiriman berikutnya ke ${outletLabel()} tersebut.`}
         meta={
           <SegmentedControl
             value={tab}
@@ -73,7 +74,7 @@ function AgingSection() {
     errorTitle: "Ekspor gagal",
     success: (n) => ({
       title: "Umur piutang diunduh",
-      description: `${n} pangkalan diekspor ke Excel.`,
+      description: `${n} ${outletLabel()} diekspor ke Excel.`,
     }),
   });
 
@@ -82,15 +83,15 @@ function AgingSection() {
 
   const columns: Column<AgingRow>[] = [
     {
-      key: "pangkalan",
-      header: "Pangkalan",
+      key: outletLabel(),
+      header: outletLabelTitle(),
       render: (row) => (
         <>
           <Link
-            to={`/pangkalan/${row.pangkalanId}`}
+            to={`/outlet/${row.outletId}`}
             className="block font-medium text-ink hover:underline hover:decoration-signal hover:decoration-2 hover:underline-offset-4"
           >
-            {row.pangkalan}
+            {row.outlet}
           </Link>
           <span className="block text-2xs text-ink-muted">
             Termin <span className="data">{row.termin}</span> hari
@@ -103,7 +104,7 @@ function AgingSection() {
           </span>
         </>
       ),
-      sortValue: (row) => row.pangkalan,
+      sortValue: (row) => row.outlet,
     },
     ...buckets.map((b) => ({
       key: b,
@@ -156,14 +157,14 @@ function AgingSection() {
         <Stat
           label="Total piutang"
           value={formatRupiahShort(r?.grandTotal ?? 0)}
-          hint={`Dari ${formatNumber(r?.rows.length ?? 0)} pangkalan`}
+          hint={`Dari ${formatNumber(r?.rows.length ?? 0)} ${outletLabel()}`}
         />
         <Stat
           label="Lewat jatuh tempo"
           value={formatRupiahShort(r?.jatuhTempoTotal ?? 0)}
           hint={
             r
-              ? `${formatNumber(r.pangkalanMenunggak)} pangkalan menunggak`
+              ? `${formatNumber(r.outletMenunggak)} ${outletLabel()} menunggak`
               : undefined
           }
           tone={r && r.jatuhTempoTotal > 0 ? "rust" : undefined}
@@ -230,7 +231,7 @@ function AgingSection() {
 
       <Panel>
         <PanelHeader
-          title="Umur piutang per pangkalan"
+          title={`Umur piutang per ${outletLabel()}`}
           hint="Dihitung dari tanggal jatuh tempo masing-masing tagihan"
           actions={
             <Button
@@ -248,7 +249,7 @@ function AgingSection() {
           columns={columns}
           data={r?.rows ?? []}
           isLoading={report.isLoading}
-          rowKey={(row) => row.pangkalanId}
+          rowKey={(row) => row.outletId}
           spineFor={(row) => (row.jatuhTempo > 0 ? "text-rust" : "text-pine")}
           pageSize={15}
           defaultSortKey="total"
@@ -279,7 +280,7 @@ function InvoiceSection() {
   const mutation = useDeskMutation({
     mutationFn: () =>
       submitCreditNote({
-        pangkalanId: creditNote!.pangkalanId,
+        outletId: creditNote!.outletId,
         invoiceId: creditNote!.id,
         jumlah: form.jumlah,
         alasan: form.alasan,
@@ -305,17 +306,17 @@ function InvoiceSection() {
       sortValue: (row) => row.nomor,
     },
     {
-      key: "pangkalan",
-      header: "Pangkalan",
+      key: outletLabel(),
+      header: outletLabelTitle(),
       render: (row) => (
         <Link
-          to={`/pangkalan/${row.pangkalanId}`}
+          to={`/outlet/${row.outletId}`}
           className="font-medium text-ink hover:underline hover:decoration-signal hover:decoration-2 hover:underline-offset-4"
         >
-          {row.pangkalan}
+          {row.outlet}
         </Link>
       ),
-      sortValue: (row) => row.pangkalan,
+      sortValue: (row) => row.outlet,
     },
     {
       key: "jatuhTempo",
@@ -427,7 +428,7 @@ function InvoiceSection() {
               <SearchInput
                 value={search}
                 onChange={setSearch}
-                placeholder="Nomor tagihan, pangkalan, surat jalan"
+                placeholder={`Nomor tagihan, ${outletLabel()}, surat jalan`}
                 className="w-56"
               />
               <SegmentedControl
@@ -464,7 +465,7 @@ function InvoiceSection() {
           <DialogHeader>
             <DialogTitle>Nota kredit untuk {creditNote?.nomor}</DialogTitle>
             <DialogDescription>
-              Mengurangi jumlah yang ditagih — untuk tabung yang dikembalikan atau
+              Mengurangi jumlah yang ditagih — untuk barang yang dikembalikan atau
               koreksi penagihan. Tercatat sebagai retur penjualan, bukan pengurangan
               omzet kotor.
             </DialogDescription>
@@ -499,7 +500,7 @@ function InvoiceSection() {
                 rows={3}
                 value={form.alasan}
                 onChange={(e) => setForm({ ...form, alasan: e.target.value })}
-                placeholder="Contoh: 5 tabung dikembalikan karena segel rusak."
+                placeholder={`Contoh: 5 ${unitLabel()} dikembalikan karena segel rusak.`}
               />
             </Field>
           </div>

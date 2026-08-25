@@ -14,6 +14,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { STATUS_HEX, getStatusVariant } from "@/lib/status";
 import type { DriverCard, MonitoringAssignment, MonitoringRow } from "../types";
 import { buildRoundSequence, type StopState } from "../lib/roundSequence";
+import { unitLabel } from "@/lib/lexicon";
 
 // Fix default marker icons broken by bundlers.
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)
@@ -56,7 +57,7 @@ function makeDriverIcon(initials: string, color: string, isSelected: boolean) {
   });
 }
 
-function makePangkalanIcon(color: string) {
+function makeOutletIcon(color: string) {
   return L.divIcon({
     className: "",
     html: `<div style="
@@ -244,7 +245,7 @@ export function DistribusiMap({
   );
 
   const resolvedAssignments = useMemo(() => {
-    const pangkalanRow = new Map(points.map((row) => [row.pangkalanId, row]));
+    const outletRow = new Map(points.map((row) => [row.outletId, row]));
     const driverById = new Map(drivers.map((driver) => [driver.id, driver]));
 
     return assignments
@@ -254,7 +255,7 @@ export function DistribusiMap({
         return {
           assignment,
           driver,
-          target: pangkalanRow.get(assignment.pangkalanId),
+          target: outletRow.get(assignment.outletId),
           driverCoord: [
             assignment.driverCoord.lat,
             assignment.driverCoord.lng,
@@ -412,11 +413,11 @@ export function DistribusiMap({
       buildRoundSequence(
         rows,
         focusedRound?.driver.id ?? null,
-        focusedRound?.assignment.pangkalanId,
+        focusedRound?.assignment.outletId,
       ),
     [focusedRound, rows],
   );
-  const stopSequence = sequence.byPangkalan;
+  const stopSequence = sequence.byOutlet;
 
   const numberedStops = sequence.numbered;
 
@@ -459,7 +460,7 @@ export function DistribusiMap({
         {points.map((p) => {
           // On a focused round the outlets stop being scenery and become the
           // sequence: numbered, with the one being driven to carrying a halo.
-          const seq = focused ? stopSequence.get(p.pangkalanId) : undefined;
+          const seq = focused ? stopSequence.get(p.outletId) : undefined;
           const offRound = !!focused && !seq;
 
           return (
@@ -471,7 +472,7 @@ export function DistribusiMap({
               icon={
                 seq
                   ? makeStopIcon(seq.order, seq.state, focused!.color, numberedStops)
-                  : makePangkalanIcon(p.color)
+                  : makeOutletIcon(p.color)
               }
             >
               <Popup>
@@ -486,12 +487,12 @@ export function DistribusiMap({
                       {seq.state === "next" && " · tujuan berikutnya"}
                     </p>
                   )}
-                  <p className="font-bold text-sm">{p.pangkalan}</p>
+                  <p className="font-bold text-sm">{p.outlet}</p>
                   <p className="text-ink-muted">{p.alamat}</p>
                   <p className="text-ink-muted">Status: {p.status}</p>
                   <p className="text-ink-muted">
                     Realisasi: {p.realisasi.toLocaleString("id-ID")} /{" "}
-                    {p.target.toLocaleString("id-ID")} tabung
+                    {p.target.toLocaleString("id-ID")} {unitLabel()}
                   </p>
                 </div>
               </Popup>
@@ -595,7 +596,7 @@ export function DistribusiMap({
                     <p className="text-ink-muted">
                       {selesai
                         ? "Semua pemberhentian selesai"
-                        : `Tujuan berikutnya: ${a.target?.pangkalan ?? "—"}`}
+                        : `Tujuan berikutnya: ${a.target?.outlet ?? "—"}`}
                     </p>
                     <p className="text-ink-muted">
                       Sisa {a.assignment.stops.length} pemberhentian
@@ -621,7 +622,7 @@ export function DistribusiMap({
           {activeDrivers} armada berjalan
         </span>
         <span className="rounded-sm border border-line bg-panel/95 px-2.5 py-1 text-2xs font-semibold text-ink-muted">
-          <span className="data">{rows.length}</span> pangkalan
+          <span className="data">{rows.length}</span> outlet
         </span>
       </div>
 
@@ -677,7 +678,7 @@ export function DistribusiMap({
             {selected.driver.name}
           </p>
           <p className="text-xs text-ink-muted">
-            {selected.driver.status} · menuju {selected.target?.pangkalan ?? "—"}
+            {selected.driver.status} · menuju {selected.target?.outlet ?? "—"}
           </p>
         </div>
       )}

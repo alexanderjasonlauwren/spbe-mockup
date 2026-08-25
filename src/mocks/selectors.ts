@@ -2,7 +2,7 @@
  * Read-side helpers shared by the feature APIs.
  *
  * Anything that joins collections or aggregates lives here, so the same number
- * (today's tonnage, a pangkalan's name, quota left on an SA) is computed one
+ * (today's tonnage, a outlet's name, quota left on an SA) is computed one
  * way for every page that shows it.
  */
 
@@ -12,7 +12,7 @@ import type {
   DeliveryEntity,
   Database,
   ID,
-  PangkalanEntity,
+  OutletEntity,
   DriverEntity,
 } from "./types";
 
@@ -25,13 +25,13 @@ export function todayIso(): string {
   return isoDate(startOfToday());
 }
 
-export function pangkalanById(id: ID | null): PangkalanEntity | undefined {
+export function outletById(id: ID | null): OutletEntity | undefined {
   if (!id) return undefined;
-  return scopedDb().pangkalan.find((p) => p.id === id);
+  return scopedDb().outlets.find((p) => p.id === id);
 }
 
-export function pangkalanName(id: ID | null): string {
-  return pangkalanById(id)?.nama ?? "—";
+export function outletName(id: ID | null): string {
+  return outletById(id)?.nama ?? "—";
 }
 
 export function driverById(id: ID | null): DriverEntity | undefined {
@@ -121,7 +121,7 @@ export function shareByKecamatan(limit = 4) {
   const totals = new Map<string, number>();
   for (const dl of d.deliveries) {
     if (dl.tanggal < first) continue;
-    const pkl = d.pangkalan.find((p) => p.id === dl.pangkalanId);
+    const pkl = d.outlets.find((p) => p.id === dl.outletId);
     if (!pkl) continue;
     totals.set(pkl.kecamatan, (totals.get(pkl.kecamatan) ?? 0) + dl.realisasi);
   }

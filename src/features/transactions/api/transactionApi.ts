@@ -2,7 +2,9 @@ import { scopedDb } from "@/mocks/scope";
 import { latency } from "@/mocks/db";
 import { isoDate, startOfToday } from "@/mocks/seed";
 import { exportCsv, exportExcel, timestampSuffix, type ExcelColumn } from "@/lib/export";
+import { productOf } from "@/mocks/lines";
 import type { DeliveryStatus, InvoiceStatus } from "@/mocks/types";
+import { outletLabelTitle, unitLabel } from "@/lib/lexicon";
 
 /**
  * One line of the finance ledger.
@@ -18,9 +20,9 @@ export interface TransactionRow {
   invoice: string;
   rencana: string;
   nomorSA: string;
-  pangkalanId: string;
-  pangkalan: string;
-  kodePangkalan: string;
+  outletId: string;
+  outlet: string;
+  kodeOutlet: string;
   kecamatan: string;
   driverId: string;
   driver: string;
@@ -43,7 +45,7 @@ export interface TransactionFilters {
   from?: string;
   to?: string;
   search?: string;
-  pangkalanId?: string;
+  outletId?: string;
   kecamatan?: string;
   driverId?: string;
   statusKirim?: string;
@@ -52,13 +54,13 @@ export interface TransactionFilters {
 
 export interface TransactionSummary {
   jumlah: number;
-  tabung: number;
+  unit: number;
   nilai: number;
   terverifikasi: number;
   menunggu: number;
   ditolak: number;
   belumDitagih: number;
-  pangkalan: number;
+  outlet: number;
 }
 
 /** Default window: the current calendar month. */
@@ -72,9 +74,8 @@ export function defaultRange() {
 
 function buildRows(): TransactionRow[] {
   const db = scopedDb();
-  const harga = db.settings.hargaPerTabung;
 
-  const pangkalanById = new Map(db.pangkalan.map((p) => [p.id, p]));
+  const outletById = new Map(db.outlets.map((p) => [p.id, p]));
   const driverById = new Map(db.drivers.map((d) => [d.id, d]));
   const planById = new Map(db.plans.map((p) => [p.id, p]));
   const saById = new Map(db.scheduleAgreements.map((s) => [s.id, s]));
@@ -84,7 +85,7 @@ function buildRows(): TransactionRow[] {
   );
 
   const fromDeliveries: TransactionRow[] = db.deliveries.map((d) => {
-    const pkl = pangkalanById.get(d.pangkalanId);
+    const pkl = outletById.get(d.outletId);
     const drv = driverById.get(d.driverId);
     const plan = planById.get(d.planId);
     const sa = plan ? saById.get(plan.saId) : undefined;
@@ -97,9 +98,9 @@ function buildRows(): TransactionRow[] {
       invoice: inv?.nomor ?? "—",
       rencana: plan?.kode ?? "—",
       nomorSA: sa?.nomorSA ?? "—",
-      pangkalanId: d.pangkalanId,
-      pangkalan: pkl?.nama ?? "—",
-      kodePangkalan: pkl?.kode ?? "—",
+      outletId: d.outletId,
+      outlet: pkl?.nama ?? "—",
+      kodeOutlet: pkl?.kode ?? "—",
       kecamatan: pkl?.kecamatan ?? "—",
       driverId: d.driverId,
       driver: drv?.nama ?? "—",
@@ -108,7 +109,15 @@ function buildRows(): TransactionRow[] {
       target: d.target,
       realisasi: d.realisasi,
       selisih: d.realisasi - d.target,
-      nominal: inv?.total ?? d.realisasi * harga,
+      // No invoice yet: value what is on the truck at catalogue prices, so an
+      // open drop still shows a plausible figure instead of nothing.
+      nominal:
+        inv?.total ??
+        d.lines.reduce(
+          (sum, l) =>
+            sum + l.realisasi * (productOf(db.products, l.productId)?.hargaJual ?? 0),
+          0,
+        ),
       bank: "—",
       noRekening: "—",
       statusKirim: d.status,
@@ -124,7 +133,7 @@ function buildRows(): TransactionRow[] {
   const standalone: TransactionRow[] = db.invoices
     .filter((i) => !i.deliveryId)
     .map((p) => {
-      const pkl = pangkalanById.get(p.pangkalanId);
+      const pkl = outletById.get(p.outletId);
       return {
         id: p.id,
         tanggal: p.tanggal,
@@ -132,16 +141,16 @@ function buildRows(): TransactionRow[] {
         invoice: p.nomor,
         rencana: "—",
         nomorSA: "—",
-        pangkalanId: p.pangkalanId,
-        pangkalan: pkl?.nama ?? "—",
-        kodePangkalan: pkl?.kode ?? "—",
+        outletId: p.outletId,
+        outlet: pkl?.nama ?? "—",
+        kodeOutlet: pkl?.kode ?? "—",
         kecamatan: pkl?.kecamatan ?? "—",
         driverId: "",
         driver: "—",
         plat: "—",
         jamRencana: "—",
         target: 0,
-        realisasi: p.jumlahTabung,
+        realisasi: p.jumlahUnit,
         selisih: 0,
         nominal: p.total,
         bank: "—",
@@ -164,7 +173,7 @@ function applyFilters(rows: TransactionRow[], f?: TransactionFilters) {
   return rows.filter((r) => {
     if (f?.from && r.tanggal < f.from) return false;
     if (f?.to && r.tanggal > f.to) return false;
-    if (f?.pangkalanId && f.pangkalanId !== "Semua" && r.pangkalanId !== f.pangkalanId)
+    if (f?.outletId && f.outletId !== "Semua" && r.outletId !== f.outletId)
       return false;
     if (f?.kecamatan && f.kecamatan !== "Semua" && r.kecamatan !== f.kecamatan)
       return false;
@@ -178,8 +187,8 @@ function applyFilters(rows: TransactionRow[], f?: TransactionFilters) {
       return (
         r.suratJalan.toLowerCase().includes(q) ||
         r.invoice.toLowerCase().includes(q) ||
-        r.pangkalan.toLowerCase().includes(q) ||
-        r.kodePangkalan.toLowerCase().includes(q) ||
+        r.outlet.toLowerCase().includes(q) ||
+        r.kodeOutlet.toLowerCase().includes(q) ||
         r.driver.toLowerCase().includes(q) ||
         r.plat.toLowerCase().includes(q)
       );
@@ -205,13 +214,13 @@ export async function getTransactionSummary(
 
   return {
     jumlah: rows.length,
-    tabung: rows.reduce((s, r) => s + r.realisasi, 0),
+    unit: rows.reduce((s, r) => s + r.realisasi, 0),
     nilai: rows.reduce((s, r) => s + r.nominal, 0),
     terverifikasi: sumWhere("Lunas"),
     menunggu: sumWhere("Terbit") + sumWhere("Sebagian"),
     ditolak: sumWhere("Jatuh Tempo"),
     belumDitagih: sumWhere("Belum ditagih"),
-    pangkalan: new Set(rows.map((r) => r.pangkalanId)).size,
+    outlet: new Set(rows.map((r) => r.outletId)).size,
   };
 }
 
@@ -220,10 +229,10 @@ export async function getTransactionFilterOptions() {
   await latency("read");
   const db = scopedDb();
   return {
-    pangkalan: db.pangkalan
+    outlet: db.outlets
       .map((p) => ({ id: p.id, label: p.nama }))
       .sort((a, b) => a.label.localeCompare(b.label)),
-    kecamatan: [...new Set(db.pangkalan.map((p) => p.kecamatan))].sort(),
+    kecamatan: [...new Set(db.outlets.map((p) => p.kecamatan))].sort(),
     drivers: db.drivers
       .map((d) => ({ id: d.id, label: `${d.nama} — ${d.plat}` }))
       .sort((a, b) => a.label.localeCompare(b.label)),
@@ -238,13 +247,13 @@ const EXPORT_COLUMNS: ExcelColumn<TransactionRow>[] = [
   { header: "Invoice", value: (r) => r.invoice, width: 20 },
   { header: "Rencana", value: (r) => r.rencana, width: 15 },
   { header: "Nomor SA", value: (r) => r.nomorSA, width: 16 },
-  { header: "Kode Pangkalan", value: (r) => r.kodePangkalan, width: 14 },
-  { header: "Pangkalan", value: (r) => r.pangkalan, width: 26 },
+  { header: `Kode ${outletLabelTitle()}`, value: (r) => r.kodeOutlet, width: 14 },
+  { header: outletLabelTitle(), value: (r) => r.outlet, width: 26 },
   { header: "Kecamatan", value: (r) => r.kecamatan, width: 16 },
   { header: "Driver", value: (r) => r.driver, width: 18 },
   { header: "Plat", value: (r) => r.plat, width: 12 },
-  { header: "Target (tabung)", value: (r) => r.target, type: "number", width: 13 },
-  { header: "Realisasi (tabung)", value: (r) => r.realisasi, type: "number", width: 15 },
+  { header: `Target (${unitLabel()})`, value: (r) => r.target, type: "number", width: 13 },
+  { header: `Realisasi (${unitLabel()})`, value: (r) => r.realisasi, type: "number", width: 15 },
   { header: "Selisih", value: (r) => r.selisih, type: "number", width: 10 },
   { header: "Nominal", value: (r) => r.nominal, type: "currency", width: 16 },
   { header: "Bank", value: (r) => r.bank, width: 10 },

@@ -27,6 +27,7 @@ import {
   relativeTime,
 } from "@/lib/format";
 import type { RecentActivity } from "@/features/dashboard/types";
+import { outletLabel, outletLabelTitle, unitLabel, unitLabelTitle } from "@/lib/lexicon";
 
 const activityColumns: Column<RecentActivity>[] = [
   {
@@ -37,10 +38,10 @@ const activityColumns: Column<RecentActivity>[] = [
     sortValue: (row) => row.tanggal,
   },
   {
-    key: "pangkalan",
-    header: "Pangkalan",
-    render: (row) => <span className="font-medium text-ink">{row.pangkalan}</span>,
-    sortValue: (row) => row.pangkalan,
+    key: outletLabel(),
+    header: outletLabelTitle(),
+    render: (row) => <span className="font-medium text-ink">{row.outlet}</span>,
+    sortValue: (row) => row.outlet,
   },
   {
     key: "driver",
@@ -49,14 +50,14 @@ const activityColumns: Column<RecentActivity>[] = [
     sortValue: (row) => row.driver,
   },
   {
-    key: "jumlahTabung",
-    header: "Tabung",
+    key: "jumlahUnit",
+    header: unitLabelTitle(),
     align: "right",
     width: "7rem",
     render: (row) => (
-      <span className="data font-semibold text-ink">{formatNumber(row.jumlahTabung)}</span>
+      <span className="data font-semibold text-ink">{formatNumber(row.jumlahUnit)}</span>
     ),
-    sortValue: (row) => row.jumlahTabung,
+    sortValue: (row) => row.jumlahUnit,
   },
   {
     key: "status",
@@ -73,7 +74,7 @@ export function DashboardPage() {
     kpi,
     rail,
     monthlyChart,
-    pangkalanShares,
+    outletShares,
     recentActivities,
     audit,
     isLoading,
@@ -143,7 +144,7 @@ export function DashboardPage() {
         <StatTile
           label="Terkirim hari ini"
           value={kpi ? formatNumber(kpi.dailyDistributed) : undefined}
-          unit="tabung"
+          unit={unitLabel()}
           isLoading={isLoading}
           meter={kpi ? { value: kpi.dailyDistributed, max: kpi.dailyTarget } : undefined}
           hint={
@@ -166,7 +167,7 @@ export function DashboardPage() {
         <StatTile
           label="Sisa kuota bulan ini"
           value={kpi ? formatNumber(kpi.monthlyQuotaRemaining) : undefined}
-          unit="tabung"
+          unit={unitLabel()}
           isLoading={isLoading}
           meter={
             kpi ? { value: quotaUsed, max: kpi.monthlyQuotaTotal, tone: "ink" as const } : undefined
@@ -221,7 +222,7 @@ export function DashboardPage() {
               {kpi.lateDeliveries} surat jalan tertunda hari ini.
             </span>{" "}
             <span className="text-ink-muted">
-              Pangkalan tidak menerima muatan sesuai jadwal.
+              {outletLabelTitle()} tidak menerima muatan sesuai jadwal.
             </span>
           </p>
           <Button asChild size="sm" variant="outline">
@@ -249,7 +250,7 @@ export function DashboardPage() {
         <Panel className="lg:col-span-2">
           <PanelHeader title="Sebaran wilayah" hint="Realisasi per kecamatan" />
           <PanelBody>
-            <WilayahShareChart data={pangkalanShares} isLoading={isLoadingCharts} />
+            <WilayahShareChart data={outletShares} isLoading={isLoadingCharts} />
           </PanelBody>
         </Panel>
       </div>

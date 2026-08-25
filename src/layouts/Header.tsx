@@ -24,7 +24,7 @@ import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { relativeTime } from "@/lib/format";
 import { sectionFor, titleFor } from "./nav";
 import { CommandPalette } from "./CommandPalette";
-import { BranchSwitcher } from "@/features/tenancy/BranchSwitcher";
+import { ScopeSwitcher } from "@/features/tenancy/ScopeSwitcher";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -117,7 +117,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         {/* shrink-0 so the title block yields first and truncates. Without it
             nothing arbitrates between the two clusters and they collide. */}
         <div className="flex shrink-0 items-center gap-1.5">
-          <BranchSwitcher />
+          <ScopeSwitcher />
 
           <button
             onClick={() => setPaletteOpen(true)}

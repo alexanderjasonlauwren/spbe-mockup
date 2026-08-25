@@ -4,6 +4,7 @@ import type {
   ReminderRule,
   ReminderRuleKey,
 } from "@/mocks/types";
+import { outletLabel } from "@/lib/lexicon";
 
 export type { NotifChannel, NotificationSettings, ReminderRule, ReminderRuleKey };
 
@@ -94,7 +95,7 @@ export const RULE_META: RuleMeta[] = [
   {
     key: "orderPending",
     label: "Pesanan menumpuk",
-    description: "Pesanan pangkalan yang belum disetujui menumpuk di antrian.",
+    description: `Pesanan ${outletLabel()} yang belum disetujui menumpuk di antrian.`,
     ambangLabel: "Picu saat lebih dari",
     ambangSatuan: "pesanan",
     ambangMin: 1,

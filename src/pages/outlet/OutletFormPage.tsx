@@ -46,7 +46,7 @@ const EMPTY: FormState = {
   telepon: "",
   alamat: "",
   kecamatan: "",
-  kota: "Kota Bekasi",
+  kota: "Kota Salatiga",
   status: "Aktif",
   kuotaBulanan: 600,
   termin: 7,
@@ -318,7 +318,7 @@ export function OutletFormPage() {
                   list="kecamatan-list"
                   value={form.kecamatan}
                   invalid={!!errors.kecamatan}
-                  placeholder="Bekasi Selatan"
+                  placeholder="Sidorejo"
                   onChange={(e) => set("kecamatan", e.target.value)}
                 />
                 <datalist id="kecamatan-list">

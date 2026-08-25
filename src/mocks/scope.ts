@@ -23,6 +23,7 @@
  * gets consolidated figures.
  */
 
+import { setActingTenant } from "./actingTenant";
 import { getDb } from "./db";
 import type { Database, ID, Scoped, TenantEntity } from "./types";
 
@@ -46,6 +47,9 @@ let active: ActiveScope | null = null;
 
 export function setActiveScope(scope: ActiveScope) {
   active = scope;
+  // Mirrored so getDb() can resolve settings without importing this module —
+  // see mocks/actingTenant.ts for why that would recurse.
+  setActingTenant(scope.actingTenantId);
   // Scope bugs look exactly like stale data, so make the active scope
   // inspectable from the console while developing.
   if (import.meta.env.DEV) {

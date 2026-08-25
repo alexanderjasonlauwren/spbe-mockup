@@ -953,7 +953,7 @@ export function saveOutlet(
       nama: input.nama.trim(),
       alamat: input.alamat ?? "",
       kecamatan: input.kecamatan ?? "",
-      kota: input.kota ?? "Kota Bekasi",
+      kota: input.kota ?? "Kota Salatiga",
       lat: input.lat ?? -6.24,
       lng: input.lng ?? 107.0,
       penanggungJawab: input.penanggungJawab ?? "",
@@ -1222,7 +1222,23 @@ export function adjustStock(id: ID, delta: number, alasan: string) {
 
 export function saveSettings(patch: Partial<Database["settings"]>) {
   return mutate((db) => {
+    // Written to the ACTING tenant's own row, never to db.settings.
+    //
+    // db.settings is derived — the acting tenant's values resolved up the tree
+    // — so assigning to it would look like it worked and be discarded on the
+    // next getDb(). Worse, if it did persist, every inherited value the form
+    // rendered would become an override this tenant never chose, and its parent
+    // could not change it for them again. Writing only the patch keeps
+    // "inherited" and "set here" distinguishable.
+    const tenantId = getActiveScope().actingTenantId;
+    const own = db.settingsByTenant.find((r) => r.tenantId === tenantId);
+    if (own) {
+      own.values = { ...own.values, ...patch };
+    } else {
+      db.settingsByTenant.push({ tenantId, values: { ...patch } });
+    }
     db.settings = { ...db.settings, ...patch };
+
     recordAudit(db, {
       action: "settings.update",
       entity: "Settings",

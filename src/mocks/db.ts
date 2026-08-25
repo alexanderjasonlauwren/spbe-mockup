@@ -17,6 +17,8 @@ import {
   isoDate,
   startOfToday,
 } from "./seed";
+import { getActingTenant } from "./actingTenant";
+import { resolveSettings } from "./settingsResolver";
 import type { AuditEntry, Database, ReminderRuleKey } from "./types";
 
 const STORAGE_KEY = "sidistrib:db:v1";
@@ -90,6 +92,20 @@ export function getDb(): Database {
     db = read() ?? createSeedDatabase();
     write(db);
   }
+  // `settings` is derived, not stored: it is the acting tenant's row resolved up
+  // the tree. Resolved here rather than at each call site because a dozen
+  // readers across the console want the effective value and would otherwise
+  // each have to walk the hierarchy — and the one that forgot would silently
+  // render the root's vocabulary inside a subsidiary.
+  //
+  // Assigned onto the same object rather than returning a copy: mutate() writes
+  // `db` back to storage, and a copy here would drop every other change.
+  db.settings = resolveSettings(
+    db.settings,
+    db.settingsByTenant ?? [],
+    db.tenants,
+    getActingTenant() || db.tenants.find((t) => t.indukId === null)?.id || "",
+  );
   return db;
 }
 

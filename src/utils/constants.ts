@@ -17,9 +17,9 @@ export const MONTH_NAMES_ID = [
 ];
 
 export const SUPPLIER_LIST = [
-  "SPBE Jakarta Utara 01",
-  "SPBE Bekasi Utama",
-  "SPBE Tangerang Raya",
+  "SPBE Salatiga Utama",
+  "SPBE Ungaran Mandiri",
+  "SPBE Boyolali Raya",
   "SPBE Maju Jaya",
   "SPBE Sumber Rejeki",
   "SPBE Berkah Gas",

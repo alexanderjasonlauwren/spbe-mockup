@@ -51,7 +51,7 @@ const EMPTY: FormState = {
   email: "",
   role: "staff",
   telepon: "",
-  cabang: "Bekasi Pusat",
+  cabang: "Pool Salatiga",
 };
 
 export function UserListPage() {

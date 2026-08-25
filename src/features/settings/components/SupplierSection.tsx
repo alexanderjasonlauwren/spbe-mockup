@@ -207,7 +207,7 @@ export function SupplierSection() {
                     id="supplier-nama"
                     value={editing.nama}
                     invalid={!!error}
-                    placeholder={`${supplierLabel()} Bekasi Utama`}
+                    placeholder={`${supplierLabel()} Salatiga Utama`}
                     onChange={(e) => setEditing({ ...editing, nama: e.target.value })}
                   />
                 </Field>

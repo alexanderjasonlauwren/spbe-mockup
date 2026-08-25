@@ -84,7 +84,7 @@ export async function getMonitoringSnapshot(dateRange: {
         muatan: mine.reduce((s, d) => s + d.target, 0),
         tujuanOutlet: target?.nama,
         eta: running ? `${running.jamRencana} WIB` : undefined,
-        lokasi: driver.status === "Standby" ? "Pool Bekasi" : target?.kecamatan,
+        lokasi: driver.status === "Standby" ? DEPOT.nama : target?.kecamatan,
         durasi: driver.status === "Bongkar Muat" ? "±15 menit" : undefined,
         selesai: mine.filter((d) => d.status === "Selesai").length,
         total: mine.length,

@@ -744,6 +744,23 @@ export interface SettingsEntity {
   tema: "terang" | "gelap" | "sistem";
 }
 
+/**
+ * One tenant's own settings, with the fields it has chosen to set.
+ *
+ * `Partial`, and that is the whole design: a field absent here means "not set
+ * for this tenant, ask its parent". It mirrors iam.tenant_settings, where every
+ * column is nullable and NULL means inherit — so a subsidiary that renames only
+ * its lexicon still follows its group's working week.
+ *
+ * Flattening this to a full SettingsEntity per tenant would lose the
+ * distinction, and saving the resolved values back would silently turn every
+ * inherited value into an override the parent could never change again.
+ */
+export interface TenantSettingsEntity {
+  tenantId: ID;
+  values: Partial<SettingsEntity>;
+}
+
 export interface Database {
   version: number;
   seededAt: string;
@@ -776,5 +793,15 @@ export interface Database {
   journals: JournalEntity[];
   invoices: InvoiceEntity[];
   creditNotes: CreditNoteEntity[];
+  /**
+   * The acting tenant's settings, already resolved up the tree.
+   *
+   * Kept as a plain SettingsEntity because a dozen readers across the console
+   * want the effective value and nothing else — a print header wants the agency
+   * name, not the question of who set it. `getDb()` resolves it from
+   * `settingsByTenant` on every read.
+   */
   settings: SettingsEntity;
+  /** Per-tenant overrides. The stored truth; `settings` above is derived. */
+  settingsByTenant: TenantSettingsEntity[];
 }

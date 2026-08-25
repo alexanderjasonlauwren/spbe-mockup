@@ -34,10 +34,11 @@ import type {
   ReceiptEntity,
   SAEntity,
   SettingsEntity,
+  TenantSettingsEntity,
   UserEntity,
 } from "./types";
 
-export const DB_VERSION = 9;
+export const DB_VERSION = 10;
 
 /* ── deterministic RNG ─────────────────────────────────────────────────── */
 
@@ -89,25 +90,28 @@ function atTime(date: Date, hhmm: string): string {
 /* ── source vocabulary ─────────────────────────────────────────────────── */
 
 const SPBE = [
-  "SPBE Bekasi Utama",
-  "SPBE Tambun Mandiri",
-  "SPBE Cikarang Raya",
-  "SPBE Jatiasih Sejahtera",
+  "SPBE Salatiga Utama",
+  "SPBE Ungaran Mandiri",
+  "SPBE Boyolali Raya",
+  "SPBE Ambarawa Sejahtera",
 ];
 
 const KECAMATAN = [
-  "Bekasi Selatan",
-  "Bekasi Timur",
-  "Bekasi Utara",
-  "Bekasi Barat",
-  "Rawalumbu",
-  "Medan Satria",
-  "Bantargebang",
-  "Jatiasih",
-  "Pondok Gede",
-  "Tambun Selatan",
-  "Cikarang Barat",
-  "Cibitung",
+  // Salatiga's four kecamatan, then the surrounding Kab. Semarang districts an
+  // agency there actually serves. Salatiga city is small — four districts does
+  // not fill a round — so the ring around it is where the volume is.
+  "Sidorejo",
+  "Sidomukti",
+  "Tingkir",
+  "Argomulyo",
+  "Getasan",
+  "Tengaran",
+  "Suruh",
+  "Pabelan",
+  "Tuntang",
+  "Banyubiru",
+  "Bringin",
+  "Susukan",
 ];
 
 const OUTLET_NAMA = [
@@ -176,7 +180,7 @@ const BANKS = ["BCA", "BNI", "Mandiri", "BRI", "BSI"] as const;
 
 
 /** The agency yard per branch. Routes start here between runs. */
-export const DEPOT = { lat: -6.2607, lng: 106.9756, nama: "Pool Bekasi" };
+export const DEPOT = { lat: -7.3305, lng: 110.5084, nama: "Pool Salatiga" };
 
 /**
  * A group with two operating subsidiaries in different businesses.
@@ -192,60 +196,92 @@ export const DEPOT = { lat: -6.2607, lng: 106.9756, nama: "Pool Bekasi" };
  */
 export const TENANTS: TenantEntity[] = [
   {
-    id: "tnt-001", kode: "sinar-grup", nama: "Sinar Grup Nusantara",
+    id: "tnt-001", kode: "bimbo-holdings", nama: "Bimbo Holdings",
     indukId: null, level: 0, jenisUsaha: "holding", jenis: "grup", aktif: true,
   },
   {
-    id: "tnt-002", kode: "sinar-lpg", nama: "PT Sinar Distribusi Nusantara",
+    id: "tnt-002", kode: "pt-salatiga", nama: "PT Bimbo Salatiga",
     indukId: "tnt-001", level: 1, jenisUsaha: "lpg_distribution",
     jenis: "operasional", aktif: true,
   },
   {
-    id: "tnt-003", kode: "sinar-air", nama: "PT Sinar Air Ungaran",
+    id: "tnt-003", kode: "pt-pati", nama: "PT Bimbo Pati",
+    indukId: "tnt-001", level: 1, jenisUsaha: "lpg_distribution",
+    jenis: "operasional", aktif: true,
+  },
+  {
+    // Kept deliberately. Salatiga and Pati are both LPG, so switching between
+    // them proves tenant isolation but not the business-agnostic lexicon — the
+    // nouns would be identical either way. A third tenant in a different trade
+    // is the only way "the console is not an LPG console" is demonstrable on
+    // screen rather than merely claimed.
+    id: "tnt-004", kode: "pt-tirta", nama: "PT Bimbo Tirta",
     indukId: "tnt-001", level: 1, jenisUsaha: "water_depot",
     jenis: "operasional", aktif: true,
   },
 ];
 
 /**
- * The tenant everything else in this seed belongs to.
+ * The tenant the operational seed hangs off.
  *
- * The LPG subsidiary, not the group: a holding runs no operations, so hanging
- * branches, outlets and deliveries off it would describe a company that does
- * not exist. The water depot is seeded thin on purpose — enough to switch into
- * and see a different vocabulary, not a second full dataset to maintain.
+ * PT Salatiga, not the holding: a `grup` tenant owns others and runs nothing
+ * itself, so hanging outlets and deliveries off it would describe a company that
+ * does not exist. Pati and Tirta are seeded thin — enough to switch into and see
+ * a different scope and vocabulary, not a second full dataset to maintain.
  */
 export const TENANT: TenantEntity = TENANTS[1];
 
 /** Three branches, so consolidated views have something to consolidate. */
 export const BRANCHES: BranchEntity[] = [
+  // One branch per operating tenant, and exactly one: neither PT has
+  // organisational branches, but branch_id is NOT NULL on every operational
+  // table in the backend and document number series are issued per branch, so
+  // the single default row IS the pool where vehicles load. More can be added
+  // later with no migration.
   {
-    id: "brc-001", tenantId: TENANT.id, kode: "BKS", nama: "Cabang Bekasi",
-    kota: "Kota Bekasi", provinsi: "Jawa Barat",
-    alamat: "Jl. Raya Industri No. 42, Bekasi Selatan",
-    penanggungJawab: "Alex Lawrence", telepon: "021-8899-4210",
-    lat: -6.2607, lng: 106.9756, utama: true, aktif: true,
+    id: "brc-001", tenantId: "tnt-002", kode: "SLT", nama: "Pool Salatiga",
+    kota: "Kota Salatiga", provinsi: "Jawa Tengah",
+    alamat: "Jl. Lingkar Selatan No. 42, Sidorejo",
+    penanggungJawab: "Alex Lawrence", telepon: "0298-321-4210",
+    lat: -7.3305, lng: 110.5084, utama: true, aktif: true,
   },
   {
-    id: "brc-002", tenantId: TENANT.id, kode: "CKR", nama: "Cabang Cikarang",
-    kota: "Kab. Bekasi", provinsi: "Jawa Barat",
-    alamat: "Jl. Jababeka Raya Blok C No. 8, Cikarang",
-    penanggungJawab: "Siti Nurhaliza", telepon: "021-8934-7720",
-    lat: -6.2797, lng: 107.1425, utama: false, aktif: true,
+    id: "brc-002", tenantId: "tnt-003", kode: "PTI", nama: "Pool Pati",
+    kota: "Kab. Pati", provinsi: "Jawa Tengah",
+    alamat: "Jl. Raya Pati-Juwana Km. 4, Margorejo",
+    penanggungJawab: "Siti Nurhaliza", telepon: "0295-381-7720",
+    lat: -6.7559, lng: 111.0388, utama: true, aktif: true,
   },
   {
-    id: "brc-003", tenantId: TENANT.id, kode: "KRW", nama: "Cabang Karawang",
-    kota: "Kab. Karawang", provinsi: "Jawa Barat",
-    alamat: "Jl. Ahmad Yani No. 117, Karawang Barat",
-    penanggungJawab: "Joko Prasetyo", telepon: "0267-641-880",
-    lat: -6.3227, lng: 107.3376, utama: false, aktif: true,
+    id: "brc-003", tenantId: "tnt-004", kode: "TRT", nama: "Depot Tirta Ungaran",
+    kota: "Kab. Semarang", provinsi: "Jawa Tengah",
+    alamat: "Jl. Diponegoro No. 118, Ungaran Barat",
+    penanggungJawab: "Joko Prasetyo", telepon: "024-692-1880",
+    lat: -7.1389, lng: 110.4058, utama: true, aktif: true,
   },
 ];
 
 /** Round-robin assignment, so every branch has a working day of its own. */
-function branchFor(index: number): { tenantId: string; branchId: string } {
-  const b = BRANCHES[index % BRANCHES.length];
-  return { tenantId: TENANT.id, branchId: b.id };
+/**
+ * Which branch — and therefore which tenant — a generated row belongs to.
+ *
+ * The tenant comes from the BRANCH, not from a constant. Branches used to all
+ * sit under one tenant, so `TENANT.id` was right; now each pool belongs to a
+ * different PT, and stamping every row with the same tenant would put Pati's
+ * outlets inside Salatiga.
+ *
+ * Operational data is seeded for Salatiga only — see TENANT — so this returns
+ * its pool, and takes no index. It used to round-robin across three branches of
+ * one tenant; each pool now belongs to a different PT, so spreading rows across
+ * them would put Pati's outlets inside Salatiga.
+ *
+ * Pati and Tirta exist to be switched into. A tenant whose console is empty is
+ * the honest demonstration that scope filtering works — data that appeared
+ * everywhere would prove nothing.
+ */
+function branchFor(): { tenantId: string; branchId: string } {
+  const b = BRANCHES[0];
+  return { tenantId: b.tenantId, branchId: b.id };
 }
 
 /* ── generators ────────────────────────────────────────────────────────── */
@@ -255,15 +291,22 @@ function seedOutlet(): OutletEntity[] {
     const kecamatan = KECAMATAN[i % KECAMATAN.length];
     const statusRoll = rand();
     return {
-      ...branchFor(i),
+      ...branchFor(),
       id: `pkl-${String(i + 1).padStart(3, "0")}`,
       kode: `PKL-${String(i + 1).padStart(4, "0")}`,
       nama,
       alamat: `Jl. ${pick(["Melati", "Kenanga", "Raya Industri", "Pahlawan", "Merdeka", "Cempaka", "Diponegoro", "Sudirman"])} No. ${randInt(1, 180)}`,
       kecamatan,
-      kota: i % 5 === 0 ? "Kab. Bekasi" : "Kota Bekasi",
-      lat: -6.2 - rand() * 0.09,
-      lng: 106.96 + rand() * 0.09,
+      kota: i % 5 === 0 ? "Kab. Semarang" : "Kota Salatiga",
+      // A box south and east of the pool.
+      //
+      // The direction is not decorative. Salatiga sits on the slope between
+      // Merbabu and Telomoyo, and the served districts — Getasan, Tengaran,
+      // Suruh, Tuntang — lie south and east of the city. A symmetric jitter
+      // would scatter pins onto the mountains to the west, and MonitoringPage
+      // renders these on a real Leaflet map where that is immediately visible.
+      lat: DEPOT.lat - rand() * 0.09,
+      lng: DEPOT.lng + rand() * 0.09,
       penanggungJawab: ORANG[(i * 3 + 5) % ORANG.length],
       telepon: `08${randInt(11, 99)}${randInt(1000000, 9999999)}`,
       status:
@@ -286,7 +329,7 @@ function seedDrivers(): DriverEntity[] {
   return Array.from({ length: 8 }, (_, i) => {
     const unit = ARMADA[i % ARMADA.length];
     return {
-      ...branchFor(i),
+      ...branchFor(),
       id: `drv-${String(i + 1).padStart(3, "0")}`,
       nama: ORANG[i],
       telepon: `08${randInt(11, 99)}${randInt(1000000, 9999999)}`,
@@ -320,7 +363,7 @@ function seedScheduleAgreements(): SAEntity[] {
     const berakhir = new Date(y, m + p.offset + 1, 0);
     const totalKuota = randInt(12, 60) * 10_000;
     return {
-      ...branchFor(i),
+      ...branchFor(),
       id: `sa-${String(i + 1).padStart(3, "0")}`,
       nomorSA: `SA-${mulai.getFullYear()}-${pad(mulai.getMonth() + 1)}-${pad(randInt(1, 99))}`,
       supplier: SPBE[i % SPBE.length],
@@ -731,7 +774,7 @@ function seedReceipts(
     return {
       lines,
       jumlahUnit: jumlah,
-      ...branchFor(i),
+      ...branchFor(),
       id: `ocr-${String(i + 1).padStart(3, "0")}`,
       namaBerkas: `kwitansi-${isoDate(addDays(startOfToday(), -randInt(0, 5)))}-${i + 1}.jpg`,
       outletId: confident > 0.25 ? pkl.id : null,
@@ -769,7 +812,7 @@ function seedOrders(
               ? "Ditolak"
               : "Selesai";
     return {
-      ...branchFor(i),
+      ...branchFor(),
       id: `ord-${String(i + 1).padStart(3, "0")}`,
       kode: `PO-${isoDate(masuk).replace(/-/g, "")}-${String(i + 1).padStart(3, "0")}`,
       outletId: pkl.id,
@@ -960,7 +1003,7 @@ function seedSupplier(): SupplierEntity[] {
     id: `supplier-${String(i + 1).padStart(3, "0")}`,
     kode: `SPBE-${String(i + 1).padStart(3, "0")}`,
     nama,
-    alamat: `Jl. ${pick(["Industri Raya", "Bypass", "Cikarang Utama", "Raya Tambun"])} No. ${randInt(1, 90)}`,
+    alamat: `Jl. ${pick(["Lingkar Selatan", "Fatmawati", "Soekarno-Hatta", "Raya Kopeng"])} No. ${randInt(1, 90)}`,
     penanggungJawab: ORANG[(i * 7 + 3) % ORANG.length],
     telepon: `021-${randInt(700, 899)}-${randInt(1000, 9999)}`,
     aktif: true,
@@ -969,28 +1012,98 @@ function seedSupplier(): SupplierEntity[] {
 
 function seedBankAccounts(): BankAccountEntity[] {
   const rows: Array<[BankNameEntity, string]> = [
-    ["BCA", "Bekasi Timur"],
-    ["Mandiri", "Bekasi Cyber Park"],
+    ["BCA", "Salatiga"],
+    ["Mandiri", "Ungaran"],
     ["BRI", "Tambun"],
   ];
   return rows.map(([bank, cabang], i) => ({
     id: `bank-${String(i + 1).padStart(3, "0")}`,
     bank,
     nomorRekening: `${randInt(100, 999)}-${randInt(100000, 999999)}-${randInt(10, 99)}`,
-    atasNama: "PT Sinar Distribusi Nusantara",
+    atasNama: "PT Bimbo Salatiga",
     cabang,
     utama: i === 0,
     aktif: true,
   }));
 }
 
+/**
+ * What each tenant sets for itself.
+ *
+ * Partial by design: a field absent here is inherited from the parent, which is
+ * the browser's mirror of iam.tenant_settings where NULL means "ask my parent".
+ *
+ * The shape of this seed is the demonstration. The group sets the working day
+ * and the holding's identity once; Salatiga and Pati override only what is
+ * genuinely theirs — their own legal name and agent number — and follow the
+ * group on everything else. Tirta overrides its LEXICON, which is what makes
+ * switching into it visibly re-label every screen: galon, depot, pabrik instead
+ * of tabung, pangkalan, SPBE.
+ *
+ * If a subsidiary here restated the working day, the demo would still look
+ * right and would prove nothing — inheritance is only observable where a value
+ * is absent.
+ */
+function seedSettingsByTenant(): TenantSettingsEntity[] {
+  return [
+    {
+      // The group. Sets the operating window and the notification rules once,
+      // for everyone beneath it.
+      tenantId: "tnt-001",
+      values: {
+        namaPerusahaan: "Bimbo Holdings",
+        alamat: "Jl. Pemuda No. 118, Semarang Tengah, Kota Semarang 50139",
+        zonaWaktu: "Asia/Jakarta",
+        jamOperasionalMulai: "06:00",
+        jamOperasionalSelesai: "18:00",
+        istilah: { satuan: "tabung", outlet: "pangkalan", pemasok: "SPBE" },
+      },
+    },
+    {
+      // Its own legal identity, and nothing else. Hours and lexicon come from
+      // the group — which is the point.
+      tenantId: "tnt-002",
+      values: {
+        namaPerusahaan: "PT Bimbo Salatiga",
+        nomorAgen: "AG-3373-0142",
+        alamat: "Jl. Lingkar Selatan No. 42, Sidorejo, Kota Salatiga 50711",
+        telepon: "0298-321-4210",
+        email: "ops@bimbo.co.id",
+      },
+    },
+    {
+      tenantId: "tnt-003",
+      values: {
+        namaPerusahaan: "PT Bimbo Pati",
+        nomorAgen: "AG-3318-0207",
+        alamat: "Jl. Raya Pati-Juwana Km. 4, Margorejo, Kab. Pati 59163",
+        telepon: "0295-381-7720",
+        email: "pati@bimbo.co.id",
+      },
+    },
+    {
+      // A different trade under the same holding. The lexicon override is the
+      // whole reason this tenant is seeded.
+      tenantId: "tnt-004",
+      values: {
+        namaPerusahaan: "PT Bimbo Tirta",
+        nomorAgen: "AG-3322-0311",
+        alamat: "Jl. Diponegoro No. 118, Ungaran Barat, Kab. Semarang 50517",
+        telepon: "024-692-1880",
+        email: "tirta@bimbo.co.id",
+        istilah: { satuan: "galon", outlet: "depot", pemasok: "pabrik" },
+      },
+    },
+  ];
+}
+
 function seedSettings(): SettingsEntity {
   return {
-    namaPerusahaan: "PT Sinar Distribusi Nusantara",
-    nomorAgen: "AG-3275-0142",
-    alamat: "Jl. Raya Industri No. 42, Bekasi Selatan, Kota Bekasi 17147",
-    telepon: "021-8899-4210",
-    email: "ops@sidistrib.id",
+    namaPerusahaan: "PT Bimbo Salatiga",
+    nomorAgen: "AG-3373-0142",
+    alamat: "Jl. Lingkar Selatan No. 42, Sidorejo, Kota Salatiga 50711",
+    telepon: "0298-321-4210",
+    email: "ops@bimbo.co.id",
     zonaWaktu: "Asia/Jakarta",
     jamOperasionalMulai: "06:00",
     jamOperasionalSelesai: "18:00",
@@ -1160,5 +1273,6 @@ export function createSeedDatabase(): Database {
     invoices,
     creditNotes,
     settings,
+    settingsByTenant: seedSettingsByTenant(),
   };
 }

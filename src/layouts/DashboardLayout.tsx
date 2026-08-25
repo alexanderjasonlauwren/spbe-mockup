@@ -6,6 +6,8 @@ import { Header } from "./Header";
 import { useOpsClock } from "@/hooks/useOpsClock";
 import { useSidebarShortcut, useSidebarStore } from "@/hooks/useSidebar";
 import { useScope } from "@/features/tenancy/useScope";
+import { getTenants } from "@/features/tenancy/api/tenancyApi";
+import { setTenantRegistry } from "@/features/tenancy/tenantRegistry";
 import { getSettings } from "@/features/settings/api/settingsApi";
 import { hydrateLexicon, setLexicon } from "@/lib/lexicon";
 import { scopeKey } from "@/mocks/scope";
@@ -16,6 +18,17 @@ export function DashboardLayout() {
   const collapsed = useSidebarStore((s) => s.collapsed);
 
   // Establishes the active branch before any child query runs.
+  // The tenant list, fetched through whichever adapter this build uses and
+  // handed to the registry that useScope reads synchronously. Done here because
+  // the layout owns the session and renders above every screen that needs a
+  // scope.
+  const tenantList = useQuery({
+    queryKey: ["tenants", "registry"],
+    queryFn: getTenants,
+    staleTime: 5 * 60_000,
+  });
+  if (tenantList.data) setTenantRegistry(tenantList.data);
+
   const scope = useScope();
   const { branchId } = scope;
 

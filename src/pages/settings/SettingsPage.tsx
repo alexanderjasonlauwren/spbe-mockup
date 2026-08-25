@@ -14,11 +14,13 @@ import {
   exportData,
   getSettingsDetail,
   clearSettingOverride,
-  INHERITABLE_FIELDS,
-  type InheritableFieldKey,
   resetData,
   updateSettings,
 } from "@/features/settings/api/settingsApi";
+import {
+  INHERITABLE_FIELDS,
+  type InheritableFieldKey,
+} from "@/features/settings/api/fields";
 import { advanceOperations } from "@/mocks/rules";
 import { useAuthStore } from "@/features/auth/store/authStore";
 import { ROLE_LABEL, ROLE_SUMMARY } from "@/features/users/api/userApi";
@@ -35,6 +37,7 @@ import {
   SelectInput,
   TextInput,
   TextareaInput,
+  Toggle,
 } from "@/components/common/Field";
 import { SupplierSection } from "@/features/settings/components/SupplierSection";
 import { BankSection } from "@/features/settings/components/BankSection";
@@ -89,10 +92,23 @@ export function SettingsPage() {
     setOwned(new Set(Object.keys(settings.data.own) as (keyof SettingsEntity)[]));
   }, [settings.data]);
 
+  /**
+   * Whether there is anything to save.
+   *
+   * Two ways there can be. The obvious one is an edited value. The other is a
+   * field the tenant has just CLAIMED without changing — "Ubah di sini" on a
+   * value it wants to keep at today's number but stop following the parent on.
+   * Comparing forms alone missed that: the badge flipped, Save stayed disabled,
+   * and the claim was lost on reload.
+   */
+  const claimed = settings.data
+    ? [...owned].some((f) => !(f in settings.data!.own))
+    : false;
+
   const dirty =
     !!form &&
     !!settings.data &&
-    JSON.stringify(form) !== JSON.stringify(settings.data.effective);
+    (claimed || JSON.stringify(form) !== JSON.stringify(settings.data.effective));
 
   /** The ancestor a field came from, when it is inherited. */
   const sourceOf = (field: InheritableFieldKey) =>
@@ -327,6 +343,107 @@ export function SettingsPage() {
                 onChange={(e) => set("alamat", e.target.value)}
               />
             </Field>
+          </PanelBody>
+        </Panel>
+        )}
+
+        {tab === "agen" && (
+        <Panel>
+          <PanelHeader
+            title="Identitas hukum"
+            hint="Tidak diwarisi — setiap badan hukum punya miliknya sendiri"
+          />
+          <PanelBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field
+              label="Nama legal"
+              htmlFor="legal"
+              hint="Sesuai akta. Berbeda dari nama dagang di atas."
+              className="sm:col-span-2"
+            >
+              <TextInput
+                id="legal"
+                value={form.namaLegal}
+                onChange={(e) => set("namaLegal", e.target.value)}
+              />
+            </Field>
+            <Field label="Nomor registrasi" htmlFor="nib" hint="NIB / SIUP">
+              <TextInput
+                id="nib"
+                mono
+                value={form.nomorRegistrasi}
+                onChange={(e) => set("nomorRegistrasi", e.target.value)}
+              />
+            </Field>
+            <div className="sm:col-span-2">
+              <Toggle
+                checked={form.pkp}
+                onChange={(next) => {
+                  set("pkp", next);
+                  // Mirrors ck_tenant_profiles_pkp_tax. A non-PKP entity must
+                  // not carry a rate at all, so clearing it here means the form
+                  // cannot submit a combination the database already refuses.
+                  if (!next) set("tarifPajakDefault", 0);
+                }}
+                label="Terdaftar sebagai PKP"
+                description="Hanya PKP yang boleh memungut PPN pada faktur."
+              />
+            </div>
+            {form.pkp && (
+              <Field label="Tarif PPN default (%)" htmlFor="ppn">
+                <TextInput
+                  id="ppn"
+                  type="number"
+                  mono
+                  min={0}
+                  max={100}
+                  value={form.tarifPajakDefault}
+                  onChange={(e) => set("tarifPajakDefault", Number(e.target.value))}
+                />
+              </Field>
+            )}
+          </PanelBody>
+        </Panel>
+        )}
+
+        {tab === "agen" && (
+        <Panel className="xl:col-span-2">
+          <PanelHeader
+            title="Kantor terdaftar"
+            hint="Alamat resmi badan hukum — bukan titik awal distribusi"
+          />
+          <PanelBody className="space-y-3">
+            <p className="text-xs leading-relaxed text-ink-muted">
+              Armada memuat dari <span className="font-medium text-ink">cabang</span>,
+              dan satu PT bisa punya beberapa. Koordinat di sini dipakai untuk
+              menampilkan tenant di peta dan sebagai titik awal cabang pertama
+              yang dibuat tanpa koordinat sendiri.
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Lintang (latitude)" htmlFor="lat">
+                <TextInput
+                  id="lat"
+                  type="number"
+                  mono
+                  step="0.0001"
+                  value={form.kantorLat ?? ""}
+                  onChange={(e) =>
+                    set("kantorLat", e.target.value === "" ? undefined : Number(e.target.value))
+                  }
+                />
+              </Field>
+              <Field label="Bujur (longitude)" htmlFor="lng">
+                <TextInput
+                  id="lng"
+                  type="number"
+                  mono
+                  step="0.0001"
+                  value={form.kantorLng ?? ""}
+                  onChange={(e) =>
+                    set("kantorLng", e.target.value === "" ? undefined : Number(e.target.value))
+                  }
+                />
+              </Field>
+            </div>
           </PanelBody>
         </Panel>
         )}

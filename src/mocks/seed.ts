@@ -1052,6 +1052,7 @@ function seedSettingsByTenant(): TenantSettingsEntity[] {
       tenantId: "tnt-001",
       values: {
         namaPerusahaan: "Bimbo Holdings",
+        namaLegal: "PT Bimbo Holdings Indonesia",
         alamat: "Jl. Pemuda No. 118, Semarang Tengah, Kota Semarang 50139",
         zonaWaktu: "Asia/Jakarta",
         jamOperasionalMulai: "06:00",
@@ -1065,7 +1066,13 @@ function seedSettingsByTenant(): TenantSettingsEntity[] {
       tenantId: "tnt-002",
       values: {
         namaPerusahaan: "PT Bimbo Salatiga",
+        namaLegal: "PT Bimbo Salatiga Sejahtera",
         nomorAgen: "AG-3373-0142",
+        nomorRegistrasi: "NIB-3373-0001-2024",
+        pkp: true,
+        tarifPajakDefault: 11,
+        kantorLat: -7.3305,
+        kantorLng: 110.5084,
         alamat: "Jl. Lingkar Selatan No. 42, Sidorejo, Kota Salatiga 50711",
         telepon: "0298-321-4210",
         email: "ops@bimbo.co.id",
@@ -1075,7 +1082,13 @@ function seedSettingsByTenant(): TenantSettingsEntity[] {
       tenantId: "tnt-003",
       values: {
         namaPerusahaan: "PT Bimbo Pati",
+        namaLegal: "PT Bimbo Pati Makmur",
         nomorAgen: "AG-3318-0207",
+        nomorRegistrasi: "NIB-3318-0004-2024",
+        pkp: true,
+        tarifPajakDefault: 11,
+        kantorLat: -6.7559,
+        kantorLng: 111.0388,
         alamat: "Jl. Raya Pati-Juwana Km. 4, Margorejo, Kab. Pati 59163",
         telepon: "0295-381-7720",
         email: "pati@bimbo.co.id",
@@ -1087,7 +1100,14 @@ function seedSettingsByTenant(): TenantSettingsEntity[] {
       tenantId: "tnt-004",
       values: {
         namaPerusahaan: "PT Bimbo Tirta",
+        namaLegal: "PT Bimbo Tirta Nusantara",
         nomorAgen: "AG-3322-0311",
+        nomorRegistrasi: "NIB-3322-0009-2025",
+        // Deliberately not PKP: a tenant below the threshold is the case the
+        // ck_tenant_profiles_pkp_tax constraint exists for, and the seed should
+        // contain one so the rule is exercised rather than assumed.
+        pkp: false,
+        tarifPajakDefault: 0,
         alamat: "Jl. Diponegoro No. 118, Ungaran Barat, Kab. Semarang 50517",
         telepon: "024-692-1880",
         email: "tirta@bimbo.co.id",
@@ -1120,6 +1140,13 @@ export function seedSettings(): SettingsEntity {
     alamat: "—",
     telepon: "—",
     email: "—",
+    namaLegal: "—",
+    nomorRegistrasi: "—",
+    // Not PKP by default, and therefore no tax rate. The safe direction: a
+    // tenant that has not told us it is registered must not be issuing invoices
+    // with PPN on them.
+    pkp: false,
+    tarifPajakDefault: 0,
     zonaWaktu: "Asia/Jakarta",
     jamOperasionalMulai: "06:00",
     jamOperasionalSelesai: "18:00",

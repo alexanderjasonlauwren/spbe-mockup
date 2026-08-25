@@ -1,13 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { ChevronRight, LogIn } from "lucide-react";
-import { getTenant } from "@/features/tenancy/api/tenancyApi";
+import { deactivateTenant, getTenant } from "@/features/tenancy/api/tenancyApi";
 import { useScope } from "@/features/tenancy/useScope";
 import { businessTypeLabel } from "@/features/tenancy/businessType";
 import { scopeKey } from "@/mocks/scope";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelBody, PanelHeader, Skeleton } from "@/components/common/Panel";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { useDeskMutation } from "@/hooks/useDeskMutation";
+import { useState } from "react";
 
 /**
  * One tenant: where it sits, who it is, and the way into it.
@@ -28,6 +31,18 @@ export function TenantDetailPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const { tenant: acting, setTenant } = useScope();
+
+  const [confirming, setConfirming] = useState(false);
+
+  const deactivate = useDeskMutation({
+    mutationFn: () => deactivateTenant(id),
+    errorTitle: "Tenant tidak dinonaktifkan",
+    success: "Tenant dinonaktifkan",
+    onDone: () => {
+      setConfirming(false);
+      navigate("/tenants");
+    },
+  });
 
   const detail = useQuery({
     queryKey: [...scopeKey(), "tenants", id],
@@ -59,21 +74,32 @@ export function TenantDetailPage() {
               Buka pengaturan
             </Button>
           ) : (
-            <Button
-              onClick={() => {
-                // The tenant travels in the URL, so the destination has to carry
-                // it. setTenant writes it to the current location and clears the
-                // query cache; navigating to a bare "/settings" immediately
-                // afterwards replaces that location and strips the parameter,
-                // and useScope then falls back to the root — the switch appears
-                // to do nothing.
-                setTenant(t.id);
-                navigate(`/settings?tenant=${t.id}`);
-              }}
-            >
-              <LogIn className="mr-1.5 h-4 w-4" />
-              Beralih ke tenant ini
-            </Button>
+            <>
+              {/* Deactivation is offered only from OUTSIDE the tenant. Switching
+                  into a tenant to switch it off would leave the session acting
+                  as something inactive, and every screen would then be scoped to
+                  a tenant the console has just been told is gone. */}
+              {t.aktif && (
+                <Button variant="outline" onClick={() => setConfirming(true)}>
+                  Nonaktifkan
+                </Button>
+              )}
+              <Button
+                onClick={() => {
+                  // The tenant travels in the URL, so the destination has to
+                  // carry it. setTenant writes it to the current location and
+                  // clears the query cache; navigating to a bare "/settings"
+                  // immediately afterwards replaces that location and strips the
+                  // parameter, and useScope then falls back to the root — the
+                  // switch appears to do nothing.
+                  setTenant(t.id);
+                  navigate(`/settings?tenant=${t.id}`);
+                }}
+              >
+                <LogIn className="mr-1.5 h-4 w-4" />
+                Beralih ke tenant ini
+              </Button>
+            </>
           )
         }
       />
@@ -148,6 +174,17 @@ export function TenantDetailPage() {
           </PanelBody>
         </Panel>
       </div>
+
+      <ConfirmDialog
+        isOpen={confirming}
+        title={`Nonaktifkan ${t.nama}?`}
+        message="Tenant tidak dihapus — datanya tetap ada dan dapat dibaca."
+        details="Ditolak bila masih ada sub-tenant yang aktif: menonaktifkan induk tidak boleh diam-diam menonaktifkan anak-anaknya."
+        confirmLabel="Nonaktifkan"
+        isPending={deactivate.isPending}
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => deactivate.mutate(undefined as never)}
+      />
     </div>
   );
 }

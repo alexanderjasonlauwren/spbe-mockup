@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { getDb } from "@/mocks/db";
 import { setActiveScope, subtreeOf } from "@/mocks/scope";
+import { tenantRegistry } from "./tenantRegistry";
 import { useAuthStore } from "@/features/auth/store/authStore";
 
 /** "semua" in the URL means the consolidated, cross-branch view. */
@@ -25,12 +26,16 @@ export function useScope() {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
 
-  // Raw store: the switcher must list every tenant and branch it could move to,
-  // which scopedDb would filter down to the current scope.
+  // Raw store: the switcher must list every branch it could move to, which
+  // scopedDb would filter down to the current scope.
   const db = getDb();
 
   // --- tenant -------------------------------------------------------------
-  const tenants = useMemo(() => db.tenants.filter((t) => t.aktif), [db.tenants]);
+  // From the registry, not the store. The registry is filled by whichever
+  // adapter this build uses; reading db.tenants here wired the switcher to the
+  // mock in every build, including one talking to a real server.
+  const allTenants = tenantRegistry();
+  const tenants = useMemo(() => allTenants.filter((t) => t.aktif), [allTenants]);
   const rootTenant = useMemo(
     () => tenants.find((t) => t.indukId === null) ?? tenants[0] ?? null,
     [tenants],

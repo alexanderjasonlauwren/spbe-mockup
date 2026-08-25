@@ -732,6 +732,35 @@ export interface SettingsEntity {
   alamat: string;
   telepon: string;
   email: string;
+
+  /* ── legal identity ──────────────────────────────────────────────────────
+   * Never inherited. A sub-tenant that is its own PT has its own tax identity,
+   * and falling back to its parent's would put the wrong one on an invoice —
+   * which is not a valid tax document. Mirrors iam.tenant_profiles.
+   */
+
+  /** As registered, for documents. `namaPerusahaan` is the trading name. */
+  namaLegal: string;
+  /** NIB / SIUP. */
+  nomorRegistrasi: string;
+  /**
+   * Registered for VAT.
+   *
+   * Not cosmetic: an invoice from a non-PKP entity must not carry PPN at all,
+   * so this decides whether `tarifPajakDefault` may be non-zero.
+   */
+  pkp: boolean;
+  tarifPajakDefault: number;
+
+  /**
+   * The registered OFFICE.
+   *
+   * Not the distribution origin — branches carry that, and a multi-branch PT has
+   * several. Here to render the tenant on a map and to seed a branch that
+   * arrives without coordinates.
+   */
+  kantorLat?: number;
+  kantorLng?: number;
   zonaWaktu: string;
   jamOperasionalMulai: string;
   jamOperasionalSelesai: string;

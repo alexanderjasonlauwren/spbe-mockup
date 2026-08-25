@@ -38,7 +38,7 @@ import type {
   UserEntity,
 } from "./types";
 
-export const DB_VERSION = 11;
+export const DB_VERSION = 12;
 
 /* ── deterministic RNG ─────────────────────────────────────────────────── */
 
@@ -1069,6 +1069,7 @@ function seedSettingsByTenant(): TenantSettingsEntity[] {
         namaLegal: "PT Bimbo Salatiga Sejahtera",
         nomorAgen: "AG-3373-0142",
         nomorRegistrasi: "NIB-3373-0001-2024",
+        npwp: "01.234.567.8-508.000",
         pkp: true,
         tarifPajakDefault: 11,
         kantorLat: -7.3305,
@@ -1085,6 +1086,7 @@ function seedSettingsByTenant(): TenantSettingsEntity[] {
         namaLegal: "PT Bimbo Pati Makmur",
         nomorAgen: "AG-3318-0207",
         nomorRegistrasi: "NIB-3318-0004-2024",
+        npwp: "02.345.678.9-507.000",
         pkp: true,
         tarifPajakDefault: 11,
         kantorLat: -6.7559,
@@ -1103,6 +1105,7 @@ function seedSettingsByTenant(): TenantSettingsEntity[] {
         namaLegal: "PT Bimbo Tirta Nusantara",
         nomorAgen: "AG-3322-0311",
         nomorRegistrasi: "NIB-3322-0009-2025",
+        npwp: "03.456.789.0-506.000",
         // Deliberately not PKP: a tenant below the threshold is the case the
         // ck_tenant_profiles_pkp_tax constraint exists for, and the seed should
         // contain one so the rule is exercised rather than assumed.
@@ -1142,6 +1145,7 @@ export function seedSettings(): SettingsEntity {
     email: "—",
     namaLegal: "—",
     nomorRegistrasi: "—",
+    npwp: "—",
     // Not PKP by default, and therefore no tax rate. The safe direction: a
     // tenant that has not told us it is registered must not be issuing invoices
     // with PPN on them.

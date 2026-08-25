@@ -3,24 +3,30 @@ import type { SettingsEntity } from "@/types/domain";
 /**
  * Fields a tenant inherits from its parent when it has not set them.
  *
- * The split follows the backend's two tables. `iam.tenant_settings` inherits per
- * column — how a tenant works and what it calls things is a sensible default for
- * a group to set once. `iam.tenant_profiles` never does: a subsidiary that is
- * its own PT has its own NPWP and agent number, and falling back to its parent's
- * would put the wrong legal identity on an invoice.
+ * The list follows the backend's `iam.tenant_settings` columns exactly, because
+ * an inheritance badge is a promise about behaviour — showing one for a field
+ * the API cannot carry would be a lie in the API build, and a demo-only truth in
+ * the mock.
  *
- * Identity fields are therefore absent here on purpose, and the settings page
- * gives them no badge.
+ *   unit_term / outlet_term / supplier_term   -> istilah
+ *   operating_hours_start / _end              -> jamOperasional*
+ *   working_days, stop_duration_minutes,
+ *   planning_lead_time_days, geofence_radius_m,
+ *   record_driver_location                    -> operasi
  *
- * In its own module rather than beside the adapters, because both adapters and
- * the page need it and importing it from one adapter would make the other's
- * dependency graph read as though it went through the first.
+ * # Two fields that were on this list and should not have been
+ *
+ * `zonaWaktu` is `iam.tenant_profiles.timezone`, and profiles NEVER inherit — a
+ * legal entity's timezone belongs with its registered address, not with how it
+ * happens to work. The console was offering to inherit it while the backend
+ * refused to, which is the two disagreeing about a rule rather than a value.
+ *
+ * `targetHarian` has no backend home at all. It is a console-side commercial
+ * goal, so it inherits in the mock and could not in the API build.
  */
 export const INHERITABLE_FIELDS = [
-  "zonaWaktu",
   "jamOperasionalMulai",
   "jamOperasionalSelesai",
-  "targetHarian",
   "istilah",
   "operasi",
 ] as const satisfies readonly (keyof SettingsEntity)[];

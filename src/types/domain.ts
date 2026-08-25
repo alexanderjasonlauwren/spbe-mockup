@@ -744,6 +744,13 @@ export interface SettingsEntity {
   /** NIB / SIUP. */
   nomorRegistrasi: string;
   /**
+   * Tax identification number, as it appears on a faktur pajak.
+   *
+   * Encrypted at rest in the backend (`npwp_encrypted`), like every other piece
+   * of personal or fiscal identity in this schema.
+   */
+  npwp: string;
+  /**
    * Registered for VAT.
    *
    * Not cosmetic: an invoice from a non-PKP entity must not carry PPN at all,

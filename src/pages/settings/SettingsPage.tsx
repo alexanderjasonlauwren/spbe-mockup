@@ -374,6 +374,30 @@ export function SettingsPage() {
                 onChange={(e) => set("nomorRegistrasi", e.target.value)}
               />
             </Field>
+            <Field label="NPWP" htmlFor="npwp" hint="Muncul pada faktur pajak">
+              <TextInput
+                id="npwp"
+                mono
+                value={form.npwp}
+                onChange={(e) => set("npwp", e.target.value)}
+              />
+            </Field>
+            {/* Timezone sits with the legal identity, not with operations: it is
+                iam.tenant_profiles.timezone, and profiles never inherit. A legal
+                entity's timezone belongs with its registered address. */}
+            <Field label="Zona waktu" htmlFor="tz">
+              <SelectInput
+                id="tz"
+                value={form.zonaWaktu}
+                onChange={(e) => set("zonaWaktu", e.target.value)}
+              >
+                {/* Asia/Jakarta is the IANA identifier for WIB, which covers
+                    Central Java. It names a timezone, not a city. */}
+                <option value="Asia/Jakarta">WIB — Asia/Jakarta</option>
+                <option value="Asia/Makassar">WITA — Asia/Makassar</option>
+                <option value="Asia/Jayapura">WIT — Asia/Jayapura</option>
+              </SelectInput>
+            </Field>
             <div className="sm:col-span-2">
               <Toggle
                 checked={form.pkp}
@@ -485,10 +509,14 @@ export function SettingsPage() {
                 }}
               />,
             )}
-            {inheritable(
-              "targetHarian",
-              "Target harian",
-              "target",
+            {/* No badge: a daily commercial target is the console's own, with
+                no column behind it in iam.tenant_settings, so it cannot inherit
+                against the API. */}
+            <Field
+              label="Target harian"
+              htmlFor="target"
+              hint="Dipakai bila belum ada rencana untuk hari itu."
+            >
               <TextInput
                 id="target"
                 type="number"
@@ -496,32 +524,10 @@ export function SettingsPage() {
                 step={50}
                 mono
                 value={form.targetHarian}
-                onChange={(e) => {
-                  takeOver("targetHarian");
-                  set("targetHarian", Number(e.target.value));
-                }}
-              />,
-            )}
-            {inheritable(
-              "zonaWaktu",
-              "Zona waktu",
-              "tz",
-              <SelectInput
-                id="tz"
-                value={form.zonaWaktu}
-                onChange={(e) => {
-                  takeOver("zonaWaktu");
-                  set("zonaWaktu", e.target.value);
-                }}
-              >
-                {/* Asia/Jakarta is the IANA identifier for WIB, which covers
-                    Central Java. It names a timezone, not a city. */}
-                <option value="Asia/Jakarta">WIB — Asia/Jakarta</option>
-                <option value="Asia/Makassar">WITA — Asia/Makassar</option>
-                <option value="Asia/Jayapura">WIT — Asia/Jayapura</option>
-              </SelectInput>,
-              "sm:col-span-2",
-            )}
+                onChange={(e) => set("targetHarian", Number(e.target.value))}
+              />
+            </Field>
+
           </PanelBody>
         </Panel>
         )}

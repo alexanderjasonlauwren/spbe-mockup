@@ -33,8 +33,21 @@ export function resolveSettings(
       : undefined;
   }
 
+  // Every field ANY level defines, not just the ones the base happens to have.
+  //
+  // Iterating base alone silently drops optional fields: the registered-office
+  // coordinates are optional on SettingsEntity and absent from the defaults, so
+  // a tenant that set them had them resolved away and the form rendered empty.
+  // The bug is invisible — the value is stored, and simply never read.
+  const fields = new Set<keyof SettingsEntity>(
+    Object.keys(base) as (keyof SettingsEntity)[],
+  );
+  for (const values of chain) {
+    for (const key of Object.keys(values) as (keyof SettingsEntity)[]) fields.add(key);
+  }
+
   const resolved = { ...base } as SettingsEntity;
-  for (const key of Object.keys(base) as (keyof SettingsEntity)[]) {
+  for (const key of fields) {
     const nearest = chain.find((values) => values[key] !== undefined);
     if (nearest) (resolved[key] as unknown) = nearest[key];
   }

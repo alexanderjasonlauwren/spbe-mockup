@@ -16,6 +16,7 @@ import type {
 } from "@/types/domain";
 import type { InheritableFieldKey } from "./fields";
 import { getActingTenant } from "@/mocks/actingTenant";
+import { DEFAULT_SETTINGS } from "./defaults";
 
 /** Mirrors the backend's SettingsPayload. Null means "inherit". */
 interface SettingsPayload {
@@ -59,7 +60,38 @@ function toDomain(p: SettingsPayload): Partial<SettingsEntity> {
   }
   if (p.operating_hours_start) out.jamOperasionalMulai = toTime(p.operating_hours_start)!;
   if (p.operating_hours_end) out.jamOperasionalSelesai = toTime(p.operating_hours_end)!;
+
+  // The five operational columns map 1:1 onto OperationsEntity. Present only
+  // when at least one is set, so a tenant that has set none of them reports
+  // `operasi` as absent — which is what lets the settings page show it as
+  // inherited rather than as chosen.
+  const hasOps =
+    p.working_days !== null ||
+    p.stop_duration_minutes !== null ||
+    p.planning_lead_time_days !== null ||
+    p.geofence_radius_m !== null ||
+    p.record_driver_location !== null;
+  if (hasOps) {
+    out.operasi = {
+      hariKerja: p.working_days ?? DEFAULT_SETTINGS.operasi.hariKerja,
+      durasiSinggahMenit: p.stop_duration_minutes ?? DEFAULT_SETTINGS.operasi.durasiSinggahMenit,
+      leadTimeHari: p.planning_lead_time_days ?? DEFAULT_SETTINGS.operasi.leadTimeHari,
+      radiusGeofenceMeter: p.geofence_radius_m ?? DEFAULT_SETTINGS.operasi.radiusGeofenceMeter,
+      rekamLokasi: p.record_driver_location ?? DEFAULT_SETTINGS.operasi.rekamLokasi,
+    };
+  }
   return out;
+}
+
+/** OperationsEntity back onto the five columns it came from. */
+function opsToWire(ops: SettingsEntity["operasi"]): Partial<SettingsPayload> {
+  return {
+    working_days: ops.hariKerja,
+    stop_duration_minutes: ops.durasiSinggahMenit,
+    planning_lead_time_days: ops.leadTimeHari,
+    geofence_radius_m: ops.radiusGeofenceMeter,
+    record_driver_location: ops.rekamLokasi,
+  };
 }
 
 function tenantPath(): string {
@@ -84,6 +116,15 @@ export async function getSettingsDetail(): Promise<ResolvedSettingsEntity> {
     inheritedFrom.jamOperasionalMulai = toTenant(row.inherited_from.operating_hours_start);
   if (row.inherited_from.operating_hours_end)
     inheritedFrom.jamOperasionalSelesai = toTenant(row.inherited_from.operating_hours_end);
+  // Same collapse as the lexicon: one domain field over five columns, and
+  // partly inherited IS inherited — the tenant did not choose the whole set.
+  const opsSource =
+    row.inherited_from.working_days ??
+    row.inherited_from.stop_duration_minutes ??
+    row.inherited_from.planning_lead_time_days ??
+    row.inherited_from.geofence_radius_m ??
+    row.inherited_from.record_driver_location;
+  if (opsSource) inheritedFrom.operasi = toTenant(opsSource);
 
   const effective = await getSettings();
   return { own: toDomain(row.own), effective, inheritedFrom };
@@ -106,10 +147,9 @@ function toTenant(src: { id: string; code: string; name: string }): TenantEntity
 
 export async function getSettings(): Promise<SettingsEntity> {
   const row = await getOne<SettingsResponse>(tenantPath());
-  // Merged over the console's defaults: this endpoint owns a subset of
-  // SettingsEntity, and the fields it does not own must keep their values
+  // Merged over neutral defaults: this endpoint owns a subset of
+  // SettingsEntity, and the fields it does not own must keep a renderable value
   // rather than becoming undefined.
-  const { DEFAULT_SETTINGS } = await import("./defaults");
   return { ...DEFAULT_SETTINGS, ...toDomain(row.effective) };
 }
 
@@ -129,6 +169,7 @@ export async function updateSettings(
     }),
     ...(patch.jamOperasionalMulai && { operating_hours_start: patch.jamOperasionalMulai }),
     ...(patch.jamOperasionalSelesai && { operating_hours_end: patch.jamOperasionalSelesai }),
+    ...(patch.operasi && opsToWire(patch.operasi)),
   });
   return getSettings();
 }
@@ -142,6 +183,14 @@ export async function clearSettingOverride(field: InheritableFieldKey): Promise<
         ? { operating_hours_start: null }
         : field === "jamOperasionalSelesai"
           ? { operating_hours_end: null }
-          : {};
+          : field === "operasi"
+            ? {
+                working_days: null,
+                stop_duration_minutes: null,
+                planning_lead_time_days: null,
+                geofence_radius_m: null,
+                record_driver_location: null,
+              }
+            : {};
   await send<SettingsResponse>("put", tenantPath(), { ...current.own, ...cleared });
 }

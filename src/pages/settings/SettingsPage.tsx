@@ -1,5 +1,5 @@
 import { scopeKey } from "@/mocks/scope";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -12,7 +12,10 @@ import {
 } from "lucide-react";
 import {
   exportData,
-  getSettings,
+  getSettingsDetail,
+  clearSettingOverride,
+  INHERITABLE_FIELDS,
+  type InheritableFieldKey,
   resetData,
   updateSettings,
 } from "@/features/settings/api/settingsApi";
@@ -23,6 +26,7 @@ import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/hooks/useToast";
 import { PageHeader } from "@/components/common/PageHeader";
+import { InheritableField } from "@/features/settings/components/InheritableField";
 import { Panel, PanelBody, PanelHeader, Skeleton } from "@/components/common/Panel";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import {
@@ -60,22 +64,94 @@ export function SettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const settings = useQuery({ queryKey: [...scopeKey(), "settings"], queryFn: getSettings });
+  const settings = useQuery({
+    queryKey: [...scopeKey(), "settings", "detail"],
+    queryFn: getSettingsDetail,
+  });
   const [form, setForm] = useState<SettingsEntity | null>(null);
   const [resetting, setResetting] = useState(false);
 
+  /**
+   * Fields this tenant has taken ownership of during THIS edit.
+   *
+   * Seeded from what it already owns, and added to when someone clicks "Ubah di
+   * sini". It is what the save sends — and that is the whole point: sending the
+   * full form would write an override for every inherited field the form merely
+   * displayed, so changing a phone number would quietly pin the working day, the
+   * timezone and the lexicon, and the parent could never change them for this
+   * tenant again. The screen would look identical throughout.
+   */
+  const [owned, setOwned] = useState<Set<keyof SettingsEntity>>(new Set());
+
   useEffect(() => {
-    if (settings.data) setForm(structuredClone(settings.data));
+    if (!settings.data) return;
+    setForm(structuredClone(settings.data.effective));
+    setOwned(new Set(Object.keys(settings.data.own) as (keyof SettingsEntity)[]));
   }, [settings.data]);
 
   const dirty =
-    !!form && !!settings.data && JSON.stringify(form) !== JSON.stringify(settings.data);
+    !!form &&
+    !!settings.data &&
+    JSON.stringify(form) !== JSON.stringify(settings.data.effective);
+
+  /** The ancestor a field came from, when it is inherited. */
+  const sourceOf = (field: InheritableFieldKey) =>
+    owned.has(field) ? null : (settings.data?.inheritedFrom[field] ?? null);
+
+  /** Take ownership of a field without changing its value yet. */
+  const takeOver = (field: keyof SettingsEntity) =>
+    setOwned((prev) => new Set(prev).add(field));
 
   const saveMutation = useDeskMutation({
-    mutationFn: (patch: Partial<SettingsEntity>) => updateSettings(patch),
+    // Only what this tenant owns. Identity fields are never inheritable, so they
+    // always travel; the rest travel only once someone has claimed them.
+    mutationFn: (full: SettingsEntity) => {
+      const patch: Partial<SettingsEntity> = {};
+      for (const key of Object.keys(full) as (keyof SettingsEntity)[]) {
+        const inheritable = (INHERITABLE_FIELDS as readonly string[]).includes(key);
+        if (!inheritable || owned.has(key)) {
+          (patch[key] as unknown) = full[key];
+        }
+      }
+      return updateSettings(patch);
+    },
     errorTitle: "Pengaturan tidak tersimpan",
     success: "Pengaturan disimpan",
   });
+
+  const inheritMutation = useDeskMutation({
+    mutationFn: (field: InheritableFieldKey) => clearSettingOverride(field),
+    errorTitle: "Gagal mengembalikan ke warisan",
+    success: "Kembali mengikuti pengaturan induk",
+  });
+
+
+  /**
+   * Renders an inheritable field with its badge and both escape hatches.
+   *
+   * A closure rather than a component so the input inside keeps its identity
+   * across renders — a component defined inline would remount on every keystroke
+   * and the field would lose focus mid-word.
+   */
+  const inheritable = (
+    field: InheritableFieldKey,
+    label: string,
+    htmlFor: string,
+    input: ReactNode,
+    className?: string,
+  ) => (
+    <InheritableField
+      label={label}
+      htmlFor={htmlFor}
+      className={className}
+      isOwn={owned.has(field)}
+      inheritedFrom={sourceOf(field)}
+      onOverride={() => takeOver(field)}
+      onInherit={() => inheritMutation.mutate(field)}
+    >
+      {input}
+    </InheritableField>
+  );
 
   const exportMutation = useDeskMutation({
     mutationFn: () => exportData(),
@@ -146,7 +222,7 @@ export function SettingsPage() {
             <>
               <Button
                 variant="outline"
-                onClick={() => settings.data && setForm(structuredClone(settings.data))}
+                onClick={() => settings.data && setForm(structuredClone(settings.data.effective))}
               >
                 Urungkan
               </Button>
@@ -262,29 +338,40 @@ export function SettingsPage() {
             hint="Menentukan rentang papan berangkat dan nilai tagihan"
           />
           <PanelBody className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Jam buka" htmlFor="buka">
+            {inheritable(
+              "jamOperasionalMulai",
+              "Jam buka",
+              "buka",
               <TextInput
                 id="buka"
                 type="time"
                 mono
                 value={form.jamOperasionalMulai}
-                onChange={(e) => set("jamOperasionalMulai", e.target.value)}
-              />
-            </Field>
-            <Field label="Jam tutup" htmlFor="tutup">
+                onChange={(e) => {
+                  takeOver("jamOperasionalMulai");
+                  set("jamOperasionalMulai", e.target.value);
+                }}
+              />,
+            )}
+            {inheritable(
+              "jamOperasionalSelesai",
+              "Jam tutup",
+              "tutup",
               <TextInput
                 id="tutup"
                 type="time"
                 mono
                 value={form.jamOperasionalSelesai}
-                onChange={(e) => set("jamOperasionalSelesai", e.target.value)}
-              />
-            </Field>
-            <Field
-              label="Target harian"
-              htmlFor="target"
-              hint="Dipakai bila belum ada rencana untuk hari itu."
-            >
+                onChange={(e) => {
+                  takeOver("jamOperasionalSelesai");
+                  set("jamOperasionalSelesai", e.target.value);
+                }}
+              />,
+            )}
+            {inheritable(
+              "targetHarian",
+              "Target harian",
+              "target",
               <TextInput
                 id="target"
                 type="number"
@@ -292,20 +379,32 @@ export function SettingsPage() {
                 step={50}
                 mono
                 value={form.targetHarian}
-                onChange={(e) => set("targetHarian", Number(e.target.value))}
-              />
-            </Field>
-            <Field label="Zona waktu" htmlFor="tz" className="sm:col-span-2">
+                onChange={(e) => {
+                  takeOver("targetHarian");
+                  set("targetHarian", Number(e.target.value));
+                }}
+              />,
+            )}
+            {inheritable(
+              "zonaWaktu",
+              "Zona waktu",
+              "tz",
               <SelectInput
                 id="tz"
                 value={form.zonaWaktu}
-                onChange={(e) => set("zonaWaktu", e.target.value)}
+                onChange={(e) => {
+                  takeOver("zonaWaktu");
+                  set("zonaWaktu", e.target.value);
+                }}
               >
+                {/* Asia/Jakarta is the IANA identifier for WIB, which covers
+                    Central Java. It names a timezone, not a city. */}
                 <option value="Asia/Jakarta">WIB — Asia/Jakarta</option>
                 <option value="Asia/Makassar">WITA — Asia/Makassar</option>
                 <option value="Asia/Jayapura">WIT — Asia/Jayapura</option>
-              </SelectInput>
-            </Field>
+              </SelectInput>,
+              "sm:col-span-2",
+            )}
           </PanelBody>
         </Panel>
         )}

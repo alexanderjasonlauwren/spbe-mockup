@@ -1303,3 +1303,28 @@ export function advanceOperations(): boolean {
     return changed;
   });
 }
+
+/**
+ * Removes a tenant's override so the field inherits again.
+ *
+ * Deletes the key rather than writing null or an empty string. An absent key is
+ * what "not set here, ask my parent" means in this shape — a null would be a
+ * value the tenant had chosen, and "" would pin an empty lexicon term that the
+ * parent could never correct.
+ */
+export function clearOverride(field: keyof Database["settings"]) {
+  return mutate((db) => {
+    const tenantId = getActiveScope().actingTenantId;
+    const own = db.settingsByTenant.find((r) => r.tenantId === tenantId);
+    if (own) delete own.values[field];
+
+    recordAudit(db, {
+      action: "settings.inherit",
+      entity: "Settings",
+      entityId: String(field),
+      summary: `Mengembalikan "${String(field)}" ke pengaturan induk.`,
+    });
+    // Re-resolved on the next getDb(), so the caller sees the parent's value.
+    return db.settingsByTenant;
+  });
+}

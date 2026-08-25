@@ -1,13 +1,95 @@
-import { scopedDb } from "@/mocks/scope";
-import { latency, resetDb } from "@/mocks/db";
-import { saveSettings } from "@/mocks/rules";
+import { getActiveScope, scopedDb } from "@/mocks/scope";
+import { getDb, latency, resetDb } from "@/mocks/db";
+import { clearOverride, saveSettings } from "@/mocks/rules";
 import { exportJson, timestampSuffix } from "@/lib/export";
-import type { SettingsEntity } from "@/mocks/types";
+import type { ResolvedSettingsEntity, SettingsEntity } from "@/mocks/types";
 import { term, type TermKey } from "@/lib/lexicon";
 
 export async function getSettings(): Promise<SettingsEntity> {
   await latency("read");
   return structuredClone(scopedDb().settings);
+}
+
+/**
+ * Fields a tenant inherits from its parent when it has not set them.
+ *
+ * The split follows the backend's two tables. iam.tenant_settings inherits per
+ * column — how a tenant WORKS and what it CALLS things is a sensible default for
+ * a group to set once. iam.tenant_profiles never does: a subsidiary that is its
+ * own PT has its own NPWP and agent number, and falling back to its parent's
+ * would put the wrong legal identity on an invoice.
+ *
+ * So identity fields are absent from this list on purpose, and the settings page
+ * gives them no badge.
+ */
+export const INHERITABLE_FIELDS = [
+  "zonaWaktu",
+  "jamOperasionalMulai",
+  "jamOperasionalSelesai",
+  "targetHarian",
+  "istilah",
+  "operasi",
+] as const satisfies readonly (keyof SettingsEntity)[];
+
+/**
+ * A field key that can be inherited.
+ *
+ * Named ...Key rather than InheritableField because the component that renders
+ * one owns that name, and a type sharing it with a component is a collision
+ * waiting for whoever imports both.
+ */
+export type InheritableFieldKey = (typeof INHERITABLE_FIELDS)[number];
+
+/**
+ * The acting tenant's settings, with provenance.
+ *
+ * Three parts, because a form needs all three: `effective` to render, `own` to
+ * know which fields this tenant actually chose, and `inheritedFrom` to say where
+ * the rest came from. Saving from `effective` is the bug this shape prevents.
+ */
+export async function getSettingsDetail(): Promise<ResolvedSettingsEntity> {
+  await latency("read");
+  const db = getDb();
+  const scope = getActiveScope();
+  const own = db.settingsByTenant.find((r) => r.tenantId === scope.actingTenantId);
+
+  const inheritedFrom: ResolvedSettingsEntity["inheritedFrom"] = {};
+  for (const field of INHERITABLE_FIELDS) {
+    if (own?.values[field] !== undefined) continue;
+    // Nearest ancestor that defines it. Walked rather than asked of the
+    // resolver so the ANSWER and the SOURCE cannot disagree — both come from
+    // the same walk in the same order.
+    let current = db.tenants.find((t) => t.id === scope.actingTenantId)?.indukId;
+    const seen = new Set<string>();
+    while (current && !seen.has(current)) {
+      seen.add(current);
+      const row = db.settingsByTenant.find((r) => r.tenantId === current);
+      if (row?.values[field] !== undefined) {
+        const source = db.tenants.find((t) => t.id === current);
+        if (source) inheritedFrom[field] = structuredClone(source);
+        break;
+      }
+      current = db.tenants.find((t) => t.id === current)?.indukId;
+    }
+  }
+
+  return {
+    own: structuredClone(own?.values ?? {}),
+    effective: structuredClone(scopedDb().settings),
+    inheritedFrom,
+  };
+}
+
+/**
+ * Clears a tenant's override, restoring inheritance for that field.
+ *
+ * Deleting the key rather than writing a null: an absent key is what "ask my
+ * parent" means in this shape, and a null would be a value the tenant had
+ * chosen.
+ */
+export async function clearSettingOverride(field: InheritableFieldKey) {
+  await latency("write");
+  return clearOverride(field);
 }
 
 export async function updateSettings(patch: Partial<SettingsEntity>) {

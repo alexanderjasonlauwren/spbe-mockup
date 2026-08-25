@@ -38,7 +38,7 @@ import type {
   UserEntity,
 } from "./types";
 
-export const DB_VERSION = 10;
+export const DB_VERSION = 11;
 
 /* ── deterministic RNG ─────────────────────────────────────────────────── */
 
@@ -1097,13 +1097,29 @@ function seedSettingsByTenant(): TenantSettingsEntity[] {
   ];
 }
 
-function seedSettings(): SettingsEntity {
+/**
+ * The console's own defaults — the last resort beneath every tenant.
+ *
+ * Exported because getDb() resolves against it on every read and must start
+ * from a PRISTINE base each time. Resolving against the previously resolved
+ * object instead lets one tenant's values become the next tenant's defaults for
+ * any field neither of them sets, which is a cross-tenant leak that looks like
+ * inheritance working.
+ */
+export function seedSettings(): SettingsEntity {
   return {
-    namaPerusahaan: "PT Bimbo Salatiga",
-    nomorAgen: "AG-3373-0142",
-    alamat: "Jl. Lingkar Selatan No. 42, Sidorejo, Kota Salatiga 50711",
-    telepon: "0298-321-4210",
-    email: "ops@bimbo.co.id",
+    // The LAST-RESORT default, not any tenant's identity.
+    //
+    // Every tenant supplies its own legal identity through settingsByTenant, so
+    // these are only reached when nothing up the chain has set them. Putting a
+    // real agent number here made the holding company display its subsidiary's
+    // — inherited from a fallback rather than from a parent, which is not a
+    // thing the hierarchy should be able to express.
+    namaPerusahaan: "—",
+    nomorAgen: "—",
+    alamat: "—",
+    telepon: "—",
+    email: "—",
     zonaWaktu: "Asia/Jakarta",
     jamOperasionalMulai: "06:00",
     jamOperasionalSelesai: "18:00",

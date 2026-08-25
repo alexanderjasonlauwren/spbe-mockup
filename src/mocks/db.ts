@@ -15,6 +15,7 @@ import {
   DEFAULT_NUMBERING,
   DEFAULT_OPERATIONS,
   isoDate,
+  seedSettings,
   startOfToday,
 } from "./seed";
 import { getActingTenant } from "./actingTenant";
@@ -101,7 +102,10 @@ export function getDb(): Database {
   // Assigned onto the same object rather than returning a copy: mutate() writes
   // `db` back to storage, and a copy here would drop every other change.
   db.settings = resolveSettings(
-    db.settings,
+    // The pristine defaults, not db.settings. Feeding the previous result back
+    // in makes the base drift: after viewing tenant A, any field A resolved
+    // becomes the default tenant B inherits, and mutate() persists the drift.
+    seedSettings(),
     db.settingsByTenant ?? [],
     db.tenants,
     getActingTenant() || db.tenants.find((t) => t.indukId === null)?.id || "",

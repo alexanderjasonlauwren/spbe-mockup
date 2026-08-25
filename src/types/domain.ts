@@ -761,6 +761,25 @@ export interface TenantSettingsEntity {
   values: Partial<SettingsEntity>;
 }
 
+/**
+ * Where a settings field came from, for one tenant.
+ *
+ * Mirrors the backend's GET /tenants/:id/settings, which returns the same three
+ * parts for the same reason: a form that only had the effective values would
+ * save them back and turn every inherited value into an override.
+ */
+export interface ResolvedSettingsEntity {
+  /** What this tenant has set for itself. Absent field = inherited. */
+  own: Partial<SettingsEntity>;
+  /** What actually applies, after inheritance. Always complete. */
+  effective: SettingsEntity;
+  /**
+   * The tenant each inherited field came from, keyed by field name. A field
+   * absent from this map was either set here or is unset everywhere.
+   */
+  inheritedFrom: Partial<Record<keyof SettingsEntity, TenantEntity>>;
+}
+
 export interface Database {
   version: number;
   seededAt: string;

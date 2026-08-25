@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { UserRole } from "@/types/auth";
 import {
+  Network,
   Bell,
   BookOpen,
   ClipboardList,
@@ -131,6 +132,14 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/products",
         icon: Fuel,
         hint: `Katalog ${unitLabel()}, harga, dan stok gudang`,
+      },
+      {
+        // Above Pengguna & Akses on purpose: a user belongs to a tenant, so the
+        // structure reads before the people in it.
+        name: "Tenant",
+        href: "/tenants",
+        icon: Network,
+        hint: "Struktur perusahaan, sub-tenant, dan cabang pertamanya",
       },
       {
         name: "Pengguna & Akses",

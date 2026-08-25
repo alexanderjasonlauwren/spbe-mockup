@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Building2, Check, ChevronDown, Layers, Network } from "lucide-react";
 import { useScope } from "./useScope";
+import { businessTypeLabel } from "./businessType";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,24 +16,6 @@ import { cn } from "@/lib/utils";
  * Was BranchSwitcher. Extended rather than replaced: it already handled the
  * consolidated "Semua" mode, which is the same idea one level up.
  */
-/**
- * A readable name for a business type.
- *
- * The mock stores the CODE, because that is what the backend keys categories and
- * lexicon defaults off. Rendering it raw put "water_depot" in front of a user.
- *
- * A lookup here rather than a second field on the seed: against the real backend
- * this comes from `business_type_name` on the tenant response, so a display name
- * in the mock would be a copy that drifts. Unknown codes fall through unchanged,
- * which reads better than "—" and makes a missing entry obvious.
- */
-const BUSINESS_LABEL: Record<string, string> = {
-  lpg_distribution: "Distribusi LPG",
-  water_depot: "Depot Air Minum",
-};
-
-const businessLabel = (code: string) => BUSINESS_LABEL[code] ?? code;
-
 export function ScopeSwitcher() {
   const {
     branches, branch, branchId, isConsolidated, canSeeAll, setBranch,
@@ -132,7 +115,7 @@ export function ScopeSwitcher() {
                           <span className="block truncate text-2xs text-ink-muted">
                             {/* A holding runs no operations, so say so rather
                                 than showing an industry it does not have. */}
-                            {t.jenis === "grup" ? "Grup" : businessLabel(t.jenisUsaha)}
+                            {t.jenis === "grup" ? "Grup" : businessTypeLabel(t.jenisUsaha)}
                           </span>
                         </span>
                         {active && <Check className="h-3.5 w-3.5 shrink-0 text-ink" />}

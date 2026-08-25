@@ -25,6 +25,8 @@ import { ProductFormPage } from "./pages/products/ProductFormPage";
 import { UserListPage } from "./pages/users/UserListPage";
 import { NotificationPage } from "./pages/notifications/NotificationPage";
 import { SettingsPage } from "./pages/settings/SettingsPage";
+import { TenantListPage } from "./pages/tenants/TenantListPage";
+import { TenantDetailPage } from "./pages/tenants/TenantDetailPage";
 import { NotFoundPage } from "./pages/errors/NotFoundPage";
 import { ErrorBoundary } from "./pages/errors/ErrorBoundary";
 import { ProtectedRoute } from "./features/auth/components/ProtectedRoutes";
@@ -172,6 +174,17 @@ const router = createBrowserRouter([
         </RequirePermission>
       ) },
       { path: "system", element: <Navigate to="/settings" replace /> },
+
+      { path: "tenants", element: (
+        <RequirePermission permission={PERMISSIONS.SETTINGS_VIEW}>
+          <TenantListPage />
+        </RequirePermission>
+      ) },
+      { path: "tenants/:id", element: (
+        <RequirePermission permission={PERMISSIONS.SETTINGS_VIEW}>
+          <TenantDetailPage />
+        </RequirePermission>
+      ) },
 
       { path: "notifications", element: <NotificationPage /> },
       { path: "settings", element: <SettingsPage /> },

@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
 import { useAuthStore } from "./features/auth/store/authStore";
+import { setSessionExpiredHandler } from "./lib/api";
 import { landingPathFor } from "./layouts/nav";
 import { DashboardLayout } from "./layouts/DashboardLayout";
 import { LoginPage } from "./pages/auth/LoginPage";
@@ -201,7 +203,49 @@ function HomeRedirect() {
   return <Navigate to={landingPathFor(role)} replace />;
 }
 
+/**
+ * Restores the session before anything renders.
+ *
+ * The persisted store carries a token and `isAuthenticated`, never the
+ * permission set — so on a page reload the console knows a session may exist
+ * but not what it may do. `restore()` re-reads both from the source of truth;
+ * until it answers, rendering would flash either a login screen at a signed-in
+ * user or an empty menu at an authorised one.
+ *
+ * It also wires the 401 handler into the store. Without this, the fallback in
+ * `lib/api.ts` clears tokens and navigates, leaving `isAuthenticated: true`
+ * persisted behind it — a state the next load has to discover is a lie.
+ */
 function App() {
+  const restore = useAuthStore((state) => state.restore);
+  // Seeded from the token rather than set to true by an effect: with no token
+  // there is nothing to restore, and a signed-out visitor should reach the
+  // login screen on the first render instead of after a blank one.
+  const [ready, setReady] = useState(() => localStorage.getItem("auth_token") === null);
+
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      void useAuthStore.getState().logout();
+      window.location.href = "/login";
+    });
+  }, []);
+
+  useEffect(() => {
+    if (ready) return;
+    let cancelled = false;
+    void restore().finally(() => {
+      if (!cancelled) setReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // `ready` is read as a one-way latch, not a dependency to re-run on: once
+    // it flips true the effect is finished for the lifetime of the app.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restore]);
+
+  if (!ready) return null;
+
   return <RouterProvider router={router} />;
 }
 

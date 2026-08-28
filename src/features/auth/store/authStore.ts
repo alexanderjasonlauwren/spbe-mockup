@@ -1,96 +1,40 @@
-import { scopedDb } from "@/mocks/scope";
+/**
+ * The session, as the console sees it.
+ *
+ * This store used to *be* the authentication: it read the mock user table
+ * directly, compared against a hardcoded demo password and minted a fake JWT.
+ * That made the API build unable to log in at all, which in turn meant none of
+ * the HTTP adapters behind it had ever run.
+ *
+ * Now it holds session state and delegates every I/O decision to `authApi`,
+ * which is the mock or the real service depending on the build. The demo
+ * behaves exactly as before — same password, same messages — because that
+ * behaviour moved into `authApi.mock.ts` rather than being deleted.
+ */
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { latency, mutate } from "@/mocks/db";
-import { PERMISSIONS } from "@/features/rbac/permissions";
+
+import { authApi } from "@/features/auth/api/authApi";
+import type { SessionTenant } from "@/features/auth/api/contract";
 import type { User, UserRole } from "@/types/auth";
 import { clearSessionTokens } from "@/lib/tokens";
-
-/**
- * What each role may do. The console reads these to hide actions a user cannot
- * complete, rather than letting them fail at the point of submission.
- */
-const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
-  admin: Object.values(PERMISSIONS),
-  manager: [
-    PERMISSIONS.USERS_VIEW,
-    PERMISSIONS.PRODUCTS_VIEW,
-    PERMISSIONS.PRODUCTS_EDIT,
-    PERMISSIONS.SA_VIEW,
-    PERMISSIONS.SA_CREATE,
-    PERMISSIONS.SA_EDIT,
-    PERMISSIONS.SA_IMPORT,
-    PERMISSIONS.DISTRIBUTION_VIEW,
-    PERMISSIONS.DISTRIBUTION_CREATE,
-    PERMISSIONS.DISTRIBUTION_EDIT,
-    PERMISSIONS.DISTRIBUTION_DELETE,
-    PERMISSIONS.PAYMENTS_VIEW,
-    PERMISSIONS.DRIVERS_VIEW,
-    PERMISSIONS.DRIVERS_ASSIGN,
-    PERMISSIONS.ORDERS_VIEW,
-    PERMISSIONS.ORDERS_EDIT,
-    PERMISSIONS.REPORTS_VIEW,
-    PERMISSIONS.REPORTS_EXPORT,
-    PERMISSIONS.SETTINGS_VIEW,
-  ],
-  finance: [
-    PERMISSIONS.PAYMENTS_VIEW,
-    PERMISSIONS.PAYMENTS_CREATE,
-    PERMISSIONS.PAYMENTS_VERIFY,
-    PERMISSIONS.SA_VIEW,
-    PERMISSIONS.DISTRIBUTION_VIEW,
-    PERMISSIONS.ORDERS_VIEW,
-    PERMISSIONS.REPORTS_VIEW,
-    PERMISSIONS.REPORTS_EXPORT,
-    PERMISSIONS.PRODUCTS_VIEW,
-    PERMISSIONS.SETTINGS_VIEW,
-  ],
-  staff: [
-    PERMISSIONS.SA_VIEW,
-    PERMISSIONS.DISTRIBUTION_VIEW,
-    PERMISSIONS.DISTRIBUTION_CREATE,
-    PERMISSIONS.DISTRIBUTION_EDIT,
-    PERMISSIONS.DRIVERS_VIEW,
-    PERMISSIONS.DRIVERS_ASSIGN,
-    PERMISSIONS.DELIVERIES_VIEW,
-    PERMISSIONS.DELIVERIES_EXECUTE,
-    PERMISSIONS.ORDERS_VIEW,
-    PERMISSIONS.ORDERS_CREATE,
-    PERMISSIONS.ORDERS_EDIT,
-    PERMISSIONS.PRODUCTS_VIEW,
-    PERMISSIONS.PAYMENTS_VIEW,
-    PERMISSIONS.REPORTS_VIEW,
-  ],
-  viewer: [
-    PERMISSIONS.SA_VIEW,
-    PERMISSIONS.DISTRIBUTION_VIEW,
-    PERMISSIONS.ORDERS_VIEW,
-    PERMISSIONS.PAYMENTS_VIEW,
-    PERMISSIONS.PRODUCTS_VIEW,
-    PERMISSIONS.DRIVERS_VIEW,
-    PERMISSIONS.REPORTS_VIEW,
-  ],
-  /**
-   * A sopir sees one thing: their own run, and what they must record on it.
-   *
-   * Deliberately the narrowest set in the table. Read permissions that look
-   * harmless are not — DELIVERIES_VIEW opens the whole fleet board, and
-   * DISTRIBUTION_VIEW opens the planner with every outlet's credit position on
-   * it. Neither is anything a driver at a gate can act on.
-   */
-  driver: [PERMISSIONS.DELIVERIES_EXECUTE],
-};
-
-/** Stand-in for the password a real deployment would check against a hash. */
-const DEMO_PASSWORD = "sidistrib";
 
 interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  /** The tenant this session acts as. Null against the mock, which has one. */
+  tenant: SessionTenant | null;
 
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  /**
+   * Re-reads the session from the stored token.
+   *
+   * Called on app start. Permissions are deliberately not persisted across a
+   * reload — see the comment on `partialize` below.
+   */
+  restore: () => Promise<void>;
   setUser: (user: User, token: string) => void;
   hasPermission: (permission: string) => boolean;
   hasRole: (role: UserRole | UserRole[]) => boolean;
@@ -101,73 +45,44 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       user: null,
       token: null,
+      tenant: null,
       isAuthenticated: false,
 
       login: async (email: string, password: string) => {
-        await latency("write");
-
-        if (!email.trim()) throw new Error("Masukkan alamat email Anda.");
-        if (password.length < 6) {
-          throw new Error("Kata sandi minimal 6 karakter.");
-        }
-
-        const account = scopedDb().users.find(
-          (u) => u.email.toLowerCase() === email.trim().toLowerCase(),
-        );
-
-        if (!account) {
-          throw new Error(
-            `Tidak ada akun terdaftar dengan email ${email.trim()}. Periksa kembali, atau hubungi admin agen Anda.`,
-          );
-        }
-        if (password !== DEMO_PASSWORD) {
-          throw new Error("Kata sandi salah. Untuk data contoh, gunakan “sidistrib”.");
-        }
-        if (account.status === "Nonaktif") {
-          throw new Error(
-            `Akun ${account.nama} dinonaktifkan. Minta admin mengaktifkannya kembali di halaman Pengguna & Akses.`,
-          );
-        }
-
-        const user: User = {
-          id: account.id,
-          email: account.email,
-          name: account.nama,
-          role: account.role,
-          permissions: ROLE_PERMISSIONS[account.role] ?? [],
-          branch: account.cabang,
-          branchIds: account.branchIds ?? [],
-          scopeType: account.scopeType ?? "tenant",
-          phone: account.telepon,
-          driverId: account.driverId,
-        };
-
-        const token = `mock-jwt-${account.id}-${Date.now()}`;
-
-        // Signing in is itself a recorded event, and flips an invited account
-        // to active — the same thing a real backend would do.
-        mutate((db) => {
-          const row = db.users.find((u) => u.id === account.id);
-          if (row) {
-            row.terakhirMasuk = new Date().toISOString();
-            if (row.status === "Diundang") row.status = "Aktif";
-          }
-        });
-
-        set({ user, token, isAuthenticated: true });
+        const { user, tenant, token } = await authApi.login(email, password);
+        set({ user, tenant, token, isAuthenticated: true });
+        // The HTTP adapter has already stored both tokens; the mock has no
+        // real ones. Writing the access token here keeps the key populated for
+        // the mock build, where some screens still read it directly.
         localStorage.setItem("auth_token", token);
       },
 
-      logout: () => {
+      restore: async () => {
+        try {
+          const { user, tenant, token } = await authApi.session();
+          set({ user, tenant, token, isAuthenticated: true });
+        } catch {
+          // A session that cannot be re-read is not a session. Failing closed
+          // here is what stops a persisted `isAuthenticated: true` from
+          // outliving the token it was true for — which would render the whole
+          // console to someone the server will answer 401 to on every request.
+          clearSessionTokens();
+          set({ user: null, tenant: null, token: null, isAuthenticated: false });
+        }
+      },
+
+      logout: async () => {
+        // Tell the server first, while the tokens still exist. POST
+        // /auth/logout revokes the refresh token so it cannot be replayed
+        // after the user walks away; clearing locally first would leave that
+        // token alive on the server with nothing able to revoke it.
+        await authApi.logout();
+
         // Both tokens. Clearing only the access token strands the refresh
         // token, and the next login would leave a usable session behind that
         // nobody can see or revoke from the UI.
-        //
-        // This does not yet tell the server. POST /auth/logout revokes the
-        // refresh token so it cannot be replayed after the user walks away;
-        // wire it in when this store stops using the mock database.
         clearSessionTokens();
-        set({ user: null, token: null, isAuthenticated: false });
+        set({ user: null, tenant: null, token: null, isAuthenticated: false });
       },
 
       setUser: (user: User, token: string) => {
@@ -184,6 +99,22 @@ export const useAuthStore = create<AuthState>()(
         return (Array.isArray(roles) ? roles : [roles]).includes(user.role);
       },
     }),
-    { name: "auth-storage" },
+    {
+      name: "auth-storage",
+      /**
+       * Only enough to know a session is worth restoring.
+       *
+       * The permission set is deliberately NOT persisted. Grants live in the
+       * database precisely so a revoked role stops authorising immediately; a
+       * copy in localStorage would survive the revocation and keep drawing
+       * menus for authority the user no longer has, until they happened to
+       * clear their browser. `restore()` re-reads them on every load, which is
+       * one request and the only way the two can agree.
+       */
+      partialize: (state) => ({
+        token: state.token,
+        isAuthenticated: state.isAuthenticated,
+      }),
+    },
   ),
 );

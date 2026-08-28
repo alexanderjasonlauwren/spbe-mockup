@@ -23,6 +23,7 @@
  * gets consolidated figures.
  */
 
+import { assertMockAllowed } from "@/lib/dataSource";
 import { setActingTenant } from "./actingTenant";
 import { getDb } from "./db";
 import type { Database, ID, Scoped, TenantEntity } from "./types";
@@ -113,6 +114,12 @@ function visible(scope: ActiveScope): (row: Scoped) => boolean {
  * branch-scoped and pass through untouched.
  */
 export function scopedDb(override?: Partial<ActiveScope>): Database {
+  // The one accessor every mock-only feature API goes through, which makes it
+  // the place to refuse. getDb() deliberately does NOT check: the scope
+  // switcher and the lexicon read the raw store to bootstrap, and they run in
+  // both builds. See assertMockAllowed for what this is defending against.
+  assertMockAllowed("scopedDb");
+
   const scope = { ...getActiveScope(), ...override };
   const db = getDb();
   const keep = visible(scope);

@@ -1,5 +1,5 @@
 import { scopeKey } from "@/mocks/scope";
-import { useEffect, useState } from "react";
+import { useResettableState } from "@/hooks/useResettableState";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarClock } from "lucide-react";
 import { getSystemConfig, saveOperations } from "@/features/system/api/systemApi";
@@ -17,11 +17,9 @@ const HARI = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
 export function OperationsSection() {
   const config = useQuery({ queryKey: [...scopeKey(), "system-config"], queryFn: getSystemConfig });
-  const [form, setForm] = useState<OperationsEntity | null>(null);
-
-  useEffect(() => {
-    if (config.data) setForm({ ...config.data.operasi });
-  }, [config.data]);
+  const [form, setForm] = useResettableState<OperationsEntity | null>([config.data], () =>
+    config.data ? { ...config.data.operasi } : null,
+  );
 
   const saveMutation = useDeskMutation({
     mutationFn: (values: OperationsEntity) => saveOperations(values),

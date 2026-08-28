@@ -7,7 +7,15 @@ on:
     branches: [main]
 
 jobs:
-  deploy:
+  # Every check this repository has, run on every change.
+  #
+  # Split from the deploy job rather than sitting above it as extra steps, so
+  # the checks still run and still report when the Vercel secrets are missing —
+  # on a fork, or before the project is linked. As steps in the deploy job they
+  # were reported as "deploy failed", which reads as an infrastructure problem
+  # rather than a broken build.
+  check:
+    name: Type check, lint, build
     runs-on: ubuntu-latest
 
     steps:
@@ -26,10 +34,33 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      # Was missing, and that is why thirteen lint errors accumulated
+      # unnoticed: `npm run lint` existed and nothing ran it. A standard
+      # nothing enforces is a suggestion.
+      - name: Lint
+        run: npm run lint
+
       - name: Build
         run: npm run build
 
-      # ── Deploy to Vercel ─────────────────────────────────────
+  deploy:
+    name: Deploy
+    needs: check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Install Vercel CLI
         run: npm install -g vercel
 

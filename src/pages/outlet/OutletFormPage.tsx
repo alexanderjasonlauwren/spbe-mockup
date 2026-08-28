@@ -1,5 +1,5 @@
 import { scopeKey } from "@/mocks/scope";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import type { OutletStatus } from "@/mocks/types";
 import { outletLabel, outletLabelTitle, unitLabel } from "@/lib/lexicon";
+import { useResettableState } from "@/hooks/useResettableState";
 
 interface FormState {
   kode: string;
@@ -61,7 +62,6 @@ export function OutletFormPage() {
   const navigate = useNavigate();
   const isEdit = !!id;
 
-  const [form, setForm] = useState<FormState>(EMPTY);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
   const detail = useQuery({
@@ -75,10 +75,13 @@ export function OutletFormPage() {
     queryFn: getKecamatanOptions,
   });
 
-  useEffect(() => {
-    if (!detail.data) return;
+  // Seeded from the loaded outlet, or EMPTY while creating one. Computed during
+  // render rather than pushed in by an effect, so the form never paints a frame
+  // of the previous outlet's values while switching between two.
+  const [form, setForm] = useResettableState<FormState>([detail.data], () => {
     const p = detail.data;
-    setForm({
+    if (!p) return EMPTY;
+    return {
       kode: p.kode,
       nama: p.nama,
       penanggungJawab: p.penanggungJawab,
@@ -93,8 +96,8 @@ export function OutletFormPage() {
       blokirOtomatis: p.blokirOtomatis ?? true,
       lat: p.lat,
       lng: p.lng,
-    });
-  }, [detail.data]);
+    };
+  });
 
   const saveMutation = useDeskMutation({
     mutationFn: (values: FormState) =>

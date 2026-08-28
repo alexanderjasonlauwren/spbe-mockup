@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   Bell,
@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { formatDateId, formatDateTimeId, relativeTime } from "@/lib/format";
 import type { UserEntity } from "@/mocks/types";
 import { outletLabel } from "@/lib/lexicon";
+import { useResettableState } from "@/hooks/useResettableState";
 
 const TYPE_STYLE = {
   Alert: { spine: "text-rust", icon: TriangleAlert, iconClass: "text-rust-ink" },
@@ -93,10 +94,10 @@ export function NotificationPage() {
     testMutation,
   } = useNotification();
 
-  const [form, setForm] = useState<NotificationSettings | null>(null);
-  useEffect(() => {
-    if (notificationSettings) setForm(structuredClone(notificationSettings));
-  }, [notificationSettings]);
+  const [form, setForm] = useResettableState<NotificationSettings | null>(
+    [notificationSettings],
+    () => (notificationSettings ? structuredClone(notificationSettings) : null),
+  );
 
   const dirty =
     !!form &&

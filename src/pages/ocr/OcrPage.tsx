@@ -1,5 +1,5 @@
 import { scopeKey } from "@/mocks/scope";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -57,6 +57,7 @@ import {
 } from "@/lib/format";
 import type { BankNameEntity, ReceiptStatus } from "@/mocks/types";
 import { outletLabel, outletLabelTitle, unitLabel } from "@/lib/lexicon";
+import { useResettableState } from "@/hooks/useResettableState";
 
 const BANKS: BankNameEntity[] = ["BCA", "BNI", "Mandiri", "BRI", "BSI"];
 const TABS: (ReceiptStatus | "Semua")[] = [
@@ -69,27 +70,31 @@ const TABS: (ReceiptStatus | "Semua")[] = [
 /** Below this, the scan is treated as a guess a human must confirm. */
 const TRUST_THRESHOLD = 0.8;
 
+/** The verification form's editable copy of an extracted receipt. */
+interface ReceiptDraft {
+  outletId: string;
+  nomorKwitansi: string;
+  tanggalKwitansi: string;
+  lines: ReceiptLineView[];
+  nominal: number;
+  bank: BankNameEntity | "";
+}
+
+const EMPTY_DRAFT: ReceiptDraft = {
+  outletId: "",
+  nomorKwitansi: "",
+  tanggalKwitansi: "",
+  lines: [],
+  nominal: 0,
+  bank: "",
+};
+
 export function OcrPage() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Menunggu Review");
   const [file, setFile] = useState<File | null>(null);
   const [reviewing, setReviewing] = useState<ReceiptView | null>(null);
   const [rejecting, setRejecting] = useState<ReceiptView | null>(null);
   const [alasan, setAlasan] = useState("");
-  const [draft, setDraft] = useState<{
-    outletId: string;
-    nomorKwitansi: string;
-    tanggalKwitansi: string;
-    lines: ReceiptLineView[];
-    nominal: number;
-    bank: BankNameEntity | "";
-  }>({
-    outletId: "",
-    nomorKwitansi: "",
-    tanggalKwitansi: "",
-    lines: [],
-    nominal: 0,
-    bank: "",
-  });
 
   const receipts = useQuery({
     queryKey: [...scopeKey(), "receipts", tab],
@@ -106,17 +111,21 @@ export function OcrPage() {
     enabled: !!reviewing,
   });
 
-  useEffect(() => {
-    if (!reviewing) return;
-    setDraft({
-      outletId: reviewing.outletId ?? "",
-      nomorKwitansi: reviewing.nomorKwitansi,
-      tanggalKwitansi: reviewing.tanggalKwitansi,
-      lines: reviewing.lines.map((l) => ({ ...l })),
-      nominal: reviewing.nominal,
-      bank: reviewing.bank ?? "",
-    });
-  }, [reviewing]);
+  // Seeded from the receipt under review. Computed during render so the
+  // verification form never shows one receipt's extracted lines against
+  // another's image, which is the one mistake this screen must not make.
+  const [draft, setDraft] = useResettableState<ReceiptDraft>([reviewing], () =>
+    reviewing
+      ? {
+          outletId: reviewing.outletId ?? "",
+          nomorKwitansi: reviewing.nomorKwitansi,
+          tanggalKwitansi: reviewing.tanggalKwitansi,
+          lines: reviewing.lines.map((l) => ({ ...l })),
+          nominal: reviewing.nominal,
+          bank: reviewing.bank ?? "",
+        }
+      : EMPTY_DRAFT,
+  );
 
   const uploadMutation = useDeskMutation({
     mutationFn: (f: File) => uploadReceipt(f),

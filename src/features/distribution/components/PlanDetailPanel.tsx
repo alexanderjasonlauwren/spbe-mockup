@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   CheckCircle2,
@@ -27,6 +27,7 @@ import type {
   PlanRow,
 } from "../types";
 import { outletLabel, outletLabelTitle, unitLabel } from "@/lib/lexicon";
+import { useResettableState } from "@/hooks/useResettableState";
 
 interface PlanDetailPanelProps {
   plan?: DistributionPlan;
@@ -60,14 +61,9 @@ export function PlanDetailPanel({
   isSaving,
   isConfirming,
 }: PlanDetailPanelProps) {
-  const [draft, setDraft] = useState<PlanRow[]>(rows);
-  const [dirty, setDirty] = useState(false);
-
   // Server state wins whenever the selected plan or its saved rows change.
-  useEffect(() => {
-    setDraft(rows);
-    setDirty(false);
-  }, [rows, plan?.id]);
+  const [draft, setDraft] = useResettableState<PlanRow[]>([rows, plan?.id], () => rows);
+  const [dirty, setDirty] = useResettableState<boolean>([rows, plan?.id], () => false);
 
   const editable = plan?.status === "Draft";
 

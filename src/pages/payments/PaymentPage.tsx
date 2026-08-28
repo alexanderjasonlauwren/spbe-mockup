@@ -1,5 +1,5 @@
 import { scopeKey } from "@/mocks/scope";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Plus, Split, Wallet, XCircle } from "lucide-react";
@@ -39,6 +39,7 @@ import { cn } from "@/lib/utils";
 import { formatDateId, formatRupiah, formatRupiahShort } from "@/lib/format";
 import type { BankNameEntity } from "@/mocks/types";
 import { outletLabel, outletLabelTitle } from "@/lib/lexicon";
+import { useResettableState } from "@/hooks/useResettableState";
 
 const TABS = ["Menunggu Verifikasi", "Terverifikasi", "Ditolak", "Semua"];
 const BANKS: BankNameEntity[] = ["BCA", "BNI", "Mandiri", "BRI", "BSI"];
@@ -374,7 +375,6 @@ function AllocateDialog({
   payment: PaymentView | null;
   onClose: () => void;
 }) {
-  const [rows, setRows] = useState<Record<string, number>>({});
 
   const invoices = useQuery({
     queryKey: [...scopeKey(), "open-invoices", payment?.outletId],
@@ -382,7 +382,14 @@ function AllocateDialog({
     enabled: !!payment,
   });
 
-  useEffect(() => setRows({}), [payment?.id]);
+  // Allocations are per payment, so opening a different one starts empty.
+  // Reset during render rather than in an effect: after an effect, the new
+  // payment's invoice list would paint for one frame carrying the amounts
+  // typed against the previous one.
+  const [rows, setRows] = useResettableState<Record<string, number>>(
+    [payment?.id],
+    () => ({}),
+  );
 
   const mutation = useDeskMutation({
     mutationFn: (input: {

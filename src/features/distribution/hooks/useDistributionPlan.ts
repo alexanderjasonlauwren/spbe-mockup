@@ -1,5 +1,4 @@
 import { scopeKey } from "@/mocks/scope";
-import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import {
@@ -18,18 +17,28 @@ import {
 } from "../api/distributionApi";
 import type { PlanRow } from "../types";
 import { outletLabel, unitLabel } from "@/lib/lexicon";
+import { useResettableState } from "@/hooks/useResettableState";
 
 export function useDistributionPlan() {
-  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
-
   const planList = useQuery({ queryKey: [...scopeKey(), "plan-list"], queryFn: getPlanList });
 
   // Open on the plan that needs attention: today's, or the newest draft.
-  useEffect(() => {
-    if (selectedPlanId || !planList.data?.length) return;
-    const draft = planList.data.find((p) => p.status === "Draft");
-    setSelectedPlanId(draft?.id ?? planList.data[0].id);
-  }, [planList.data, selectedPlanId]);
+  //
+  // Chosen during render rather than in an effect, so the first paint already
+  // has a plan selected. Via an effect the panel rendered once with nothing
+  // selected, which flashed the empty state on every load.
+  //
+  // The list is the only dependency: an explicit selection survives a refetch
+  // because setSelectedPlanId replaces the value without disturbing the seed,
+  // and only a genuinely new list re-runs the choice.
+  const [selectedPlanId, setSelectedPlanId] = useResettableState<string | null>(
+    [planList.data],
+    () => {
+      const plans = planList.data;
+      if (!plans?.length) return null;
+      return (plans.find((p) => p.status === "Draft") ?? plans[0]).id;
+    },
+  );
 
   const planDetail = useQuery({
     queryKey: [...scopeKey(), "plan-detail", selectedPlanId],

@@ -1,5 +1,5 @@
 import { scopeKey } from "@/mocks/scope";
-import { useEffect, useState } from "react";
+import { useResettableState } from "@/hooks/useResettableState";
 import { useQuery } from "@tanstack/react-query";
 import { getSystemConfig, saveNumbering } from "@/features/system/api/systemApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
@@ -13,11 +13,9 @@ import { outletLabel } from "@/lib/lexicon";
 
 export function NumberingSection() {
   const config = useQuery({ queryKey: [...scopeKey(), "system-config"], queryFn: getSystemConfig });
-  const [form, setForm] = useState<NumberingEntity | null>(null);
-
-  useEffect(() => {
-    if (config.data) setForm({ ...config.data.penomoran });
-  }, [config.data]);
+  const [form, setForm] = useResettableState<NumberingEntity | null>([config.data], () =>
+    config.data ? { ...config.data.penomoran } : null,
+  );
 
   const saveMutation = useDeskMutation({
     mutationFn: (values: NumberingEntity) => saveNumbering(values),

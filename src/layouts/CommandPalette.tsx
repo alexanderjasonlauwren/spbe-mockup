@@ -1,5 +1,5 @@
 import { scopeKey } from "@/mocks/scope";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { getDb } from "@/mocks/db";
 import { ALL_NAV_ITEMS } from "./nav";
 import { outletLabel, outletLabelTitle } from "@/lib/lexicon";
+import { useResettableState } from "@/hooks/useResettableState";
 
 interface Entry {
   id: string;
@@ -30,8 +31,6 @@ export function CommandPalette({
   onClose: () => void;
 }) {
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
-  const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -88,6 +87,11 @@ export function CommandPalette({
     return [...nav, ...outlet, ...drivers];
   }, [records.data]);
 
+  // Each opening starts clean. Reset during render rather than in an effect,
+  // so the palette never paints one frame carrying the previous search.
+  const [query, setQuery] = useResettableState([open], () => "");
+  const [cursor, setCursor] = useResettableState([open], () => 0);
+
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     const matched = q
@@ -100,12 +104,9 @@ export function CommandPalette({
   }, [entries, query]);
 
   useEffect(() => {
-    if (open) {
-      setQuery("");
-      setCursor(0);
-      // Let the dialog paint before stealing focus.
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
+    // Focus stays in an effect: moving it is a real side effect on the DOM,
+    // not state, and it has to happen after the dialog has painted.
+    if (open) requestAnimationFrame(() => inputRef.current?.focus());
   }, [open]);
 
   useEffect(() => {

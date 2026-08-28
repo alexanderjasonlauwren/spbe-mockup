@@ -1,5 +1,5 @@
 import { scopeKey } from "@/mocks/scope";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
@@ -13,6 +13,7 @@ import { Panel, PanelBody, PanelHeader, Skeleton } from "@/components/common/Pan
 import { Field, TextInput, Toggle } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
 import { formatPercentId, formatRupiah } from "@/lib/format";
+import { useResettableState } from "@/hooks/useResettableState";
 
 interface FormState {
   kode: string;
@@ -41,7 +42,6 @@ export function ProductFormPage() {
   const navigate = useNavigate();
   const isEdit = !!id;
 
-  const [form, setForm] = useState<FormState>(EMPTY);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
   const detail = useQuery({
@@ -50,10 +50,13 @@ export function ProductFormPage() {
     enabled: isEdit,
   });
 
-  useEffect(() => {
-    if (!detail.data) return;
+  // Seeded from the loaded product, or EMPTY while creating one. Computed
+  // during render rather than pushed in by an effect, so the form never paints
+  // a frame of the previous product's values while switching between two.
+  const [form, setForm] = useResettableState<FormState>([detail.data], () => {
     const p = detail.data;
-    setForm({
+    if (!p) return EMPTY;
+    return {
       kode: p.kode,
       nama: p.nama,
       ukuran: p.ukuran,
@@ -62,8 +65,8 @@ export function ProductFormPage() {
       stok: p.stok,
       stokMinimum: p.stokMinimum,
       aktif: p.aktif,
-    });
-  }, [detail.data]);
+    };
+  });
 
   const saveMutation = useDeskMutation({
     mutationFn: (values: FormState) =>

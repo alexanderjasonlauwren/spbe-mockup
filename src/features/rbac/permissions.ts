@@ -39,6 +39,10 @@ export const PERMISSIONS = {
   SA_VIEW: "distribution.read.schedule_agreements",
   SA_CREATE: "distribution.create.schedule_agreements",
   SA_EDIT: "distribution.update.schedule_agreements",
+  // Bulk-replacing a month of obligations from a spreadsheet. Deliberately not
+  // create.schedule_agreements: whoever may sign an agreement is not
+  // necessarily whoever may re-import one over the top of it.
+  SA_IMPORT: "distribution.import.schedule_agreements",
 
   // Distribution planning
   DISTRIBUTION_VIEW: "distribution.read.distribution_orders",
@@ -82,10 +86,6 @@ export const PERMISSIONS = {
   //
   // Each disappears the moment its backend counterpart is seeded:
   //
-  //   SA_IMPORT           needs a code when the Base SA upload lands (Phase D1).
-  //                       Not `create.schedule_agreements`: importing a
-  //                       spreadsheet of daily targets is a different authority
-  //                       from signing an agreement.
   //   DISTRIBUTION_DELETE the catalogue gives distribution_orders read/create/
   //                       update/approve/reject and no delete. That looks
   //                       deliberate — a plan is cancelled, not erased — so the
@@ -96,7 +96,6 @@ export const PERMISSIONS = {
   //                       nothing is worse than a missing one, because it reads
   //                       as coverage."
   // ---------------------------------------------------------------------
-  SA_IMPORT: "console.import.schedule_agreements",
   DISTRIBUTION_DELETE: "console.delete.distribution_orders",
   REPORTS_VIEW: "console.read.reports",
   REPORTS_EXPORT: "console.export.reports",

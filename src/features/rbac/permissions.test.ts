@@ -48,9 +48,10 @@ describe("permission vocabulary", () => {
     for (const code of CONSOLE_ONLY_PERMISSIONS) {
       expect(code.startsWith("console."), `${code} should carry the console. prefix`).toBe(true);
     }
-    // Four today: SA_IMPORT, DISTRIBUTION_DELETE, REPORTS_VIEW, REPORTS_EXPORT.
+    // Three: DISTRIBUTION_DELETE, REPORTS_VIEW, REPORTS_EXPORT. SA_IMPORT left
+    // this list when the backend gained distribution.import.schedule_agreements.
     // Raising this number is a deliberate act; lower it as adapters land.
-    expect(CONSOLE_ONLY_PERMISSIONS.length).toBeLessThanOrEqual(4);
+    expect(CONSOLE_ONLY_PERMISSIONS.length).toBeLessThanOrEqual(3);
   });
 
   // Every non-console code must be shaped like the backend's, which is

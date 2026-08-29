@@ -40,6 +40,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # The console had no test framework at all until 2026-08-29 — not few
+      # tests, none — so this step and the suite behind it arrived together.
+      # Wired into CI on the first day for the reason the lint step above
+      # exists: a check nothing runs is a check that stops being true.
+      - name: Test
+        run: npm test
+
       - name: Build
         run: npm run build
 

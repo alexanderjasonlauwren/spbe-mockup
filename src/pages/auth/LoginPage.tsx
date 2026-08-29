@@ -106,8 +106,17 @@ export function LoginPage() {
         </div>
 
         <div className="relative z-10">
+          {/*
+            "muatan", not "tabung". This is the one screen with no tenant, so
+            there is no lexicon to ask -- whoever is looking at it has not
+            signed in yet and the console does not know which business they
+            run. A vertical's noun here is the first thing a water depot sees,
+            and it cannot be swapped later the way every noun behind the login
+            can. "Muatan" is the console's own generic word for a load, already
+            on the planning screen.
+          */}
           <h2 className="max-w-md text-[2.5rem] font-bold leading-[1.08] tracking-[-0.035em] text-[#F4F5F0]">
-            Setiap tabung punya
+            Setiap muatan punya
             <br />
             jam berangkatnya.
           </h2>

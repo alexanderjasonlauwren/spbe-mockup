@@ -75,7 +75,7 @@ export function LoginPage() {
       await login(email, password);
       // Read after the store settles: a sopir belongs on their run, not on a
       // dashboard of trucks that are not theirs.
-      navigate(landingPathFor(useAuthStore.getState().user?.role), {
+      navigate(landingPathFor(useAuthStore.getState().user?.permissions), {
         replace: true,
       });
     } catch (err) {

@@ -26,7 +26,7 @@ export function RequirePermission({
   children: React.ReactNode;
 }) {
   const hasPermission = useAuthStore((s) => s.hasPermission);
-  const role = useAuthStore((s) => s.user?.role);
+  const permissions = useAuthStore((s) => s.user?.permissions);
 
   if (hasPermission(permission)) return <>{children}</>;
 
@@ -38,7 +38,7 @@ export function RequirePermission({
         description="Peran akun Anda tidak mencakup halaman ini. Hubungi admin agen bila Anda memang memerlukannya."
         action={
           <Button asChild size="sm">
-            <Link to={landingPathFor(role)}>Kembali ke halaman Anda</Link>
+            <Link to={landingPathFor(permissions)}>Kembali ke halaman Anda</Link>
           </Button>
         }
       />

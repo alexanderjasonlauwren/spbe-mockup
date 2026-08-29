@@ -199,8 +199,8 @@ const router = createBrowserRouter([
 
 /** Sends each role to the console it works from. */
 function HomeRedirect() {
-  const role = useAuthStore((state) => state.user?.role);
-  return <Navigate to={landingPathFor(role)} replace />;
+  const permissions = useAuthStore((state) => state.user?.permissions);
+  return <Navigate to={landingPathFor(permissions)} replace />;
 }
 
 /**

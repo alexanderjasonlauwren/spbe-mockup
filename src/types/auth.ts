@@ -1,3 +1,15 @@
+/**
+ * Role names, as the mock database and the users list use them.
+ *
+ * NOT the session's model of authority. A signed-in user carries `roles` — a
+ * list, because the backend has always allowed several and has no `role` column
+ * on iam.users to read — and nothing branches on those names. What a person may
+ * do is `permissions`, resolved per request by the server from iam.user_roles.
+ *
+ * This union survives because the users LIST still shows a role column backed
+ * by mock data. It is display vocabulary, and it should go when that list is
+ * wired to the API.
+ */
 export type UserRole =
   | "admin"
   | "manager"
@@ -10,7 +22,18 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: UserRole;
+  /**
+   * What this person is CALLED in the tenant they are acting in, for display.
+   *
+   * Several, because a person can hold several. The console modelled one and
+   * had to pick, so a user who was both Finance and Dispatcher appeared as
+   * whichever the code happened to read — and against the API there was no
+   * honest answer at all, so the adapter returned a fixed placeholder.
+   *
+   * Never branch on these. `permissions` is the authority, and a role renamed
+   * in the database must not change what the software permits.
+   */
+  roles: string[];
   permissions: string[];
   avatar?: string;
   branch?: string;

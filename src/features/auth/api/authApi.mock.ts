@@ -112,7 +112,9 @@ function sessionFor(accountId: string): SessionResult {
     id: account.id,
     email: account.email,
     name: account.nama,
-    role: account.role,
+    // One in the mock's fixture, a list on the wire. The demo has always had
+    // exactly one role per account; the shape is what changed, not the data.
+    roles: [account.role],
     permissions: ROLE_PERMISSIONS[account.role] ?? [],
     branch: account.cabang,
     branchIds: account.branchIds ?? [],

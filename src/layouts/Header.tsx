@@ -25,6 +25,7 @@ import { relativeTime } from "@/lib/format";
 import { sectionFor, titleFor } from "./nav";
 import { CommandPalette } from "./CommandPalette";
 import { ScopeSwitcher } from "@/features/tenancy/ScopeSwitcher";
+import { describeRoles } from "@/features/rbac/access";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -253,7 +254,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                   {user?.name ?? "Pengguna"}
                 </span>
                 <span className="block text-2xs capitalize leading-tight text-ink-muted">
-                  {user?.role ?? "staf"}
+                  {describeRoles(user?.roles)}
                 </span>
               </span>
               <span className="flex h-8 w-8 items-center justify-center rounded-md bg-ink text-2xs font-bold text-ink-on">

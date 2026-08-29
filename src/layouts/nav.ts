@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import type { UserRole } from "@/types/auth";
+import { PERMISSIONS } from "@/features/rbac/permissions";
 import {
   Network,
   Bell,
@@ -196,19 +196,41 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   ...BOTTOM_NAV,
 ];
 
-/** The menu this role actually works from. */
-export function navGroupsFor(role?: UserRole): NavGroup[] {
-  return role === "driver" ? DRIVER_NAV_GROUPS : NAV_GROUPS;
+/**
+ * Whether this person works from the driver console.
+ *
+ * Derived from what they may do, not from a role name. The console used to ask
+ * `role === "driver"`, which assumed one role per user; the backend has never
+ * worked that way -- authority is a set of grants from iam.user_roles, a person
+ * may hold several roles at once, and there is no `role` column on iam.users to
+ * read. So the question had no honest answer and the API adapter had to invent
+ * one.
+ *
+ * The real question is narrower and answerable: someone who may record a
+ * delivery and may do nothing else has only one screen to be on. A dispatcher
+ * who can also execute deliveries holds far more than this and keeps the full
+ * console, which is the correct outcome and the one a role name got wrong the
+ * moment anybody held two.
+ */
+export function usesDriverConsole(permissions: readonly string[] = []): boolean {
+  return (
+    permissions.length === 1 && permissions[0] === PERMISSIONS.DELIVERIES_EXECUTE
+  );
+}
+
+/** The menu this person actually works from. */
+export function navGroupsFor(permissions?: readonly string[]): NavGroup[] {
+  return usesDriverConsole(permissions) ? DRIVER_NAV_GROUPS : NAV_GROUPS;
 }
 
 /**
- * Where a role belongs after signing in.
+ * Where someone belongs after signing in.
  *
  * A sopir landing on the dashboard would open the console on a dispatch rail of
  * trucks that are not theirs, with their own run two taps away.
  */
-export function landingPathFor(role?: UserRole): string {
-  return role === "driver" ? "/sopir" : "/dashboard";
+export function landingPathFor(permissions?: readonly string[]): string {
+  return usesDriverConsole(permissions) ? "/sopir" : "/dashboard";
 }
 
 /** Title shown in the header for a given path. */

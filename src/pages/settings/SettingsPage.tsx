@@ -23,7 +23,6 @@ import {
 } from "@/features/settings/api/fields";
 import { advanceOperations } from "@/mocks/rules";
 import { useAuthStore } from "@/features/auth/store/authStore";
-import { ROLE_LABEL, ROLE_SUMMARY } from "@/features/users/api/userApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { useTheme } from "@/hooks/useTheme";
 import { useToast } from "@/hooks/useToast";
@@ -46,6 +45,7 @@ import { OperationsSection } from "@/features/settings/components/OperationsSect
 import { Button } from "@/components/ui/button";
 import { cn, getInitials } from "@/lib/utils";
 import type { SettingsEntity } from "@/mocks/types";
+import { describeAccess, describeRoles } from "@/features/rbac/access";
 
 /**
  * Which group of settings is on screen.
@@ -269,7 +269,7 @@ export function SettingsPage() {
               <div>
                 <dt className="text-ink-muted">Peran</dt>
                 <dd className="font-medium text-ink">
-                  {user ? ROLE_LABEL[user.role] : "—"}
+                  {user ? describeRoles(user.roles) : "—"}
                 </dd>
               </div>
               <div>
@@ -282,7 +282,7 @@ export function SettingsPage() {
               </div>
             </dl>
             <p className="mt-3 max-w-xl text-xs leading-relaxed text-ink-muted">
-              {user ? ROLE_SUMMARY[user.role] : ""}
+              {user ? describeAccess(user.permissions) : ""}
             </p>
             <p className="mt-3 text-xs text-ink-muted">
               Peran dan cabang diatur oleh admin di{" "}

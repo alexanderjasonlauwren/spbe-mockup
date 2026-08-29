@@ -14,7 +14,7 @@
  */
 import { getOne, send } from "@/lib/api";
 import { getRefreshToken, setSessionTokens, type SessionTokens } from "@/lib/tokens";
-import type { User, UserRole } from "@/types/auth";
+import type { User } from "@/types/auth";
 import type { AuthApi, SessionResult, SessionTenant } from "./contract";
 
 /** Mirrors the backend's user.LoginResponse. */
@@ -37,31 +37,19 @@ interface SessionResponse {
     status: string;
   };
   tenant: { tenant_id: number; code: string; name: string };
+  roles: string[];
   permissions: { code: string; tenant_wide: boolean }[];
 }
-
-/**
- * The console still carries a single `role` per user; the backend has not for
- * some time — authority is a set of grants from `iam.user_roles`, and a user
- * can hold several roles at once.
- *
- * Rather than invent a role from the permission set, which would be a guess
- * that goes wrong the first time someone holds two, this reports the one thing
- * that is true of any authenticated user and lets the permission set do the
- * gating it already does. `hasRole` is cosmetic on every screen that calls it —
- * a label in the header, a landing route — and `hasPermission` is what actually
- * hides anything.
- *
- * @see docs open item: retire UserRole from the console.
- */
-const ROLE_FROM_API: UserRole = "staff";
 
 function toDomain(row: SessionResponse): SessionResult {
   const user: User = {
     id: row.user.id,
     email: row.user.email ?? "",
     name: row.user.full_name,
-    role: ROLE_FROM_API,
+    // Real role names now, from GET /profile. This used to be a hardcoded
+    // placeholder because the endpoint did not return them and the console
+    // insisted on exactly one — so every API user was labelled "staff".
+    roles: row.roles ?? [],
     // Every held code, whatever its scope. A branch-scoped grant still means
     // "show me this screen" — it is the action inside that is narrower, and the
     // server is what refuses it. Filtering to tenant-wide here would hide a

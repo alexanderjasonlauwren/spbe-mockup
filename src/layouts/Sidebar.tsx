@@ -50,8 +50,8 @@ export function Sidebar({ onClose }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const logout = useAuthStore((state) => state.logout);
-  const role = useAuthStore((state) => state.user?.role);
-  const navGroups = navGroupsFor(role);
+  const permissions = useAuthStore((state) => state.user?.permissions);
+  const navGroups = navGroupsFor(permissions);
 
   const collapsed = useSidebarStore((s) => s.collapsed);
   const openGroups = useSidebarStore((s) => s.openGroups);

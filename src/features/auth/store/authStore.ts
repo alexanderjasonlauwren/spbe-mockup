@@ -16,7 +16,7 @@ import { persist } from "zustand/middleware";
 
 import { authApi } from "@/features/auth/api/authApi";
 import type { SessionTenant } from "@/features/auth/api/contract";
-import type { User, UserRole } from "@/types/auth";
+import type { User } from "@/types/auth";
 import { clearSessionTokens } from "@/lib/tokens";
 
 interface AuthState {
@@ -37,7 +37,6 @@ interface AuthState {
   restore: () => Promise<void>;
   setUser: (user: User, token: string) => void;
   hasPermission: (permission: string) => boolean;
-  hasRole: (role: UserRole | UserRole[]) => boolean;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -92,12 +91,6 @@ export const useAuthStore = create<AuthState>()(
 
       hasPermission: (permission: string) =>
         get().user?.permissions.includes(permission) ?? false,
-
-      hasRole: (roles: UserRole | UserRole[]) => {
-        const { user } = get();
-        if (!user) return false;
-        return (Array.isArray(roles) ? roles : [roles]).includes(user.role);
-      },
     }),
     {
       name: "auth-storage",

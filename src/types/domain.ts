@@ -191,6 +191,14 @@ export interface PlanRowEntity {
   /** Derived: total units across `lines`. */
   jumlahUnit: number;
   jamPengiriman: string; // "HH:mm"
+  /**
+   * Which of the driver's depot cycles carries this stop. Null when nobody has
+   * been given it yet.
+   *
+   * Optional so every board saved before trips existed still loads; such a row
+   * reads as trip 1, which is what it was.
+   */
+  tripNo?: number | null;
 }
 
 /* ── transaction lines ─────────────────────────────────────────────────── */

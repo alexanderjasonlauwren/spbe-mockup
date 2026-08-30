@@ -81,6 +81,7 @@ export async function getPlanDetail(planId: string): Promise<PlanRow[]> {
         driverId: r.driverId,
         driver: driver?.nama ?? "Belum ditetapkan",
         jamPengiriman: r.jamPengiriman,
+        tripNo: r.tripNo ?? null,
         statusBayar: exp.terblokir ? "Belum Lunas" : "Lunas",
         sisaKuotaOutlet: Math.max(0, (pkl?.kuotaBulanan ?? 0) - takenThisMonth),
         piutang: exp.outstanding,
@@ -105,6 +106,9 @@ export async function saveDraft(planId: string, rows: PlanRow[]): Promise<void> 
       // matches the entity.
       jumlahUnit: r.jumlahUnit,
       jamPengiriman: r.jamPengiriman,
+      // Persisted, or accepting a suggestion would collapse every trip back
+      // into one the moment the draft was saved.
+      tripNo: r.tripNo,
     })),
   );
 }

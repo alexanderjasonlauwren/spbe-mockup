@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   CheckCircle2,
@@ -9,9 +9,10 @@ import {
   Trash2,
   TriangleAlert,
   Truck,
+  Wand2,
   XCircle,
 } from "lucide-react";
-import { PanelHeader } from "@/components/common/Panel";
+import { Meter, PanelHeader } from "@/components/common/Panel";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Skeleton } from "@/components/common/Panel";
 import { StatusBadge } from "@/components/common/StatusBadge";
@@ -25,7 +26,9 @@ import type {
   DriverOption,
   PlanOption,
   PlanRow,
+  UnroutableStop,
 } from "../types";
+import { suggestAssignment } from "../api/suggestAssignment";
 import { outletLabel, outletLabelTitle, unitLabel } from "@/lib/lexicon";
 import { useResettableState } from "@/hooks/useResettableState";
 
@@ -47,6 +50,76 @@ interface PlanDetailPanelProps {
 /** A stop that has not been persisted yet gets a temporary id. */
 let tempSeq = 0;
 
+/**
+ * How many depot cycles one driver may be given by hand.
+ *
+ * Matches the planner's own ceiling, so a board typed manually and a board
+ * accepted from a suggestion can express the same days.
+ */
+const MAX_TRIP = 3;
+
+interface TripGroup {
+  key: string;
+  driverId: string;
+  tripNo: number;
+  driver: DriverOption | undefined;
+  kapasitas: number;
+  muatan: number;
+  /** Cylinders on this trip that no payment has arrived for. */
+  berisiko: number;
+  rows: PlanRow[];
+}
+
+/**
+ * A row with a driver but no trip number is trip 1.
+ *
+ * Every board saved before trips existed is in that shape, so treating the
+ * absence as "unassigned" would empty the panel for every historical plan.
+ */
+function tripOf(row: PlanRow): number {
+  return row.tripNo ?? 1;
+}
+
+function groupIntoTrips(rows: PlanRow[], drivers: DriverOption[]): TripGroup[] {
+  const byKey = new Map<string, TripGroup>();
+
+  for (const row of rows) {
+    if (!row.driverId) continue;
+    const tripNo = tripOf(row);
+    const key = `${row.driverId}#${tripNo}`;
+    let group = byKey.get(key);
+    if (!group) {
+      const driver = drivers.find((d) => d.id === row.driverId);
+      group = {
+        key,
+        driverId: row.driverId,
+        tripNo,
+        driver,
+        kapasitas: driver?.kapasitas ?? 0,
+        muatan: 0,
+        berisiko: 0,
+        rows: [],
+      };
+      byKey.set(key, group);
+    }
+    group.rows.push(row);
+    group.muatan += row.jumlahUnit;
+    if (row.statusBayar !== "Lunas") group.berisiko += row.jumlahUnit;
+  }
+
+  // Fleet order, then trip number: the board reads down the day the way the
+  // pool dispatches it. The driver id breaks ties so a driver missing from the
+  // options list still lands somewhere fixed rather than moving on each render.
+  const rank = new Map(drivers.map((d, i) => [d.id, i]));
+  return [...byKey.values()].sort(
+    (a, b) =>
+      (rank.get(a.driverId) ?? Number.MAX_SAFE_INTEGER) -
+        (rank.get(b.driverId) ?? Number.MAX_SAFE_INTEGER) ||
+      a.driverId.localeCompare(b.driverId) ||
+      a.tripNo - b.tripNo,
+  );
+}
+
 export function PlanDetailPanel({
   plan,
   rows,
@@ -64,24 +137,30 @@ export function PlanDetailPanel({
   // Server state wins whenever the selected plan or its saved rows change.
   const [draft, setDraft] = useResettableState<PlanRow[]>([rows, plan?.id], () => rows);
   const [dirty, setDirty] = useResettableState<boolean>([rows, plan?.id], () => false);
+  // Both reset with the plan: a proposal is about the board it was made from,
+  // and showing yesterday's leftovers beside today's stops would be a lie.
+  const [unroutable, setUnroutable] = useResettableState<UnroutableStop[]>(
+    [rows, plan?.id],
+    () => [],
+  );
+  const [dasar, setDasar] = useResettableState<string | null>([rows, plan?.id], () => null);
 
   const editable = plan?.status === "Draft";
 
   const total = draft.reduce((s, r) => s + r.jumlahUnit, 0);
   const overQuota = plan ? total > plan.sisaKuotaSA : false;
 
-  const loadByDriver = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const row of draft) {
-      if (!row.driverId) continue;
-      map.set(row.driverId, (map.get(row.driverId) ?? 0) + row.jumlahUnit);
-    }
-    return map;
-  }, [draft]);
+  /**
+   * Trips, in the order they are driven.
+   *
+   * Capacity applies to a trip, not to a driver: someone who loads at the pool,
+   * runs four outlets, comes back and loads again carries two truckloads in a
+   * day. Summing both against one truck reported an overload that was not real
+   * and blocked a board the fleet could actually run.
+   */
+  const trips = useMemo(() => groupIntoTrips(draft, driverOptions), [draft, driverOptions]);
 
-  const overloaded = driverOptions.filter(
-    (d) => (loadByDriver.get(d.id) ?? 0) > d.kapasitas,
-  );
+  const overloaded = trips.filter((t) => t.muatan > t.kapasitas);
   const unassigned = draft.filter((r) => !r.driverId);
   // A line with no product cannot be priced, so it cannot be invoiced either.
   const tanpaProduk = draft.filter((r) => r.lines.some((l) => !l.productId));
@@ -92,6 +171,43 @@ export function PlanDetailPanel({
     unassigned.length > 0 ||
     tanpaProduk.length > 0 ||
     kreditDiblokir.length > 0;
+
+  /**
+   * Proposes a board. Nothing is saved: the dispatcher accepts it by pressing
+   * Simpan draf, or edits it first, or reloads and loses it.
+   *
+   * That is the shape the client asked for -- "propose, they accept or edit" --
+   * and it is why this writes into the draft rather than calling the service.
+   */
+  const suggest = () => {
+    const suggestion = suggestAssignment(draft, driverOptions);
+
+    const placement = new Map<string, { driverId: string; driver: string; tripNo: number }>();
+    for (const trip of suggestion.trips) {
+      for (const stop of trip.stops) {
+        placement.set(stop.outletId, {
+          driverId: trip.driverId,
+          driver: trip.driver,
+          tripNo: trip.tripNo,
+        });
+      }
+    }
+
+    setDraft((prev) =>
+      prev.map((row) => {
+        const at = placement.get(row.outletId);
+        // A stop the planner could not place is cleared rather than left on
+        // whichever trip it happened to be on: the unroutable list below is
+        // then the whole truth about what is not being carried.
+        return at
+          ? { ...row, driverId: at.driverId, driver: at.driver, tripNo: at.tripNo }
+          : { ...row, driverId: null, driver: "Belum ditetapkan", tripNo: null };
+      }),
+    );
+    setUnroutable(suggestion.unroutable);
+    setDasar(suggestion.dasar);
+    setDirty(true);
+  };
 
   const patchRow = (id: string, patch: Partial<PlanRow>) => {
     setDraft((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -124,6 +240,7 @@ export function PlanDetailPanel({
         jumlahUnit: 100,
         driverId: null,
         driver: "Belum ditetapkan",
+        tripNo: null,
         jamPengiriman: `${String(hour).padStart(2, "0")}:00`,
         statusBayar: "Lunas",
         sisaKuotaOutlet: 0,
@@ -171,6 +288,20 @@ export function PlanDetailPanel({
             </Button>
             {editable ? (
               <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={suggest}
+                  disabled={draft.length === 0}
+                  title={
+                    draft.length === 0
+                      ? `Tambahkan ${outletLabel()} terlebih dahulu`
+                      : "Susun usulan trip. Tidak menyimpan apa pun sampai Anda simpan."
+                  }
+                >
+                  <Wand2 className="h-3.5 w-3.5" />
+                  Sarankan penugasan
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -223,12 +354,32 @@ export function PlanDetailPanel({
           unit={unitLabel()}
           tone={overQuota ? "rust" : undefined}
         />
-        <Figure
-          label="Armada terpakai"
-          value={formatNumber(loadByDriver.size)}
-          unit="unit"
-        />
+        <Figure label="Trip" value={formatNumber(trips.length)} unit="rit" />
       </div>
+
+      {/* What the last proposal could not place, and what it was based on.
+          Both are stated rather than implied: a suggestion that quietly drops
+          a stop is worse than none, and one that implies it minimised driving
+          when it did not is worse still. */}
+      {editable && dasar && (
+        <div className="border-b border-line bg-panel-sunk px-5 py-2.5">
+          <p className="text-xs text-ink-muted">{dasar}</p>
+          {unroutable.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {unroutable.map((u) => (
+                <li key={u.outletId} className="flex items-baseline gap-2 text-xs">
+                  <TriangleAlert className="h-3 w-3 shrink-0 translate-y-0.5 text-rust-ink" />
+                  <span className="text-ink">{u.outlet}</span>
+                  <span className="data text-2xs text-ink-muted">
+                    {formatNumber(u.jumlahUnit)} {unitLabel()}
+                  </span>
+                  <span className="text-ink-muted">— {u.alasan}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Blockers, stated as what to do about them. */}
       {editable && adaHambatan && (
@@ -244,13 +395,14 @@ export function PlanDetailPanel({
               .
             </Blocker>
           )}
-          {overloaded.map((d) => (
-            <Blocker key={d.id}>
-              {d.label} membawa{" "}
-              <span className="data">{formatNumber(loadByDriver.get(d.id) ?? 0)}</span>{" "}
-              {unitLabel()}, melebihi kapasitas{" "}
-              <span className="data">{formatNumber(d.kapasitas)}</span>. Pindahkan
-              sebagian titik ke armada lain.
+          {overloaded.map((t) => (
+            <Blocker key={t.key}>
+              {t.driver?.label ?? "Driver"} pada trip{" "}
+              <span className="data">{t.tripNo}</span> membawa{" "}
+              <span className="data">{formatNumber(t.muatan)}</span> {unitLabel()},
+              melebihi kapasitas{" "}
+              <span className="data">{formatNumber(t.kapasitas)}</span>. Pindahkan
+              sebagian titik ke armada lain, atau ke trip berikutnya.
             </Blocker>
           ))}
           {tanpaProduk.length > 0 && (
@@ -329,124 +481,54 @@ export function PlanDetailPanel({
               </tr>
             </thead>
             <tbody>
-              {draft.map((row) => {
-                const driver = driverOptions.find((d) => d.id === row.driverId);
-                const load = row.driverId ? loadByDriver.get(row.driverId) ?? 0 : 0;
-                const over = driver ? load > driver.kapasitas : false;
+              {trips.map((trip) => (
+                <Fragment key={trip.key}>
+                  <TripHeader trip={trip} colSpan={editable ? 6 : 5} />
+                  {trip.rows.map((row) => (
+                    <StopRow
+                      key={row.id}
+                      row={row}
+                      editable={editable}
+                      over={trip.muatan > trip.kapasitas}
+                      driverOptions={driverOptions}
+                      productOptions={productOptions}
+                      patchRow={patchRow}
+                      patchLines={patchLines}
+                      removeRow={removeRow}
+                    />
+                  ))}
+                </Fragment>
+              ))}
 
-                return (
-                  <tr key={row.id} className="border-b border-line last:border-b-0">
-                    <td className="px-5 py-2.5">
-                      <span className="block text-sm font-medium text-ink">
-                        {row.outlet}
+              {/* Stops nobody is carrying, last and named as such. A stop that
+                  simply vanished from the board is one the pangkalan telephones
+                  about. */}
+              {unassigned.length > 0 && (
+                <Fragment>
+                  <tr className="border-b border-line bg-panel-sunk">
+                    <td colSpan={editable ? 6 : 5} className="px-5 py-2">
+                      <span className="label text-2xs text-rust-ink">
+                        Belum ditugaskan · {unassigned.length} titik ·{" "}
+                        {formatNumber(unassigned.reduce((s, r) => s + r.jumlahUnit, 0))}{" "}
+                        {unitLabel()}
                       </span>
-                      <span className="block text-xs text-ink-muted">{row.alamat}</span>
                     </td>
-
-                    <td className="px-3 py-2.5">
-                      {editable ? (
-                        <TextInput
-                          type="time"
-                          mono
-                          aria-label={`Jam pengiriman ${row.outlet}`}
-                          value={row.jamPengiriman}
-                          onChange={(e) =>
-                            patchRow(row.id, { jamPengiriman: e.target.value })
-                          }
-                        />
-                      ) : (
-                        <span className="data text-sm text-ink">{row.jamPengiriman}</span>
-                      )}
-                    </td>
-
-                    <td className="px-3 py-2.5">
-                      {editable ? (
-                        <LoadEditor
-                          row={row}
-                          products={productOptions}
-                          onChange={(lines) => patchLines(row.id, lines)}
-                        />
-                      ) : (
-                        <LoadSummary row={row} products={productOptions} />
-                      )}
-                    </td>
-
-                    <td className="px-3 py-2.5">
-                      {editable ? (
-                        <>
-                          <SelectInput
-                            aria-label={`Driver untuk ${row.outlet}`}
-                            value={row.driverId ?? ""}
-                            invalid={!row.driverId || over}
-                            onChange={(e) =>
-                              patchRow(row.id, {
-                                driverId: e.target.value || null,
-                                driver:
-                                  driverOptions.find((d) => d.id === e.target.value)
-                                    ?.label ?? "Belum ditetapkan",
-                              })
-                            }
-                          >
-                            <option value="">Belum ditetapkan</option>
-                            {driverOptions.map((d) => (
-                              <option key={d.id} value={d.id} disabled={d.disabled}>
-                                {d.label} — {d.sublabel}
-                                {d.disabled ? " (cuti)" : ""}
-                              </option>
-                            ))}
-                          </SelectInput>
-                          {driver && (
-                            <p
-                              className={cn(
-                                "mt-1 text-2xs",
-                                over ? "font-semibold text-rust-ink" : "text-ink-muted",
-                              )}
-                            >
-                              Muatan <span className="data">{formatNumber(load)}</span> /{" "}
-                              <span className="data">{formatNumber(driver.kapasitas)}</span>
-                            </p>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <span className="block text-sm text-ink">{row.driver}</span>
-                          {driver && (
-                            <span className="data block text-2xs text-ink-muted">
-                              {driver.sublabel}
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </td>
-
-                    <td className="px-3 py-2.5">
-                      <StatusBadge
-                        variant={row.alasanBlokir ? "danger" : "success"}
-                        label={row.alasanBlokir ? "Diblokir" : "Lancar"}
-                      />
-                      {row.piutang > 0 && (
-                        <span className="data mt-1 block text-2xs text-ink-muted">
-                          piutang {formatNumber(Math.round(row.piutang / 1000))} rb
-                        </span>
-                      )}
-                    </td>
-
-                    {editable && (
-                      <td className="px-3 py-2.5">
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          aria-label={`Hapus ${row.outlet} dari rencana`}
-                          onClick={() => removeRow(row.id)}
-                          className="hover:bg-rust-soft hover:text-rust-ink"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </td>
-                    )}
                   </tr>
-                );
-              })}
+                  {unassigned.map((row) => (
+                    <StopRow
+                      key={row.id}
+                      row={row}
+                      editable={editable}
+                      over={false}
+                      driverOptions={driverOptions}
+                      productOptions={productOptions}
+                      patchRow={patchRow}
+                      patchLines={patchLines}
+                      removeRow={removeRow}
+                    />
+                  ))}
+                </Fragment>
+              )}
             </tbody>
           </table>
         )}
@@ -636,5 +718,205 @@ function Blocker({ children }: { children: React.ReactNode }) {
       <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rust-ink" />
       <p className="text-xs leading-relaxed text-ink">{children}</p>
     </li>
+  );
+}
+
+/**
+ * One stop, wherever it sits.
+ *
+ * Shared by the trip groups and the unassigned list so a row cannot drift into
+ * looking different depending on whether anyone has been given it to carry.
+ */
+function StopRow({
+  row,
+  editable,
+  over,
+  driverOptions,
+  productOptions,
+  patchRow,
+  patchLines,
+  removeRow,
+}: {
+  row: PlanRow;
+  editable: boolean;
+  /** True when the trip this row sits on is over its truck's capacity. */
+  over: boolean;
+  driverOptions: DriverOption[];
+  productOptions: { id: string; label: string; satuan: string }[];
+  patchRow: (id: string, patch: Partial<PlanRow>) => void;
+  patchLines: (id: string, lines: PlanRow["lines"]) => void;
+  removeRow: (id: string) => void;
+}) {
+  const driver = driverOptions.find((d) => d.id === row.driverId);
+
+  return (
+      <tr className="border-b border-line last:border-b-0">
+        <td className="px-5 py-2.5">
+          <span className="block text-sm font-medium text-ink">
+            {row.outlet}
+          </span>
+          <span className="block text-xs text-ink-muted">{row.alamat}</span>
+        </td>
+
+        <td className="px-3 py-2.5">
+          {editable ? (
+            <TextInput
+              type="time"
+              mono
+              aria-label={`Jam pengiriman ${row.outlet}`}
+              value={row.jamPengiriman}
+              onChange={(e) =>
+                patchRow(row.id, { jamPengiriman: e.target.value })
+              }
+            />
+          ) : (
+            <span className="data text-sm text-ink">{row.jamPengiriman}</span>
+          )}
+        </td>
+
+        <td className="px-3 py-2.5">
+          {editable ? (
+            <LoadEditor
+              row={row}
+              products={productOptions}
+              onChange={(lines) => patchLines(row.id, lines)}
+            />
+          ) : (
+            <LoadSummary row={row} products={productOptions} />
+          )}
+        </td>
+
+        <td className="px-3 py-2.5">
+          {editable ? (
+            <>
+              <SelectInput
+                aria-label={`Driver untuk ${row.outlet}`}
+                value={row.driverId ?? ""}
+                invalid={!row.driverId || over}
+                onChange={(e) =>
+                  patchRow(row.id, {
+                    driverId: e.target.value || null,
+                    driver:
+                      driverOptions.find((d) => d.id === e.target.value)
+                        ?.label ?? "Belum ditetapkan",
+                  })
+                }
+              >
+                <option value="">Belum ditetapkan</option>
+                {driverOptions.map((d) => (
+                  <option key={d.id} value={d.id} disabled={d.disabled}>
+                    {d.label} — {d.sublabel}
+                    {d.disabled ? " (cuti)" : ""}
+                  </option>
+                ))}
+              </SelectInput>
+              {/* Which of that driver's runs this stop rides on. Only shown
+                  once there is a driver: a trip number with nobody to drive it
+                  is not an assignment, and the grouping has nowhere to put it. */}
+              {driver && (
+                <SelectInput
+                  aria-label={`Trip untuk ${row.outlet}`}
+                  className="mt-1 py-1.5 text-xs"
+                  value={String(tripOf(row))}
+                  invalid={over}
+                  onChange={(e) => patchRow(row.id, { tripNo: Number(e.target.value) })}
+                >
+                  {Array.from({ length: MAX_TRIP }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={n}>
+                      Trip {n}
+                    </option>
+                  ))}
+                </SelectInput>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="block text-sm text-ink">{row.driver}</span>
+              {driver && (
+                <span className="data block text-2xs text-ink-muted">
+                  {driver.sublabel}
+                </span>
+              )}
+            </>
+          )}
+        </td>
+
+        <td className="px-3 py-2.5">
+          <StatusBadge
+            variant={row.alasanBlokir ? "danger" : "success"}
+            label={row.alasanBlokir ? "Diblokir" : "Lancar"}
+          />
+          {row.piutang > 0 && (
+            <span className="data mt-1 block text-2xs text-ink-muted">
+              piutang {formatNumber(Math.round(row.piutang / 1000))} rb
+            </span>
+          )}
+        </td>
+
+        {editable && (
+          <td className="px-3 py-2.5">
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Hapus ${row.outlet} dari rencana`}
+              onClick={() => removeRow(row.id)}
+              className="hover:bg-rust-soft hover:text-rust-ink"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </td>
+        )}
+      </tr>
+  );
+}
+
+/**
+ * The strip above one trip's stops: who drives it, and how full the truck is.
+ *
+ * The load bar lives here rather than on each row because a truckload is a
+ * property of the trip. Repeating it per row invited the reading that each stop
+ * had its own capacity, and made an overload look like several problems.
+ */
+function TripHeader({ trip, colSpan }: { trip: TripGroup; colSpan: number }) {
+  const over = trip.muatan > trip.kapasitas;
+
+  return (
+    <tr className="border-b border-line bg-panel-sunk">
+      <td colSpan={colSpan} className="px-5 py-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          <span className="label text-2xs text-ink-muted">Trip {trip.tripNo}</span>
+          <span className="text-sm font-medium text-ink">
+            {trip.driver?.label ?? "Driver tidak dikenal"}
+          </span>
+          {trip.driver?.sublabel && (
+            <span className="data text-2xs text-ink-muted">{trip.driver.sublabel}</span>
+          )}
+
+          <span className="ml-auto flex items-center gap-2">
+            {trip.berisiko > 0 && (
+              <span className="label text-2xs text-signal-ink">
+                {formatNumber(trip.berisiko)} {unitLabel()} belum dibayar
+              </span>
+            )}
+            <span
+              className={cn(
+                "data text-2xs font-semibold",
+                over ? "text-rust-ink" : "text-ink-muted",
+              )}
+            >
+              {formatNumber(trip.muatan)} / {formatNumber(trip.kapasitas)}
+            </span>
+          </span>
+
+          <Meter
+            className="w-full"
+            value={trip.muatan}
+            max={Math.max(trip.kapasitas, trip.muatan)}
+            tone={over ? "rust" : "pine"}
+            label={`Muatan trip ${trip.tripNo}`}
+          />
+        </div>
+      </td>
+    </tr>
   );
 }

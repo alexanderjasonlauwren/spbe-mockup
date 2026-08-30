@@ -5,6 +5,9 @@ import { useScheduleAgreement } from "@/features/sa/hooks/useScheduleAgreement";
 import { SAFilterBar } from "@/features/sa/components/SAFilterBar";
 import { SATable } from "@/features/sa/components/SATable";
 import { UploadSAForm } from "@/features/sa/components/UploadSAForm";
+import { ImportTargetsDialog } from "@/features/sa/components/ImportTargetsDialog";
+import { useAuthStore } from "@/features/auth/store/authStore";
+import { PERMISSIONS } from "@/features/rbac/permissions";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelBody, PanelHeader, Meter } from "@/components/common/Panel";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -39,6 +42,15 @@ export function SAManagementPage() {
 
   const [pendingDelete, setPendingDelete] = useState<ScheduleAgreement | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [importing, setImporting] = useState<ScheduleAgreement | null>(null);
+
+  // Importing replaces a month of contractual obligations from a spreadsheet,
+  // which is not the same authority as recording an agreement — so it has its
+  // own permission, and the action is absent rather than disabled for whoever
+  // lacks it.
+  const canImport = useAuthStore((state) =>
+    state.hasPermission(PERMISSIONS.SA_IMPORT),
+  );
 
   const live = saList.filter((s) => s.status === "Aktif" || s.status === "Limit");
   const totalKuota = live.reduce((sum, s) => sum + s.totalKuota, 0);
@@ -158,6 +170,7 @@ export function SAManagementPage() {
           onActivate={(id) => activateMutation.mutate(id)}
           onPrint={(id) => printMutation.mutate(id)}
           onDelete={setPendingDelete}
+          onImport={canImport ? setImporting : undefined}
           pendingId={activateMutation.variables}
         />
       </Panel>
@@ -178,6 +191,8 @@ export function SAManagementPage() {
           />
         </DialogContent>
       </Dialog>
+
+      <ImportTargetsDialog sa={importing} onClose={() => setImporting(null)} />
 
       <ConfirmDialog
         isOpen={!!pendingDelete}

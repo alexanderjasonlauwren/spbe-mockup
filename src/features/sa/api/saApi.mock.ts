@@ -8,12 +8,21 @@ import { scopedDb } from "@/mocks/scope";
 import { latency } from "@/mocks/db";
 import {
   activateScheduleAgreement,
+  applySaImport,
   createScheduleAgreement,
   deleteScheduleAgreement,
+  recordSaImport,
 } from "@/mocks/rules";
+import { buildTargetDiff, parseTargetCsv, PESAN_TANPA_BARIS } from "./targetImport";
 import { startOfToday } from "@/mocks/seed";
 import type { SAEntity } from "@/mocks/types";
-import type { ScheduleAgreement, SAFilterParams, UploadSAPayload } from "../types";
+import type {
+  SAImportApplied,
+  SAImportBatch,
+  ScheduleAgreement,
+  SAFilterParams,
+  UploadSAPayload,
+} from "../types";
 
 function daysUntil(iso: string): number {
   const target = new Date(iso).getTime();
@@ -121,7 +130,78 @@ async function getSupplierOptions(): Promise<string[]> {
   return [...new Set([...master, ...historical])].sort();
 }
 
-/** Produces the printable quota summary sheet for an agreement. */
+/* ── Base SA imports ───────────────────────────────────────────────────── */
+
+/**
+ * The largest file this will read.
+ *
+ * The same 4 MiB the service allows, and for the same reason: a month of dated
+ * quantities is a few kilobytes, so anything approaching this is not the file
+ * the person means to upload.
+ */
+const MAKS_UKURAN = 4 << 20;
+
+async function parseImport(saId: string, file: File): Promise<SAImportBatch> {
+  await latency("upload");
+
+  if (file.size > MAKS_UKURAN) {
+    throw new Error(
+      `Berkas lebih besar dari ${MAKS_UKURAN >> 20} MB, jauh di atas ukuran satu bulan tanggal dan jumlah.`,
+    );
+  }
+
+  const text = await file.text();
+  const parsed = parseTargetCsv(text);
+  if (parsed.rows.length === 0) {
+    // Distinct from a parse failure: a file of headers only is well-formed and
+    // useless, and "0 rows" is more actionable than "invalid file".
+    throw new Error(PESAN_TANPA_BARIS);
+  }
+
+  const db = scopedDb();
+  const existing = new Map(
+    db.saDailyTargets.filter((t) => t.saId === saId).map((t) => [t.tanggal, t.target]),
+  );
+
+  const batch = recordSaImport({
+    saId,
+    namaBerkas: file.name,
+    checksum: await checksum(file),
+    rows: parsed.rows.map((r) => ({ tanggal: r.tanggal, target: r.target })),
+  });
+
+  return {
+    id: batch.id,
+    saId,
+    namaBerkas: batch.namaBerkas,
+    checksum: batch.checksum,
+    diff: buildTargetDiff(parsed, existing),
+  };
+}
+
+async function applyImport(batchId: string): Promise<SAImportApplied> {
+  await latency("write");
+  const batch = applySaImport(batchId);
+  return { id: batch.id, barisDitulis: batch.barisDitulis };
+}
+
+/**
+ * SHA-256 of the uploaded bytes.
+ *
+ * Computed rather than invented, even in the mock: the console renders it as
+ * the fingerprint of what was reviewed, and a fabricated one would make the
+ * demo teach that the number means nothing.
+ *
+ * `crypto.subtle` is unavailable over plain HTTP on a non-localhost origin, so
+ * an empty string stands for "not computed here" rather than a fake digest.
+ */
+async function checksum(file: File): Promise<string> {
+  if (!globalThis.crypto?.subtle) return "";
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 import type { ScheduleAgreementApi } from "./contract";
 
@@ -132,4 +212,6 @@ export const saApiMock: ScheduleAgreementApi = {
   activateSA,
   deleteSA,
   getSupplierOptions,
+  parseImport,
+  applyImport,
 };

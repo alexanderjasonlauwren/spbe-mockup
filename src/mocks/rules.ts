@@ -45,6 +45,7 @@ import type {
   ProductEntity,
   ReceiptEntity,
   SAEntity,
+  SAImportBatchEntity,
   UserEntity,
 } from "./types";
 import { outletLabel, outletLabelTitle, unitLabel } from "@/lib/lexicon";
@@ -183,6 +184,97 @@ export function deleteScheduleAgreement(saId: ID) {
       entityId: saId,
       summary: `Menghapus ${sa.nomorSA}.`,
     });
+  });
+}
+
+/* ── Base SA imports ───────────────────────────────────────────────────── */
+
+/**
+ * Records an upload. Writes no targets.
+ *
+ * Parsing and applying are separate acts on purpose: counts alone are not
+ * enough to decide with, and a bad spreadsheet should cost a glance rather than
+ * a month of overwritten obligations.
+ *
+ * The parsed rows are stored on the batch, so applying writes the numbers whose
+ * diff someone approved rather than whatever the file says when it is read
+ * again. The service does the same thing by checksum against the stored object.
+ */
+export function recordSaImport(input: {
+  saId: ID;
+  namaBerkas: string;
+  checksum: string;
+  rows: { tanggal: string; target: number }[];
+}): SAImportBatchEntity {
+  return mutate((db) => {
+    requireSa(db, input.saId);
+
+    const batch: SAImportBatchEntity = {
+      id: nextId("saimp"),
+      saId: input.saId,
+      namaBerkas: input.namaBerkas,
+      checksum: input.checksum,
+      status: "parsed",
+      dibuatPada: new Date().toISOString(),
+      rows: input.rows.map((r) => ({ ...r })),
+      barisDitulis: 0,
+    };
+    db.saImportBatches.unshift(batch);
+    return batch;
+  });
+}
+
+/**
+ * Writes the daily targets a reviewed import describes.
+ *
+ * Dates already on record but absent from the file are left alone. A Base SA
+ * covering half a month is a partial statement, not an instruction to erase the
+ * rest, and treating an absent date as a deletion would let an incomplete
+ * export wipe obligations the supplier never withdrew.
+ *
+ * Unchanged rows are still written, so their provenance names this file rather
+ * than an older import that happened to state the same number.
+ */
+export function applySaImport(batchId: ID): SAImportBatchEntity {
+  return mutate((db) => {
+    const batch = db.saImportBatches.find((b) => b.id === batchId);
+    if (!batch) throw new ApiError("Impor tidak ditemukan.", 404);
+    if (batch.status !== "parsed") {
+      throw new ApiError("Impor ini sudah diterapkan.", 409);
+    }
+    const sa = requireSa(db, batch.saId);
+
+    for (const row of batch.rows) {
+      const existing = db.saDailyTargets.find(
+        (t) => t.saId === batch.saId && t.tanggal === row.tanggal,
+      );
+      if (existing) {
+        existing.target = row.target;
+        existing.sumber = "file_import";
+        existing.importBatchId = batch.id;
+      } else {
+        db.saDailyTargets.push({
+          id: nextId("sadt"),
+          saId: batch.saId,
+          tanggal: row.tanggal,
+          target: row.target,
+          sumber: "file_import",
+          importBatchId: batch.id,
+        });
+      }
+    }
+
+    batch.status = "applied";
+    batch.diterapkanPada = new Date().toISOString();
+    batch.barisDitulis = batch.rows.length;
+
+    recordAudit(db, {
+      action: "sa.import.apply",
+      entity: "ScheduleAgreement",
+      entityId: sa.id,
+      summary: `Menerapkan ${batch.namaBerkas} pada ${sa.nomorSA}: ${fmt(batch.barisDitulis)} tanggal ditulis.`,
+    });
+    return batch;
   });
 }
 

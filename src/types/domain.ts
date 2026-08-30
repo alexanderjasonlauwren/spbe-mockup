@@ -167,6 +167,53 @@ export interface SAEntity extends Scoped {
   diunggahPada: string;
 }
 
+/**
+ * One date's stated obligation under an agreement.
+ *
+ * Kept per date rather than as a monthly total because a shortfall is argued
+ * day by day: "the 24th was 300 and we delivered 210" is a claim, and a month's
+ * figure divided by its working days is not.
+ *
+ * A target of zero is a real row. Sundays and public holidays are stated zeros,
+ * and the distinction between "nothing was due" and "nobody entered it" is
+ * exactly what this table exists to keep.
+ */
+export interface SADailyTargetEntity {
+  id: ID;
+  saId: ID;
+  tanggal: string; // ISO date
+  target: number;
+  /**
+   * How the number arrived, not who typed it.
+   *
+   * A figure the supplier stated and one a person keyed from a PDF are
+   * different kinds of evidence, and only the file can be produced in an
+   * argument. `importBatchId` names which file.
+   */
+  sumber: "manual" | "file_import";
+  importBatchId: ID | null;
+}
+
+/**
+ * An upload, and what applying it would do.
+ *
+ * The parsed rows are held on the batch so applying writes what was reviewed:
+ * re-reading the file at apply time would let a different file be applied than
+ * the one whose diff someone approved.
+ */
+export interface SAImportBatchEntity {
+  id: ID;
+  saId: ID;
+  namaBerkas: string;
+  /** SHA-256 of the bytes read. */
+  checksum: string;
+  status: "parsed" | "applied";
+  dibuatPada: string;
+  diterapkanPada?: string;
+  rows: { tanggal: string; target: number }[];
+  barisDitulis: number;
+}
+
 export type PlanStatusEntity = "Draft" | "Terkonfirmasi" | "Selesai" | "Batal";
 
 export interface PlanEntity extends Scoped {
@@ -839,6 +886,10 @@ export interface Database {
   outlets: OutletEntity[];
   drivers: DriverEntity[];
   scheduleAgreements: SAEntity[];
+  /** Daily obligations under an agreement. Follow their SA, like plan rows. */
+  saDailyTargets: SADailyTargetEntity[];
+  /** Uploads awaiting a decision, and the applied ones they became. */
+  saImportBatches: SAImportBatchEntity[];
   plans: PlanEntity[];
   planRows: PlanRowEntity[];
   deliveries: DeliveryEntity[];

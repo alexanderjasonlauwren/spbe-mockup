@@ -7,9 +7,13 @@
  * keeps the backend consistent with its published contract and leaves every
  * component untouched — the direction technical-gaps 2.4 chose.
  */
-import { getList, getOne, send } from "@/lib/api";
+import { getList, getOne, send, upload } from "@/lib/api";
 import type { FilterSpec } from "@/lib/listQuery";
 import type {
+  SAImportApplied,
+  SAImportBatch,
+  SAImportChangeKind,
+  SAImportDiff,
   ScheduleAgreement,
   SAFilterParams,
   SAStatus,
@@ -140,6 +144,76 @@ async function defaultBranchID(): Promise<string> {
   return preferred.id;
 }
 
+/* ── Base SA imports ───────────────────────────────────────────────────── */
+
+/** Mirrors the service's ParseResponse. */
+interface ParseResponse {
+  id: string;
+  status: string;
+  schedule_agreement_id: string;
+  file_name: string;
+  checksum_sha256: string;
+  diff: DiffResponse;
+}
+
+interface DiffResponse {
+  changes: {
+    date: string;
+    change: string;
+    from?: number;
+    to: number;
+  }[];
+  issues: { line: number; value?: string; reason: string }[];
+  new: number;
+  updated: number;
+  unchanged: number;
+  skipped: number;
+}
+
+interface ApplyResponse {
+  id: string;
+  status: string;
+  rows_written: number;
+}
+
+/**
+ * The service's three change words, in the console's.
+ *
+ * An unrecognised kind reads as `berubah` rather than being dropped: a row the
+ * console cannot classify still moved a number, and hiding it would understate
+ * what the import does.
+ */
+const CHANGE_TO_DOMAIN: Record<string, SAImportChangeKind> = {
+  new: "baru",
+  updated: "berubah",
+  unchanged: "tetap",
+};
+
+function toDiff(wire: DiffResponse): SAImportDiff {
+  return {
+    perubahan: (wire.changes ?? []).map((c) => ({
+      tanggal: c.date,
+      jenis: CHANGE_TO_DOMAIN[c.change] ?? "berubah",
+      dari: c.from,
+      menjadi: c.to,
+    })),
+    // The reason text is the server's, passed through rather than translated.
+    // A lookup keyed on English prose would silently fall back to the raw
+    // string the first time the parser rephrased a message, which is worse than
+    // showing the server's words consistently: the parser there is the
+    // authority in this build, and what it says is what happened to the file.
+    masalah: (wire.issues ?? []).map((i) => ({
+      baris: i.line,
+      nilai: i.value,
+      alasan: i.reason,
+    })),
+    baru: wire.new,
+    berubah: wire.updated,
+    tetap: wire.unchanged,
+    dilewati: wire.skipped,
+  };
+}
+
 export const saApiHttp: ScheduleAgreementApi = {
   async getSAList(filters?: SAFilterParams): Promise<ScheduleAgreement[]> {
     const specs: FilterSpec[] = [];
@@ -208,6 +282,27 @@ export const saApiHttp: ScheduleAgreementApi = {
 
   async deleteSA(id: string): Promise<void> {
     await send<null>("delete", `/schedule-agreements/${id}`);
+  },
+
+  async parseImport(saId: string, file: File): Promise<SAImportBatch> {
+    const parsed = await upload<ParseResponse>(
+      `/schedule-agreements/${saId}/imports`,
+      file,
+    );
+    return {
+      id: parsed.id,
+      // Echoed by the service so the console can show what is about to change
+      // without a second request.
+      saId: parsed.schedule_agreement_id,
+      namaBerkas: parsed.file_name,
+      checksum: parsed.checksum_sha256,
+      diff: toDiff(parsed.diff),
+    };
+  },
+
+  async applyImport(batchId: string): Promise<SAImportApplied> {
+    const applied = await send<ApplyResponse>("post", `/imports/${batchId}/apply`);
+    return { id: applied.id, barisDitulis: applied.rows_written };
   },
 
   async getSupplierOptions(): Promise<string[]> {

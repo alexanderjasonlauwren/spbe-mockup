@@ -10,6 +10,8 @@
  * it is running against.
  */
 import type {
+  SAImportApplied,
+  SAImportBatch,
   ScheduleAgreement,
   SAFilterParams,
   UploadSAPayload,
@@ -28,4 +30,16 @@ export interface ScheduleAgreementApi {
    * would be a table nobody maintains.
    */
   getSupplierOptions(): Promise<string[]>;
+
+  /**
+   * Reads a Base SA export and reports what applying it would do. Writes
+   * nothing.
+   *
+   * Two calls rather than one because approving the diff is the point: a
+   * `POST` that parsed and wrote in a single step would make a mistyped column
+   * a month of overwritten obligations instead of a glance at a table.
+   */
+  parseImport(saId: string, file: File): Promise<SAImportBatch>;
+  /** Writes the targets a reviewed batch describes. */
+  applyImport(batchId: string): Promise<SAImportApplied>;
 }

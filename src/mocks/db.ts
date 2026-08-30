@@ -59,6 +59,8 @@ function migrate(db: Database): Database {
   db.suppliers ??= [];
   db.bankAccounts ??= [];
   db.deliveryEvents ??= [];
+  db.saDailyTargets ??= [];
+  db.saImportBatches ??= [];
 
   const s = db.settings as Partial<Database["settings"]>;
   s.penomoran ??= { ...DEFAULT_NUMBERING };

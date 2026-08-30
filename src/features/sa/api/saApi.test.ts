@@ -11,11 +11,13 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 const getList = vi.fn();
 const getOne = vi.fn();
 const send = vi.fn();
+const upload = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   getList: (...args: unknown[]) => getList(...args),
   getOne: (...args: unknown[]) => getOne(...args),
   send: (...args: unknown[]) => send(...args),
+  upload: (...args: unknown[]) => upload(...args),
 }));
 
 const { saApiHttp } = await import("./saApi.http");
@@ -46,6 +48,7 @@ beforeEach(() => {
   getList.mockReset();
   getOne.mockReset();
   send.mockReset();
+  upload.mockReset();
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -189,5 +192,132 @@ describe("the supplier list", () => {
       "SPBE Salatiga",
       "SPBE Ungaran",
     ]);
+  });
+});
+
+describe("mapping an import's diff onto the domain", () => {
+  const file = new File(["tanggal,target\n"], "SA-Agustus-rev2.csv", {
+    type: "text/csv",
+  });
+
+  function parsed(diff: Record<string, unknown> = {}) {
+    return {
+      id: "22222222-2222-4222-8222-222222222222",
+      status: "parsed",
+      schedule_agreement_id: "11111111-1111-4111-8111-111111111111",
+      file_name: "SA-Agustus-rev2.csv",
+      checksum_sha256: "abc123",
+      diff: {
+        changes: [],
+        issues: [],
+        new: 0,
+        updated: 0,
+        unchanged: 0,
+        skipped: 0,
+        ...diff,
+      },
+    };
+  }
+
+  it("posts the file as multipart to the agreement's import route", async () => {
+    upload.mockResolvedValue(parsed());
+
+    await saApiHttp.parseImport("11111111-1111-4111-8111-111111111111", file);
+
+    expect(upload).toHaveBeenCalledWith(
+      "/schedule-agreements/11111111-1111-4111-8111-111111111111/imports",
+      file,
+    );
+  });
+
+  it("translates the three change words", async () => {
+    upload.mockResolvedValue(
+      parsed({
+        changes: [
+          { date: "2026-09-01", change: "unchanged", to: 350 },
+          { date: "2026-09-02", change: "updated", from: 350, to: 300 },
+          { date: "2026-09-03", change: "new", to: 400 },
+        ],
+        new: 1,
+        updated: 1,
+        unchanged: 1,
+      }),
+    );
+
+    const batch = await saApiHttp.parseImport("sa-1", file);
+
+    expect(batch.diff.perubahan.map((c) => c.jenis)).toEqual([
+      "tetap",
+      "berubah",
+      "baru",
+    ]);
+    expect(batch.diff.perubahan[1]).toEqual({
+      tanggal: "2026-09-02",
+      jenis: "berubah",
+      dari: 350,
+      menjadi: 300,
+    });
+    // A new date has no previous value. Undefined, never 0 — a zero would read
+    // as a stated obligation of nothing, which is a different claim.
+    expect(batch.diff.perubahan[2].dari).toBeUndefined();
+    expect(batch.diff).toMatchObject({ baru: 1, berubah: 1, tetap: 1 });
+  });
+
+  it("keeps a change it does not recognise rather than dropping it", async () => {
+    // A row the console cannot classify still moves a number, and hiding it
+    // would understate what applying the file does.
+    upload.mockResolvedValue(
+      parsed({ changes: [{ date: "2026-09-01", change: "reinstated", to: 350 }] }),
+    );
+
+    const batch = await saApiHttp.parseImport("sa-1", file);
+
+    expect(batch.diff.perubahan).toHaveLength(1);
+    expect(batch.diff.perubahan[0].jenis).toBe("berubah");
+  });
+
+  it("passes the parser's own words through for an unreadable line", async () => {
+    upload.mockResolvedValue(
+      parsed({
+        issues: [{ line: 4, value: "kemarin", reason: "not a date the parser recognises" }],
+        skipped: 1,
+      }),
+    );
+
+    const batch = await saApiHttp.parseImport("sa-1", file);
+
+    expect(batch.diff.masalah).toEqual([
+      { baris: 4, nilai: "kemarin", alasan: "not a date the parser recognises" },
+    ]);
+    expect(batch.diff.dilewati).toBe(1);
+  });
+
+  it("survives a diff with no arrays at all", async () => {
+    // Go marshals an empty slice as null, so a file that changed nothing and
+    // broke nothing arrives with both lists absent.
+    upload.mockResolvedValue(
+      parsed({ changes: undefined, issues: undefined }),
+    );
+
+    const batch = await saApiHttp.parseImport("sa-1", file);
+
+    expect(batch.diff.perubahan).toEqual([]);
+    expect(batch.diff.masalah).toEqual([]);
+  });
+
+  it("reports what applying actually wrote", async () => {
+    send.mockResolvedValue({
+      id: "22222222-2222-4222-8222-222222222222",
+      status: "applied",
+      rows_written: 31,
+    });
+
+    const applied = await saApiHttp.applyImport("22222222-2222-4222-8222-222222222222");
+
+    expect(send).toHaveBeenCalledWith(
+      "post",
+      "/imports/22222222-2222-4222-8222-222222222222/apply",
+    );
+    expect(applied.barisDitulis).toBe(31);
   });
 });

@@ -19,6 +19,8 @@ export const uploadSA = api.uploadSA.bind(api);
 export const activateSA = api.activateSA.bind(api);
 export const deleteSA = api.deleteSA.bind(api);
 export const getSupplierOptions = api.getSupplierOptions.bind(api);
+export const parseImport = api.parseImport.bind(api);
+export const applyImport = api.applyImport.bind(api);
 
 /**
  * Printing is a browser concern, not a data source.

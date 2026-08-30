@@ -33,6 +33,7 @@ import type {
   SupplierEntity,
   ReceiptEntity,
   SAEntity,
+  SADailyTargetEntity,
   SettingsEntity,
   TenantSettingsEntity,
   UserEntity,
@@ -378,6 +379,53 @@ function seedScheduleAgreements(): SAEntity[] {
       catatan: p.status === "Draft" ? "Menunggu verifikasi dokumen SPBE." : undefined,
     };
   });
+}
+
+/**
+ * The daily obligations already on record for an agreement.
+ *
+ * Seeded for the running month only, and only to the 20th. Two reasons, both
+ * about what the import screen has to show: a diff against an empty record is
+ * every row "new", which demonstrates nothing about the case that matters, and
+ * a month already complete leaves no dates for an upload to add. Twenty days on
+ * record and a file covering the month produces all three outcomes at once.
+ *
+ * Sundays are seeded as a stated zero rather than left absent. That is the
+ * distinction the record exists to keep, so the demo has to carry it too.
+ */
+function seedDailyTargets(sas: SAEntity[]): SADailyTargetEntity[] {
+  const today = startOfToday();
+  const targets: SADailyTargetEntity[] = [];
+
+  const running = sas.filter(
+    (sa) =>
+      sa.status !== "Draft" &&
+      new Date(sa.periodeMulai).getMonth() === today.getMonth() &&
+      new Date(sa.periodeMulai).getFullYear() === today.getFullYear(),
+  );
+
+  for (const sa of running) {
+    const start = new Date(sa.periodeMulai);
+    // Roughly the month's quota spread over its working days, rounded to the
+    // fifties a supplier actually writes. Derived, and the console says so
+    // wherever it renders one.
+    const perDay = Math.round(sa.totalKuota / 26 / 50) * 50;
+
+    for (let day = 1; day <= 20; day += 1) {
+      const date = new Date(start.getFullYear(), start.getMonth(), day);
+      if (date.getMonth() !== start.getMonth()) break;
+      const sunday = date.getDay() === 0;
+      targets.push({
+        id: `sadt-${sa.id}-${String(day).padStart(2, "0")}`,
+        saId: sa.id,
+        tanggal: isoDate(date),
+        target: sunday ? 0 : perDay,
+        sumber: "manual",
+        importBatchId: null,
+      });
+    }
+  }
+  return targets;
 }
 
 /**
@@ -1271,6 +1319,7 @@ export function createSeedDatabase(): Database {
   const outlets = seedOutlet();
   const drivers = seedDrivers();
   const scheduleAgreements = seedScheduleAgreements();
+  const saDailyTargets = seedDailyTargets(scheduleAgreements);
   const products = seedProducts();
   const { plans, planRows, deliveries } = seedOperations(
     outlets,
@@ -1301,6 +1350,9 @@ export function createSeedDatabase(): Database {
     outlets,
     drivers,
     scheduleAgreements,
+    saDailyTargets,
+    // Uploads are made in the browser, so the seeded day starts with none.
+    saImportBatches: [],
     plans,
     planRows,
     deliveries,

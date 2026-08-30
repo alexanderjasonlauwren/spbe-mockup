@@ -268,6 +268,41 @@ export async function getList<T>(path: string, params: ListParams = {}): Promise
   }
 }
 
+/**
+ * POST a file as multipart form data, unwrapped.
+ *
+ * Separate from `send` because of the Content-Type: the client instance sets
+ * `application/json` by default, and a multipart body sent under that header is
+ * rejected by the server before it reaches a handler. Deleting the header lets
+ * the browser write its own, boundary included — which is the only way to get a
+ * boundary that matches the body.
+ *
+ * The timeout is raised over the default because this one carries bytes: 10
+ * seconds is generous for a JSON round trip and short for an upload on a phone
+ * tethered at a depot.
+ */
+export async function upload<T>(
+  path: string,
+  file: File,
+  field = "file",
+  timeout = 60_000,
+): Promise<T> {
+  const form = new FormData();
+  form.append(field, file);
+  try {
+    const response = await apiClient.request<Envelope<T>>({
+      method: "post",
+      url: path,
+      data: form,
+      timeout,
+      headers: { "Content-Type": undefined },
+    });
+    return response.data.data;
+  } catch (error) {
+    throw toApiError(error);
+  }
+}
+
 /** POST / PUT / DELETE, unwrapped. */
 export async function send<T>(
   method: "post" | "put" | "patch" | "delete",

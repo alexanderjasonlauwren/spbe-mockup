@@ -169,6 +169,26 @@ export function OutletDetailPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Panel className="lg:col-span-2">
           <PanelHeader title="Kuota bulan berjalan" />
+          {/*
+            Without deliveries there is no "terpakai", so there is no "tersisa"
+            either -- only the obligation itself. Showing the meter at zero
+            would report that none of this month's quota has been used, which
+            is a claim about deliveries this build cannot see.
+          */}
+          {!p.statistikTersedia ? (
+            <PanelBody className="space-y-2">
+              <p className="data truncate text-figure font-semibold text-ink">
+                {formatNumber(p.kuotaBulanan)}
+                <span className="ml-1.5 font-sans text-sm font-medium tracking-normal text-ink-muted">
+                  {unitLabel()} direncanakan
+                </span>
+              </p>
+              <p className="text-xs text-ink-muted">
+                Realisasi bulan ini belum tersedia dari layanan — surat jalan
+                dicatat oleh dispatch dan belum terbaca di sini.
+              </p>
+            </PanelBody>
+          ) : (
           <PanelBody className="space-y-4">
             <div className="flex items-end justify-between gap-4">
               <div>
@@ -192,19 +212,32 @@ export function OutletDetailPage() {
               label={`Kuota terpakai ${formatPercentId(kuotaPakai)}`}
             />
           </PanelBody>
+          )}
         </Panel>
 
         <Panel spine={p.tagihanTertunda > 0 ? "text-signal" : undefined}>
           <PanelHeader title="Tagihan tertunda" />
           <PanelBody>
-            <p className="data truncate text-figure font-semibold text-ink">
-              {formatNumber(p.tagihanTertunda)}
-              <span className="ml-1.5 font-sans text-sm font-medium tracking-normal text-ink-muted">
-                faktur
-              </span>
-            </p>
-            <p className="mt-1 text-xs text-ink-muted">
-              Senilai <span className="data">{formatRupiah(p.nilaiTertunda)}</span>
+            {/*
+              The invoice COUNT needs core.invoices; the AMOUNT is credit_balance
+              on the outlet itself. So the money is shown in both builds and the
+              count only where it is real -- a "0 faktur" beside a non-zero
+              balance would be a contradiction the reader has to resolve.
+            */}
+            {p.statistikTersedia && (
+              <p className="data truncate text-figure font-semibold text-ink">
+                {formatNumber(p.tagihanTertunda)}
+                <span className="ml-1.5 font-sans text-sm font-medium tracking-normal text-ink-muted">
+                  faktur
+                </span>
+              </p>
+            )}
+            <p className={p.statistikTersedia ? "mt-1 text-xs text-ink-muted" : "data truncate text-figure font-semibold text-ink"}>
+              {p.statistikTersedia ? (
+                <>Senilai <span className="data">{formatRupiah(p.nilaiTertunda)}</span></>
+              ) : (
+                formatRupiah(p.nilaiTertunda)
+              )}
             </p>
             {p.tagihanTertunda > 0 && (
               <Button asChild variant="outline" size="sm" className="mt-3 w-full">

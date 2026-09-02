@@ -65,6 +65,9 @@ export function OutletListPage() {
 
   const rows = list.data ?? [];
   const aktif = rows.filter((p) => p.status === "Aktif").length;
+  // Outlets with an unverified invoice. The header clause below already hides
+  // itself when this is empty, which is what the API build produces -- invoices
+  // are not readable there, so the count is zero and nothing claims otherwise.
   const tertunggak = rows.filter((p) => p.tagihanTertunda > 0);
 
   const columns: Column<OutletView>[] = [
@@ -113,6 +116,18 @@ export function OutletListPage() {
       render: (row) => {
         const pct =
           row.kuotaBulanan === 0 ? 0 : (row.terpakaiBulanIni / row.kuotaBulanan) * 100;
+        // No deliveries, no realisation -- so the column shows the obligation
+        // rather than a meter pinned at zero, which would read as "this outlet
+        // has taken none of its quota" when the truth is that nobody here can
+        // see what it has taken.
+        if (!row.statistikTersedia) {
+          return (
+            <span className="data text-ink">
+              {formatNumber(row.kuotaBulanan)}
+              <span className="text-ink-muted"> direncanakan</span>
+            </span>
+          );
+        }
         return (
           <div className="min-w-[9rem]">
             <div className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">

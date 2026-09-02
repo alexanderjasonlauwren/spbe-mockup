@@ -18,6 +18,7 @@ import {
   refreshOverdue,
   verifyPaymentRecord,
 } from "./ar";
+import { crewedVehicle } from "./fleet";
 import { isoDate, startOfToday } from "./seed";
 import { distanceMeters, type GeoStamp } from "@/lib/geo";
 import {
@@ -35,6 +36,7 @@ import type {
   DeliveryEventEntity,
   DeliveryEventType,
   DriverEntity,
+  VehicleEntity,
   ID,
   DeliveryLine,
   OutletEntity,
@@ -401,9 +403,15 @@ export function confirmPlan(planId: ID): { deliveries: number; total: number } {
     }
     for (const [driverId, muatan] of perDriver) {
       const driver = db.drivers.find((d) => d.id === driverId);
-      if (driver && muatan > driver.kapasitas) {
+      if (!driver) continue;
+      // Capacity is the truck's, never the driver's. A driver with no truck has
+      // no ceiling to check against, so the load is not refused here -- the
+      // dispatch board is where a run without a vehicle is caught, and refusing
+      // it twice in two vocabularies helps nobody.
+      const vehicle = crewedVehicle(db, driverId);
+      if (vehicle && muatan > vehicle.kapasitas) {
         throw new ApiError(
-          `Muatan ${driver.nama} ${fmt(muatan)} ${unitLabel()} melebihi kapasitas ${driver.armada} (${fmt(driver.kapasitas)}).`,
+          `Muatan ${driver.nama} ${fmt(muatan)} ${unitLabel()} melebihi kapasitas ${vehicle.armada} (${fmt(vehicle.kapasitas)}).`,
         );
       }
     }
@@ -1096,8 +1104,9 @@ export function deleteOutlet(id: ID) {
 export function saveDriver(input: Partial<DriverEntity> & { id?: ID }): DriverEntity {
   return mutate((db) => {
     if (!input.nama?.trim()) throw new ApiError("Nama driver wajib diisi.");
-    if (input.plat && !input.id && db.drivers.some((d) => d.plat === input.plat)) {
-      throw new ApiError(`Plat ${input.plat} sudah terdaftar pada armada lain.`, 409);
+    if (!input.id && !input.kode?.trim()) throw new ApiError("Kode driver wajib diisi.");
+    if (input.kode && db.drivers.some((d) => d.kode === input.kode && d.id !== input.id)) {
+      throw new ApiError(`Kode ${input.kode} sudah dipakai driver lain.`, 409);
     }
 
     if (input.id) {
@@ -1108,7 +1117,7 @@ export function saveDriver(input: Partial<DriverEntity> & { id?: ID }): DriverEn
         action: "driver.update",
         entity: "Driver",
         entityId: existing.id,
-        summary: `Memperbarui data ${existing.nama} (${existing.plat}).`,
+        summary: `Memperbarui data ${existing.nama}.`,
       });
       return existing;
     }
@@ -1116,12 +1125,10 @@ export function saveDriver(input: Partial<DriverEntity> & { id?: ID }): DriverEn
     const created: DriverEntity = {
       ...stampScope({}),
       id: nextId("drv"),
+      kode: input.kode!.trim(),
       nama: input.nama.trim(),
       telepon: input.telepon ?? "",
       nomorSim: input.nomorSim ?? "",
-      plat: input.plat ?? "",
-      armada: input.armada ?? "",
-      kapasitas: input.kapasitas ?? 240,
       status: input.status ?? "Standby",
       bergabungPada: isoDate(startOfToday()),
     };
@@ -1130,9 +1137,75 @@ export function saveDriver(input: Partial<DriverEntity> & { id?: ID }): DriverEn
       action: "driver.create",
       entity: "Driver",
       entityId: created.id,
-      summary: `Menambahkan driver ${created.nama} (${created.plat}).`,
+      summary: `Menambahkan driver ${created.nama}.`,
     });
     return created;
+  });
+}
+
+/**
+ * Creates or updates a truck.
+ *
+ * The plate is the natural key a depot uses, so a duplicate is refused rather
+ * than allowed and reconciled later -- two rows for one truck means two
+ * capacities, and the planner loads against whichever they opened.
+ */
+export function saveVehicle(input: Partial<VehicleEntity> & { id?: ID }): VehicleEntity {
+  return mutate((db) => {
+    if (!input.plat?.trim()) throw new ApiError("Plat nomor wajib diisi.");
+    const plat = input.plat.trim();
+    if (db.vehicles.some((v) => v.plat === plat && v.id !== input.id)) {
+      throw new ApiError(`Plat ${plat} sudah terdaftar pada armada lain.`, 409);
+    }
+    if (input.kapasitas !== undefined && input.kapasitas <= 0) {
+      throw new ApiError("Kapasitas harus lebih dari nol.");
+    }
+
+    if (input.id) {
+      const existing = db.vehicles.find((v) => v.id === input.id);
+      if (!existing) throw new ApiError("Armada tidak ditemukan.", 404);
+      Object.assign(existing, input, { plat });
+      recordAudit(db, {
+        action: "vehicle.update",
+        entity: "Vehicle",
+        entityId: existing.id,
+        summary: `Memperbarui armada ${existing.plat}.`,
+      });
+      return existing;
+    }
+
+    const created: VehicleEntity = {
+      ...stampScope({}),
+      id: nextId("veh"),
+      plat,
+      armada: input.armada?.trim() ?? "",
+      kapasitas: input.kapasitas ?? 240,
+      kapasitasKg: input.kapasitasKg,
+      status: input.status ?? "Aktif",
+      terdaftarPada: isoDate(startOfToday()),
+    };
+    db.vehicles.unshift(created);
+    recordAudit(db, {
+      action: "vehicle.create",
+      entity: "Vehicle",
+      entityId: created.id,
+      summary: `Menambahkan armada ${created.plat}.`,
+    });
+    return created;
+  });
+}
+
+export function deleteVehicle(id: ID) {
+  return mutate((db) => {
+    const index = db.vehicles.findIndex((v) => v.id === id);
+    if (index < 0) throw new ApiError("Armada tidak ditemukan.", 404);
+    const [removed] = db.vehicles.splice(index, 1);
+    recordAudit(db, {
+      action: "vehicle.delete",
+      entity: "Vehicle",
+      entityId: removed.id,
+      summary: `Menghapus armada ${removed.plat}.`,
+    });
   });
 }
 

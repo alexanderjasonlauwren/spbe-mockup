@@ -1,3 +1,4 @@
+import { crewedArmada } from "@/mocks/fleet";
 import { scopeKey } from "@/mocks/scope";
 import { useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -48,8 +49,10 @@ export function CommandPalette({
         drivers: db.drivers.map((d) => ({
           id: d.id,
           nama: d.nama,
-          plat: d.plat,
-          armada: d.armada,
+          // The truck, from the fleet. A driver has no plate of their own --
+          // the pairing belongs to the run, and `crewedVehicle` is what stands
+          // in for it in this build.
+          ...crewedArmada(db, d),
         })),
       };
     },

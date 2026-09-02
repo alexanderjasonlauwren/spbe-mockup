@@ -1,3 +1,4 @@
+import { crewedArmada } from "@/mocks/fleet";
 import { scopedDb } from "@/mocks/scope";
 import { latency } from "@/mocks/db";
 import { updateDeliveryStatus } from "@/mocks/rules";
@@ -77,9 +78,8 @@ export async function getMonitoringSnapshot(dateRange: {
         id: driver.id,
         name: driver.nama,
         slot: slotOf.get(driver.id) ?? 0,
-        plat: driver.plat,
-        armada: driver.armada,
-        kapasitas: driver.kapasitas,
+        // The truck, from the fleet rather than from the driver.
+        ...crewedArmada(db, driver),
         status: driver.status,
         muatan: mine.reduce((s, d) => s + d.target, 0),
         tujuanOutlet: target?.nama,
@@ -204,7 +204,7 @@ export async function printSuratJalan(deliveryId: string): Promise<void> {
       <tbody>
         <tr>
           <td><strong>${pkl?.nama ?? "—"}</strong><br />${pkl ? `${pkl.alamat}, Kec. ${pkl.kecamatan}` : ""}<br />${pkl?.penanggungJawab ?? ""} · ${pkl?.telepon ?? ""}</td>
-          <td>${drv?.nama ?? "—"}<br /><span class="code">${drv?.plat ?? ""}</span><br />${drv?.armada ?? ""}</td>
+          <td>${drv?.nama ?? "—"}<br /><span class="code">${drv ? crewedArmada(db, drv).plat : ""}</span><br />${drv ? crewedArmada(db, drv).armada : ""}</td>
           <td class="num">${fmt(d.target)}</td>
           <td class="num">${fmt(d.realisasi)}</td>
         </tr>

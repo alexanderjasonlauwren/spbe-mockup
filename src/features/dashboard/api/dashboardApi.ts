@@ -1,3 +1,4 @@
+import { crewedArmada } from "@/mocks/fleet";
 import { scopedDb } from "@/mocks/scope";
 import { latency } from "@/mocks/db";
 import { addDays, isoDate, startOfToday } from "@/mocks/seed";
@@ -122,9 +123,9 @@ export async function getDispatchRail(): Promise<DispatchRail> {
       return {
         driverId: driver.id,
         driver: driver.nama,
-        plat: driver.plat,
-        armada: driver.armada,
-        kapasitas: driver.kapasitas,
+        // The truck, from the fleet rather than from the driver: capacity is
+        // a property of the vehicle, and the pairing belongs to the run.
+        ...crewedArmada(db, driver),
         muatan: mine.reduce((s, d) => s + d.target, 0),
         status: driver.status,
         stops: mine.map((d) => {
@@ -158,7 +159,7 @@ export async function getDispatchRail(): Promise<DispatchRail> {
     lanes,
     idleDrivers: db.drivers
       .filter((d) => !drops.some((x) => x.driverId === d.id))
-      .map((d) => ({ id: d.id, nama: d.nama, plat: d.plat, status: d.status })),
+      .map((d) => ({ id: d.id, nama: d.nama, plat: crewedArmada(db, d).plat, status: d.status })),
   };
 }
 

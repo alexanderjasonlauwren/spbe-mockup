@@ -1,3 +1,4 @@
+import { crewedArmada } from "@/mocks/fleet";
 import { scopedDb } from "@/mocks/scope";
 import { latency } from "@/mocks/db";
 import { isoDate, startOfToday } from "@/mocks/seed";
@@ -104,7 +105,7 @@ function buildRows(): TransactionRow[] {
       kecamatan: pkl?.kecamatan ?? "—",
       driverId: d.driverId,
       driver: drv?.nama ?? "—",
-      plat: drv?.plat ?? "—",
+      plat: drv ? crewedArmada(db, drv).plat : "—",
       jamRencana: d.jamRencana,
       target: d.target,
       realisasi: d.realisasi,
@@ -234,7 +235,7 @@ export async function getTransactionFilterOptions() {
       .sort((a, b) => a.label.localeCompare(b.label)),
     kecamatan: [...new Set(db.outlets.map((p) => p.kecamatan))].sort(),
     drivers: db.drivers
-      .map((d) => ({ id: d.id, label: `${d.nama} — ${d.plat}` }))
+      .map((d) => ({ id: d.id, label: `${d.nama} — ${crewedArmada(db, d).plat}` }))
       .sort((a, b) => a.label.localeCompare(b.label)),
   };
 }

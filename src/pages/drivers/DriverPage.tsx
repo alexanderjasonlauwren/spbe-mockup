@@ -12,7 +12,7 @@ import {
 } from "@/features/drivers/api/driverApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { PageHeader } from "@/components/common/PageHeader";
-import { Panel, PanelHeader, Meter } from "@/components/common/Panel";
+import { Panel, PanelHeader } from "@/components/common/Panel";
 import { DataTable, type Column } from "@/components/common/DataTable";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { StatusBadge } from "@/components/common/StatusBadge";
@@ -43,22 +43,18 @@ const STATUSES: (DriverStatusEntity | "Semua")[] = [
 
 interface FormState {
   id?: string;
+  kode: string;
   nama: string;
   telepon: string;
   nomorSim: string;
-  plat: string;
-  armada: string;
-  kapasitas: number;
   status: DriverStatusEntity;
 }
 
 const EMPTY: FormState = {
+  kode: "",
   nama: "",
   telepon: "",
   nomorSim: "",
-  plat: "",
-  armada: "",
-  kapasitas: 240,
   status: "Standby",
 };
 
@@ -111,8 +107,7 @@ export function DriverPage() {
     if (!editing) return;
     const next: typeof errors = {};
     if (!editing.nama.trim()) next.nama = "Nama driver wajib diisi.";
-    if (!editing.plat.trim()) next.plat = "Nomor plat wajib diisi.";
-    if (editing.kapasitas <= 0) next.kapasitas = "Kapasitas harus lebih dari nol.";
+    if (!editing.kode.trim()) next.kode = "Kode driver wajib diisi.";
     setErrors(next);
     if (Object.keys(next).length > 0) return;
     saveMutation.mutate(editing);
@@ -136,40 +131,23 @@ export function DriverPage() {
       sortValue: (row) => row.nama,
     },
     {
-      key: "armada",
-      header: "Armada",
-      render: (row) => (
-        <>
-          <span className="data block text-xs text-ink">{row.plat}</span>
-          <span className="block text-2xs text-ink-muted">{row.armada}</span>
-        </>
-      ),
-      sortValue: (row) => row.plat,
-    },
-    {
       key: "muatan",
       header: "Muatan hari ini",
-      width: "14rem",
-      render: (row) => (
-        <div className="min-w-[9rem]">
-          <div className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">
-            <span className="data text-ink">
-              {formatNumber(row.muatanHariIni)}
-              <span className="text-ink-muted"> / {formatNumber(row.kapasitas)}</span>
-            </span>
-            <span className="data text-ink-muted">
-              {formatPercentId(row.utilisasi * 100)}
-            </span>
-          </div>
-          <Meter
-            value={row.muatanHariIni}
-            max={row.kapasitas}
-            tone={row.utilisasi > 1 ? "rust" : "signal"}
-            label={`Muatan ${row.nama}`}
-          />
-        </div>
-      ),
-      sortValue: (row) => row.utilisasi,
+      width: "12rem",
+      // A load, not a utilisation. Utilisation needs a ceiling, a ceiling is a
+      // truck's capacity, and a driver has no truck of their own -- which one
+      // they are out in is a fact about today's run. The meter moved to the
+      // fleet list, where the capacity actually lives.
+      render: (row) =>
+        row.statistikTersedia ? (
+          <span className="data text-ink">
+            {formatNumber(row.muatanHariIni)}
+            <span className="text-ink-muted"> {unitLabel()}</span>
+          </span>
+        ) : (
+          <span className="text-xs text-ink-muted">Belum tersedia</span>
+        ),
+      sortValue: (row) => row.muatanHariIni,
     },
     {
       key: "tugas",
@@ -220,12 +198,10 @@ export function DriverPage() {
             onClick={() =>
               openEditor({
                 id: row.id,
+                kode: row.kode,
                 nama: row.nama,
                 telepon: row.telepon,
                 nomorSim: row.nomorSim,
-                plat: row.plat,
-                armada: row.armada,
-                kapasitas: row.kapasitas,
                 status: row.status,
               })
             }
@@ -346,6 +322,23 @@ export function DriverPage() {
                   />
                 </Field>
 
+                {/*
+                  The depot's own reference. Required by the service and unique
+                  per tenant -- it is what a dispatcher writes on a run sheet
+                  and reads back, and it had no field here because the mock
+                  never needed one.
+                */}
+                <Field label="Kode" htmlFor="d-kode" error={errors.kode} required>
+                  <TextInput
+                    id="d-kode"
+                    mono
+                    placeholder="DRV-0001"
+                    value={editing.kode}
+                    invalid={!!errors.kode}
+                    onChange={(e) => setEditing({ ...editing, kode: e.target.value })}
+                  />
+                </Field>
+
                 <Field label="Telepon" htmlFor="d-telp">
                   <TextInput
                     id="d-telp"
@@ -365,46 +358,6 @@ export function DriverPage() {
                   />
                 </Field>
 
-                <Field label="Nomor plat" htmlFor="d-plat" error={errors.plat} required>
-                  <TextInput
-                    id="d-plat"
-                    mono
-                    placeholder="B 1234 TGH"
-                    value={editing.plat}
-                    invalid={!!errors.plat}
-                    onChange={(e) => setEditing({ ...editing, plat: e.target.value })}
-                  />
-                </Field>
-
-                <Field label="Jenis armada" htmlFor="d-armada">
-                  <TextInput
-                    id="d-armada"
-                    placeholder="Isuzu Elf NMR"
-                    value={editing.armada}
-                    onChange={(e) => setEditing({ ...editing, armada: e.target.value })}
-                  />
-                </Field>
-
-                <Field
-                  label="Kapasitas"
-                  htmlFor="d-kap"
-                  error={errors.kapasitas}
-                  hint={`Jumlah ${unitLabel()} per rit.`}
-                  required
-                >
-                  <TextInput
-                    id="d-kap"
-                    type="number"
-                    min={1}
-                    step={20}
-                    mono
-                    value={editing.kapasitas}
-                    invalid={!!errors.kapasitas}
-                    onChange={(e) =>
-                      setEditing({ ...editing, kapasitas: Number(e.target.value) })
-                    }
-                  />
-                </Field>
 
                 <Field label="Status" htmlFor="d-status">
                   <SelectInput

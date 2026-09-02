@@ -6,6 +6,7 @@
  * was: what changed is that it is now one of two adapters behind a contract,
  * rather than the only thing the console can talk to.
  */
+import { crewedArmada } from "@/mocks/fleet";
 import { scopedDb } from "@/mocks/scope";
 import { latency } from "@/mocks/db";
 import {
@@ -200,8 +201,12 @@ async function getDriverOptions(planId: string): Promise<DriverOption[]> {
   return db.drivers.map((d) => ({
     id: d.id,
     label: d.nama,
-    sublabel: `${d.plat} · ${d.armada}`,
-    kapasitas: d.kapasitas,
+    // The truck this driver is out in, from the fleet. The HTTP adapter reads
+    // the same pairing from the dispatch board, which is where the service
+    // records it -- so an uncrewed driver has no capacity there, and here has
+    // the one `crewedVehicle` stands in with.
+    sublabel: `${crewedArmada(db, d).plat} · ${crewedArmada(db, d).armada}`,
+    kapasitas: crewedArmada(db, d).kapasitas,
     muatan: rows
       .filter((r) => r.driverId === d.id)
       .reduce((s, r) => s + r.jumlahUnit, 0),
@@ -266,7 +271,7 @@ export async function printRouteSheet(planId: string): Promise<void> {
               <td class="code">${r.jamPengiriman}</td>
               <td>${pkl?.nama ?? "—"}</td>
               <td>${pkl ? `${pkl.alamat}, Kec. ${pkl.kecamatan}` : "—"}</td>
-              <td>${drv ? `${drv.nama}<br /><span class="code">${drv.plat}</span>` : "Belum ditetapkan"}</td>
+              <td>${drv ? `${drv.nama}<br /><span class="code">${crewedArmada(db, drv).plat}</span>` : "Belum ditetapkan"}</td>
               <td class="num">${fmt(r.jumlahUnit)}</td>
               <td></td>
             </tr>`;

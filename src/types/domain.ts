@@ -138,16 +138,58 @@ export type DriverStatusEntity =
   | "Selesai"
   | "Cuti";
 
+/**
+ * A person who drives, and nothing about a truck.
+ *
+ * # Why the vehicle is not on here
+ *
+ * `core.drivers` and `core.vehicles` have no link column anywhere. The pairing
+ * lives on `core.dispatch_trips` (`driver_id` + `vehicle_id`), which is right:
+ * a driver swaps trucks and a truck swaps drivers, so a `default_vehicle_id`
+ * would be a second source of truth for something a trip already records.
+ *
+ * This entity used to carry `plat`, `armada` and `kapasitas`, and the screens
+ * built on it asked questions with no answer — "what is this driver's
+ * capacity?" is a question about a truck on a particular day. They now read
+ * `VehicleEntity`, and capacity comes from the vehicle the driver is crewed
+ * with.
+ */
 export interface DriverEntity extends Scoped {
   id: ID;
+  /**
+   * The depot's own reference, DRV-0001. Required by the service and unique
+   * per tenant — it is what a dispatcher writes on paper and reads back, and
+   * the console had never modelled it because the mock never needed one.
+   */
+  kode: string;
   nama: string;
   telepon: string;
   nomorSim: string;
-  plat: string;
-  armada: string;
-  kapasitas: number;
   status: DriverStatusEntity;
   bergabungPada: string;
+}
+
+export type VehicleStatusEntity = "Aktif" | "Perawatan" | "Nonaktif";
+
+/**
+ * A truck. Carries the capacity, because that is a property of the vehicle and
+ * of nothing else.
+ *
+ * `kapasitasKg` is nullable on purpose and mirrors the schema: `capacity_qty`
+ * is NOT NULL and `capacity_kg` is not, because "unknown weight limit, check
+ * the count only" is a real configuration rather than a missing field.
+ */
+export interface VehicleEntity extends Scoped {
+  id: ID;
+  plat: string;
+  /** Make and model, as the depot says it: "Isuzu Elf NMR". */
+  armada: string;
+  /** Units of product one load holds. Never zero — a truck that carries
+   * nothing is not a truck. */
+  kapasitas: number;
+  kapasitasKg?: number;
+  status: VehicleStatusEntity;
+  terdaftarPada: string;
 }
 
 export type SAStatusEntity = "Draft" | "Aktif" | "Limit" | "Selesai";
@@ -885,6 +927,7 @@ export interface Database {
   branches: BranchEntity[];
   outlets: OutletEntity[];
   drivers: DriverEntity[];
+  vehicles: VehicleEntity[];
   scheduleAgreements: SAEntity[];
   /** Daily obligations under an agreement. Follow their SA, like plan rows. */
   saDailyTargets: SADailyTargetEntity[];

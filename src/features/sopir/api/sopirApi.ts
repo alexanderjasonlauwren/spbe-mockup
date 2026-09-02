@@ -1,3 +1,4 @@
+import { crewedArmada } from "@/mocks/fleet";
 import { scopedDb } from "@/mocks/scope";
 import { latency } from "@/mocks/db";
 import { updateDeliveryStatus } from "@/mocks/rules";
@@ -103,9 +104,8 @@ export async function getMyRun(
       ? {
           id: driver.id,
           nama: driver.nama,
-          plat: driver.plat,
-          armada: driver.armada,
-          kapasitas: driver.kapasitas,
+          // The truck, from the fleet rather than from the driver.
+          ...crewedArmada(db, driver),
           status: driver.status,
         }
       : null,
@@ -119,7 +119,7 @@ export async function getMyRun(
       muatan: stops.reduce((sum, s) => sum + s.target, 0),
       terkirim: stops.reduce((sum, s) => sum + s.realisasi, 0),
       kembali: stops.reduce((sum, s) => sum + (s.unitKembali ?? 0), 0),
-      kapasitas: driver?.kapasitas ?? 0,
+      kapasitas: driver ? crewedArmada(db, driver).kapasitas : 0,
     },
     // A drop already under way outranks the next queued one: that is where the
     // truck physically is.
@@ -178,12 +178,13 @@ export async function holdStop(input: { deliveryId: string; catatan: string }) {
  */
 export async function getDriverOptions(): Promise<DriverOption[]> {
   await latency("read");
-  return scopedDb()
-    .drivers.filter((d) => d.status !== "Cuti")
+  const db = scopedDb();
+  return db.drivers
+    .filter((d) => d.status !== "Cuti")
     .sort((a, b) => a.nama.localeCompare(b.nama))
     .map((d) => ({
       id: d.id,
       label: d.nama,
-      sublabel: `${d.plat} · ${d.armada}`,
+      sublabel: `${crewedArmada(db, d).plat} · ${crewedArmada(db, d).armada}`,
     }));
 }

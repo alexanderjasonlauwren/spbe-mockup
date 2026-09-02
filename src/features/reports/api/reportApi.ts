@@ -1,3 +1,4 @@
+import { crewedArmada } from "@/mocks/fleet";
 import { scopedDb } from "@/mocks/scope";
 import { latency } from "@/mocks/db";
 import { exportCsv, printDocument, timestampSuffix } from "@/lib/export";
@@ -196,8 +197,8 @@ export async function getDriverPerformance(range: ReportRange) {
       return {
         id: driver.id,
         nama: driver.nama,
-        plat: driver.plat,
-        armada: driver.armada,
+        plat: crewedArmada(db, driver).plat,
+        armada: crewedArmada(db, driver).armada,
         suratJalan: mine.length,
         selesai: mine.filter((d) => d.status === "Selesai").length,
         tertunda: mine.filter((d) => d.status === "Tertunda").length,

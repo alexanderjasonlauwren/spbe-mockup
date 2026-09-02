@@ -116,19 +116,24 @@ export function DriverDetailPage() {
       </Button>
 
       <PageHeader
-        eyebrow={`${d.plat} · ${d.armada}`}
+        eyebrow={`SIM ${d.nomorSim}`}
         title={d.nama}
-        description={`Kapasitas ${formatNumber(d.kapasitas)} ${unitLabel()} per rit. Bergabung ${formatDateId(d.bergabungPada)}.`}
+        description={`Bergabung ${formatDateId(d.bergabungPada)}. Armada ditetapkan per rit di papan berangkat.`}
         meta={<StatusBadge variant={getStatusVariant(d.status)} label={d.status} />}
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {/*
+          A load with no ceiling beside it. Utilisation needs a capacity, a
+          capacity belongs to a truck, and which truck this driver is out in is
+          a fact about today's run rather than about them -- the dispatch board
+          is what knows it, and the fleet list is where capacity lives.
+        */}
         <Stat
           label="Muatan hari ini"
           value={formatNumber(d.muatanHariIni)}
           unit={unitLabel()}
-          meter={{ value: d.muatanHariIni, max: d.kapasitas }}
-          hint={`${formatPercentId(d.utilisasi * 100)} dari kapasitas armada`}
+          hint="Kapasitas mengikuti armada yang ditugaskan hari ini"
         />
         <Stat
           label="Pemberhentian hari ini"
@@ -155,12 +160,19 @@ export function DriverDetailPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Panel>
-          <PanelHeader title="Data armada" />
+          <PanelHeader title="Data pengemudi" />
           <PanelBody className="space-y-3 text-sm">
-            <p className="flex items-center gap-2.5 text-ink">
-              <Truck className="h-4 w-4 shrink-0 text-ink-muted" />
-              {d.armada}
-              <span className="data ml-auto text-xs text-ink-muted">{d.plat}</span>
+            {/*
+              The panel used to name a truck. There is no truck to name: a
+              driver swaps vehicles and a vehicle swaps drivers, so the pairing
+              is recorded on the run and read from the dispatch board.
+            */}
+            <p className="flex items-center gap-2.5 text-ink-muted">
+              <Truck className="h-4 w-4 shrink-0" />
+              Armada ditetapkan per rit
+              <Link to="/distribution" className="ml-auto text-xs underline">
+                Papan berangkat
+              </Link>
             </p>
             <p className="flex items-center gap-2.5 text-ink">
               <IdCard className="h-4 w-4 shrink-0 text-ink-muted" />

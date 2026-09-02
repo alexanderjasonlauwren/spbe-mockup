@@ -17,6 +17,7 @@ import type {
   Database,
   DeliveryEntity,
   DriverEntity,
+  VehicleEntity,
   NotificationEntity,
   OutletEntity,
   PaymentEntity,
@@ -327,20 +328,45 @@ function seedOutlet(): OutletEntity[] {
 }
 
 function seedDrivers(): DriverEntity[] {
+  return Array.from({ length: 8 }, (_, i) => ({
+    ...branchFor(),
+    id: `drv-${String(i + 1).padStart(3, "0")}`,
+    kode: `DRV-${String(i + 1).padStart(4, "0")}`,
+    nama: ORANG[i],
+    telepon: `08${randInt(11, 99)}${randInt(1000000, 9999999)}`,
+    nomorSim: `B${randInt(1000000, 9999999)}`,
+    status: i === 7 ? "Cuti" : "Standby",
+    bergabungPada: isoDate(addDays(startOfToday(), -randInt(200, 1400))),
+  }));
+}
+
+/**
+ * The fleet, as its own rows.
+ *
+ * Eight trucks for eight drivers, which is what the console used to imply by
+ * putting the plate on the driver. They are separate rows now because the
+ * schema keeps them separate: a driver swaps trucks and a truck swaps drivers,
+ * and the pairing belongs to a trip rather than to either of them.
+ *
+ * The same count is deliberate. It keeps the demo looking exactly as it did
+ * while `crewedVehicle` stands in for the trip that would decide it — see
+ * `mocks/fleet.ts`.
+ */
+function seedVehicles(): VehicleEntity[] {
   return Array.from({ length: 8 }, (_, i) => {
     const unit = ARMADA[i % ARMADA.length];
     return {
       ...branchFor(),
-      id: `drv-${String(i + 1).padStart(3, "0")}`,
-      nama: ORANG[i],
-      telepon: `08${randInt(11, 99)}${randInt(1000000, 9999999)}`,
-      nomorSim: `B${randInt(1000000, 9999999)}`,
+      id: `veh-${String(i + 1).padStart(3, "0")}`,
       plat: `B ${randInt(1000, 9999)} ${pick(["TGH", "AB", "CK", "PV", "KYA", "RFS"])}`,
       armada: unit.armada,
       kapasitas: unit.kapasitas,
-      status: i === 7 ? "Cuti" : "Standby",
-      bergabungPada: isoDate(addDays(startOfToday(), -randInt(200, 1400))),
-    };
+      // Left unset on most of the fleet, mirroring the column: a weight limit
+      // nobody has recorded is a real state, and the planner checks the count.
+      kapasitasKg: i % 3 === 0 ? unit.kapasitas * 15 : undefined,
+      status: i === 7 ? "Perawatan" : "Aktif",
+      terdaftarPada: isoDate(addDays(startOfToday(), -randInt(200, 1400))),
+    } satisfies VehicleEntity;
   });
 }
 
@@ -1318,6 +1344,7 @@ function seedNotifications(
 export function createSeedDatabase(): Database {
   const outlets = seedOutlet();
   const drivers = seedDrivers();
+  const vehicles = seedVehicles();
   const scheduleAgreements = seedScheduleAgreements();
   const saDailyTargets = seedDailyTargets(scheduleAgreements);
   const products = seedProducts();
@@ -1349,6 +1376,7 @@ export function createSeedDatabase(): Database {
     branches: BRANCHES,
     outlets,
     drivers,
+    vehicles,
     scheduleAgreements,
     saDailyTargets,
     // Uploads are made in the browser, so the seeded day starts with none.

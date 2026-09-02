@@ -1,253 +1,54 @@
-import { scopedDb } from "@/mocks/scope";
-import { latency } from "@/mocks/db";
+/**
+ * The distribution planning adapter this build uses.
+ *
+ * Both implementations are passed to `pick`, so the choice is visible here and
+ * a build cannot silently fall back to the mock.
+ */
+import { assertMockAllowed, pick } from "@/lib/dataSource";
 import {
-  cancelPlan,
-  confirmPlan as confirmPlanRule,
-  createPlan as createPlanRule,
-  savePlanRows,
-  scheduleOrders,
-} from "@/mocks/rules";
-import { printDocument } from "@/lib/export";
-import { outletExposure } from "@/mocks/ar";
-import { defaultProduct } from "@/mocks/lines";
-import { isoDate, startOfToday } from "@/mocks/seed";
-import type { PlanEntity } from "@/mocks/types";
-import type {
-  DistributionPlan,
-  DriverOption,
-  PlanOption,
-  PlanRow,
-} from "../types";
-import { outletLabelTitle, unitLabel, unitLabelTitle } from "@/lib/lexicon";
+  addApprovedOrders as addApprovedOrdersMock,
+  distributionApiMock,
+  printRouteSheet as printRouteSheetMock,
+} from "./distributionApi.mock";
+import { distributionApiHttp } from "./distributionApi.http";
+import type { DistributionApi } from "./contract";
 
-function toPlanView(plan: PlanEntity): DistributionPlan {
-  const db = scopedDb();
-  const rows = db.planRows.filter((r) => r.planId === plan.id);
-  const sa = db.scheduleAgreements.find((s) => s.id === plan.saId);
+const api: DistributionApi = pick(distributionApiMock, distributionApiHttp);
 
-  return {
-    id: plan.id,
-    kode: plan.kode,
-    tanggal: plan.tanggal,
-    totalUnit: rows.reduce((s, r) => s + r.jumlahUnit, 0),
-    jumlahOutlet: rows.length,
-    jumlahDriver: new Set(rows.map((r) => r.driverId).filter(Boolean)).size,
-    status: plan.status,
-    saId: plan.saId,
-    nomorSA: sa?.nomorSA ?? "—",
-    sisaKuotaSA: sa ? Math.max(0, sa.totalKuota - sa.terpakai) : 0,
-    catatan: plan.catatan,
-    dibuatOleh: plan.dibuatOleh,
-    dikonfirmasiOleh: plan.dikonfirmasiOleh,
-    dikonfirmasiPada: plan.dikonfirmasiPada,
-  };
-}
+export const getPlanList = api.getPlanList.bind(api);
+export const getPlan = api.getPlan.bind(api);
+export const getPlanDetail = api.getPlanDetail.bind(api);
+export const createPlan = api.createPlan.bind(api);
+export const saveDraft = api.saveDraft.bind(api);
+export const confirmPlan = api.confirmPlan.bind(api);
+export const cancelDistributionPlan = api.cancelDistributionPlan.bind(api);
+export const getOutletOptions = api.getOutletOptions.bind(api);
+export const getProductOptions = api.getProductOptions.bind(api);
+export const getDefaultProductId = api.getDefaultProductId.bind(api);
+export const getDriverOptions = api.getDriverOptions.bind(api);
+export const getActiveSaOptions = api.getActiveSaOptions.bind(api);
+export const suggestAssignment = api.suggestAssignment.bind(api);
 
-export async function getPlanList(): Promise<DistributionPlan[]> {
-  await latency("read");
-  return scopedDb()
-    .plans.slice()
-    .sort((a, b) => b.tanggal.localeCompare(a.tanggal))
-    .map(toPlanView);
-}
-
-export async function getPlanDetail(planId: string): Promise<PlanRow[]> {
-  await latency("read");
-  const db = scopedDb();
-  const monthStart = isoDate(
-    new Date(startOfToday().getFullYear(), startOfToday().getMonth(), 1),
-  );
-
-  return db.planRows
-    .filter((r) => r.planId === planId)
-    .sort((a, b) => a.jamPengiriman.localeCompare(b.jamPengiriman))
-    .map((r) => {
-      const pkl = db.outlets.find((p) => p.id === r.outletId);
-      const driver = db.drivers.find((d) => d.id === r.driverId);
-      const takenThisMonth = db.deliveries
-        .filter((d) => d.outletId === r.outletId && d.tanggal >= monthStart)
-        .reduce((s, d) => s + d.target, 0);
-      // Credit standing, not "is there an unverified transfer" — this column
-      // is what tells the planner a stop is about to be refused.
-      const exp = outletExposure(db, r.outletId);
-
-      return {
-        id: r.id,
-        outletId: r.outletId,
-        outlet: pkl?.nama ?? "—",
-        alamat: pkl ? `${pkl.alamat}, Kec. ${pkl.kecamatan}` : "—",
-        lines: r.lines.map((l) => ({ ...l })),
-        jumlahUnit: r.jumlahUnit,
-        driverId: r.driverId,
-        driver: driver?.nama ?? "Belum ditetapkan",
-        jamPengiriman: r.jamPengiriman,
-        tripNo: r.tripNo ?? null,
-        statusBayar: exp.terblokir ? "Belum Lunas" : "Lunas",
-        sisaKuotaOutlet: Math.max(0, (pkl?.kuotaBulanan ?? 0) - takenThisMonth),
-        piutang: exp.outstanding,
-        piutangJatuhTempo: exp.jatuhTempo,
-        alasanBlokir: exp.alasan,
-      } satisfies PlanRow;
-    });
-}
-
-export async function saveDraft(planId: string, rows: PlanRow[]): Promise<void> {
-  await latency("write");
-  savePlanRows(
-    planId,
-    rows.map((r) => ({
-      id: r.id,
-      outletId: r.outletId,
-      driverId: r.driverId,
-      // A row edited on a screen that still only knows totals keeps its mix and
-      // pushes the change onto the first line, rather than dropping the rest.
-      lines: r.lines.filter((l) => l.productId && l.jumlah > 0),
-      // Recomputed by the rules layer from the lines; sent only so the shape
-      // matches the entity.
-      jumlahUnit: r.jumlahUnit,
-      jamPengiriman: r.jamPengiriman,
-      // Persisted, or accepting a suggestion would collapse every trip back
-      // into one the moment the draft was saved.
-      tripNo: r.tripNo,
-    })),
-  );
-}
-
-export async function confirmPlan(planId: string) {
-  await latency("write");
-  return confirmPlanRule(planId);
-}
-
-export async function createPlan(input: { tanggal: string; saId: string }) {
-  await latency("write");
-  return toPlanView(createPlanRule(input));
-}
-
-export async function cancelDistributionPlan(planId: string): Promise<void> {
-  await latency("write");
-  cancelPlan(planId);
-}
-
+/**
+ * Scheduling approved orders onto a plan is mock-only, and says so.
+ *
+ * The service has no orders module yet — `core.orders` exists in the schema and
+ * nothing serves it — so there is no HTTP implementation to pick. Routing it
+ * through `assertMockAllowed` means the API build gets that sentence on the
+ * screen that tried, rather than a list of invented orders beside real ones.
+ */
 export async function addApprovedOrders(planId: string, orderIds: string[]) {
-  await latency("write");
-  return scheduleOrders(planId, orderIds);
+  assertMockAllowed("distribution.addApprovedOrders");
+  return addApprovedOrdersMock(planId, orderIds);
 }
 
-/* ── option lists for the planner ──────────────────────────────────────── */
-
-export async function getOutletOptions(): Promise<PlanOption[]> {
-  await latency("read");
-  return scopedDb()
-    .outlets.filter((p) => p.status === "Aktif")
-    .sort((a, b) => a.nama.localeCompare(b.nama))
-    .map((p) => ({
-      id: p.id,
-      label: p.nama,
-      sublabel: `Kec. ${p.kecamatan} · kuota ${p.kuotaBulanan.toLocaleString("id-ID")}/bln`,
-    }));
-}
-
-/** What a stop can be loaded with. */
-export async function getProductOptions(): Promise<
-  { id: string; label: string; satuan: string }[]
-> {
-  await latency("read");
-  return scopedDb()
-    .products.filter((p) => p.aktif)
-    .map((p) => ({ id: p.id, label: p.nama, satuan: p.satuan }));
-}
-
-/** The line a brand-new stop starts with, so a row is never empty. */
-export async function getDefaultProductId(): Promise<string> {
-  return defaultProduct(scopedDb().products)?.id ?? "";
-}
-
-export async function getDriverOptions(planId: string): Promise<DriverOption[]> {
-  await latency("read");
-  const db = scopedDb();
-  const rows = db.planRows.filter((r) => r.planId === planId);
-
-  return db.drivers.map((d) => ({
-    id: d.id,
-    label: d.nama,
-    sublabel: `${d.plat} · ${d.armada}`,
-    kapasitas: d.kapasitas,
-    muatan: rows
-      .filter((r) => r.driverId === d.id)
-      .reduce((s, r) => s + r.jumlahUnit, 0),
-    status: d.status,
-    disabled: d.status === "Cuti",
-  }));
-}
-
-export async function getActiveSaOptions(): Promise<PlanOption[]> {
-  await latency("read");
-  const today = isoDate(startOfToday());
-  return scopedDb()
-    .scheduleAgreements.filter(
-      (s) => s.status !== "Draft" && s.periodeBerakhir >= today,
-    )
-    .map((s) => ({
-      id: s.id,
-      label: s.nomorSA,
-      sublabel: `${s.supplier} · sisa ${(s.totalKuota - s.terpakai).toLocaleString("id-ID")} ${unitLabel()}`,
-      disabled: s.terpakai >= s.totalKuota,
-    }));
-}
-
-/** Prints the route sheet handed to drivers at the depot. */
-export async function printRouteSheet(planId: string): Promise<void> {
-  await latency("read");
-  const db = scopedDb();
-  const plan = db.plans.find((p) => p.id === planId);
-  if (!plan) throw new Error("Rencana distribusi tidak ditemukan.");
-
-  const rows = db.planRows
-    .filter((r) => r.planId === planId)
-    .sort((a, b) => a.jamPengiriman.localeCompare(b.jamPengiriman));
-  const total = rows.reduce((s, r) => s + r.jumlahUnit, 0);
-  const fmt = (n: number) => n.toLocaleString("id-ID");
-
-  printDocument(
-    `${plan.kode} — Lembar Rute`,
-    `
-    <p class="eyebrow">${db.settings.namaPerusahaan} · Agen ${db.settings.nomorAgen}</p>
-    <h1>Lembar Rute Distribusi</h1>
-    <hr class="rule" />
-    <div class="meta">
-      <div>Kode rencana<strong class="code">${plan.kode}</strong></div>
-      <div>Tanggal<strong>${new Date(plan.tanggal).toLocaleDateString("id-ID", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}</strong></div>
-      <div>Status<strong>${plan.status}</strong></div>
-      <div>Titik singgah<strong>${rows.length}</strong></div>
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Jam</th><th>${outletLabelTitle()}</th><th>Alamat</th><th>Driver / Armada</th>
-          <th style="text-align:right">${unitLabelTitle()}</th><th style="width:90px">Diterima</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows
-          .map((r) => {
-            const pkl = db.outlets.find((p) => p.id === r.outletId);
-            const drv = db.drivers.find((d) => d.id === r.driverId);
-            return `<tr>
-              <td class="code">${r.jamPengiriman}</td>
-              <td>${pkl?.nama ?? "—"}</td>
-              <td>${pkl ? `${pkl.alamat}, Kec. ${pkl.kecamatan}` : "—"}</td>
-              <td>${drv ? `${drv.nama}<br /><span class="code">${drv.plat}</span>` : "Belum ditetapkan"}</td>
-              <td class="num">${fmt(r.jumlahUnit)}</td>
-              <td></td>
-            </tr>`;
-          })
-          .join("")}
-      </tbody>
-      <tfoot><tr><td colspan="4">Total muatan</td><td class="num">${fmt(total)}</td><td></td></tr></tfoot>
-    </table>
-    <div class="sign">
-      <div>Petugas gudang<span></span></div>
-      <div>Koordinator distribusi<span>${plan.dikonfirmasiOleh ?? ""}</span></div>
-    </div>`,
-  );
+/**
+ * The route sheet is mock-only for a narrower reason: it prints an address and
+ * a delivery time per stop, and neither is on the order-item response. Printing
+ * a sheet with "—" where the driver needs the address is worse than saying the
+ * sheet is not ready.
+ */
+export async function printRouteSheet(planId: string) {
+  assertMockAllowed("distribution.printRouteSheet");
+  return printRouteSheetMock(planId);
 }

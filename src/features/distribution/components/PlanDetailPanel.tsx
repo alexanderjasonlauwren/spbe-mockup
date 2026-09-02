@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   CheckCircle2,
@@ -22,13 +22,14 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatDateLong, formatNumber } from "@/lib/format";
 import type {
+  AssignmentSuggestion,
   DistributionPlan,
   DriverOption,
   PlanOption,
   PlanRow,
   UnroutableStop,
 } from "../types";
-import { suggestAssignment } from "../api/suggestAssignment";
+import { suggestAssignment } from "../api/distributionApi";
 import { outletLabel, outletLabelTitle, unitLabel } from "@/lib/lexicon";
 import { useResettableState } from "@/hooks/useResettableState";
 
@@ -179,8 +180,22 @@ export function PlanDetailPanel({
    * That is the shape the client asked for -- "propose, they accept or edit" --
    * and it is why this writes into the draft rather than calling the service.
    */
-  const suggest = () => {
-    const suggestion = suggestAssignment(draft, driverOptions);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+
+  const suggest = async () => {
+    if (!plan) return;
+    setIsSuggesting(true);
+    let suggestion: AssignmentSuggestion;
+    try {
+      // Over the SAVED plan, in both builds. The service reads the order's own
+      // stops -- it has no way to see a draft that exists only in this
+      // component -- so proposing over unsaved edits would give one build a
+      // different answer from the other for the same screen. The button is
+      // disabled while the draft is dirty for exactly that reason.
+      suggestion = await suggestAssignment(plan.id);
+    } finally {
+      setIsSuggesting(false);
+    }
 
     const placement = new Map<string, { driverId: string; driver: string; tripNo: number }>();
     for (const trip of suggestion.trips) {
@@ -291,12 +306,14 @@ export function PlanDetailPanel({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={suggest}
-                  disabled={draft.length === 0}
+                  onClick={() => void suggest()}
+                  disabled={draft.length === 0 || dirty || isSuggesting}
                   title={
                     draft.length === 0
                       ? `Tambahkan ${outletLabel()} terlebih dahulu`
-                      : "Susun usulan trip. Tidak menyimpan apa pun sampai Anda simpan."
+                      : dirty
+                        ? "Simpan draf dulu — usulan disusun dari titik singgah yang tersimpan"
+                        : "Susun usulan trip. Tidak menyimpan apa pun sampai Anda simpan."
                   }
                 >
                   <Wand2 className="h-3.5 w-3.5" />

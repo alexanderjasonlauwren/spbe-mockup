@@ -17,6 +17,16 @@ export interface DistributionPlan {
   dibuatOleh: string;
   dikonfirmasiOleh?: string;
   dikonfirmasiPada?: string;
+  /**
+   * The optimistic-locking counter the caller must echo back to save, confirm
+   * or cancel.
+   *
+   * Without it there is nothing to detect a concurrent edit against, and the
+   * service refuses a write built on a stale value with 409 rather than
+   * overwriting whatever the other planner committed. The mock build has one
+   * writer and carries a constant.
+   */
+  version: number;
 }
 
 export interface PlanRow {

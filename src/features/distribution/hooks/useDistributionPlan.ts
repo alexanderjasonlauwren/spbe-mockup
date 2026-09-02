@@ -10,6 +10,7 @@ import {
   getDriverOptions,
   getOutletOptions,
   getProductOptions,
+  getPlan,
   getPlanDetail,
   getPlanList,
   printRouteSheet,
@@ -40,6 +41,19 @@ export function useDistributionPlan() {
     },
   );
 
+  // The selected plan is read on its own rather than found in the list.
+  //
+  // A list row cannot carry which agreement the plan spends: the service
+  // records that per stop, so it is only known once the stops have been
+  // fetched. Finding the plan in the list left the panel showing "—" for the SA
+  // on the API build while the mock showed the real one — the exact kind of
+  // difference between the two builds this split exists to prevent.
+  const selectedPlanQuery = useQuery({
+    queryKey: [...scopeKey(), "plan", selectedPlanId],
+    queryFn: () => getPlan(selectedPlanId!),
+    enabled: !!selectedPlanId,
+  });
+
   const planDetail = useQuery({
     queryKey: [...scopeKey(), "plan-detail", selectedPlanId],
     queryFn: () => getPlanDetail(selectedPlanId!),
@@ -67,19 +81,28 @@ export function useDistributionPlan() {
     queryFn: getActiveSaOptions,
   });
 
+  // The version every write echoes back. Read from the plan the panel is
+  // showing, never from a remembered value: the point of the guard is that it
+  // is the number the caller actually saw.
+  const version = () => selectedPlanQuery.data?.version ?? 1;
+
   const saveDraftMutation = useDeskMutation({
     mutationFn: ({ planId, rows }: { planId: string; rows: PlanRow[] }) =>
-      saveDraft(planId, rows),
+      saveDraft(planId, rows, version()),
     errorTitle: "Draf tidak tersimpan",
     success: "Draf disimpan",
   });
 
   const confirmPlanMutation = useDeskMutation({
-    mutationFn: (planId: string) => confirmPlan(planId),
+    mutationFn: (planId: string) => confirmPlan(planId, version()),
     errorTitle: "Konfirmasi gagal",
-    success: (result) => ({
-      title: "Rencana dikonfirmasi",
-      description: `${result.deliveries} surat jalan terbit dan ${result.total.toLocaleString("id-ID")} ${unitLabel()} ditarik dari kuota SA. Pantau di Monitoring Distribusi.`,
+    // What the confirmation actually committed, rather than how many delivery
+    // notes it printed. The service confirms the obligation and leaves the
+    // paperwork to dispatch, so a delivery count here would be a number only
+    // the demo could fill.
+    success: (plan) => ({
+      title: `Rencana ${plan.kode} dikonfirmasi`,
+      description: `${plan.jumlahOutlet} ${outletLabel()} · ${plan.totalUnit.toLocaleString("id-ID")} ${unitLabel()} terikat pada kuota SA. Pantau di Monitoring Distribusi.`,
     }),
   });
 
@@ -94,7 +117,7 @@ export function useDistributionPlan() {
   });
 
   const cancelPlanMutation = useDeskMutation({
-    mutationFn: (planId: string) => cancelDistributionPlan(planId),
+    mutationFn: (planId: string) => cancelDistributionPlan(planId, version()),
     errorTitle: "Pembatalan gagal",
     success: () => ({
       title: "Rencana dibatalkan",
@@ -114,7 +137,7 @@ export function useDistributionPlan() {
     errorTitle: "Cetak lembar rute gagal",
   });
 
-  const selectedPlan = planList.data?.find((p) => p.id === selectedPlanId);
+  const selectedPlan = selectedPlanQuery.data;
 
   return {
     planList: planList.data ?? [],

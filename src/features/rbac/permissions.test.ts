@@ -48,10 +48,13 @@ describe("permission vocabulary", () => {
     for (const code of CONSOLE_ONLY_PERMISSIONS) {
       expect(code.startsWith("console."), `${code} should carry the console. prefix`).toBe(true);
     }
-    // Three: DISTRIBUTION_DELETE, REPORTS_VIEW, REPORTS_EXPORT. SA_IMPORT left
-    // this list when the backend gained distribution.import.schedule_agreements.
+    // Two: REPORTS_VIEW and REPORTS_EXPORT. SA_IMPORT left this list when the
+    // backend gained distribution.import.schedule_agreements, and
+    // DISTRIBUTION_DELETE left it when the distribution order module shipped
+    // with no delete at all -- the console had been holding a code for an
+    // action the backend had decided against, which is the opposite of a to-do.
     // Raising this number is a deliberate act; lower it as adapters land.
-    expect(CONSOLE_ONLY_PERMISSIONS.length).toBeLessThanOrEqual(3);
+    expect(CONSOLE_ONLY_PERMISSIONS.length).toBeLessThanOrEqual(2);
   });
 
   // Every non-console code must be shaped like the backend's, which is

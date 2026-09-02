@@ -20,6 +20,8 @@ import { getStatusVariant } from "@/lib/status";
 import { SelectInput, TextInput } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { CanAccess } from "@/features/rbac/components/CanAccess";
+import { PERMISSIONS } from "@/features/rbac/permissions";
 import { formatDateLong, formatNumber } from "@/lib/format";
 import type {
   AssignmentSuggestion,
@@ -328,23 +330,33 @@ export function PlanDetailPanel({
                   <Save className="h-3.5 w-3.5" />
                   {dirty ? "Simpan draf" : "Tersimpan"}
                 </Button>
-                <Button
-                  size="sm"
-                  onClick={onConfirm}
-                  disabled={
-                    isConfirming || draft.length === 0 || dirty || adaHambatan
-                  }
-                  title={
-                    dirty
-                      ? "Simpan draf terlebih dahulu"
-                      : adaHambatan
-                        ? "Selesaikan hambatan di atas sebelum konfirmasi"
-                        : "Terbitkan surat jalan dan tarik kuota"
-                  }
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  Konfirmasi
-                </Button>
+                {/*
+                  Confirming is an approval, not an edit, and the backend guards
+                  it with its own permission: a planner builds the day and a
+                  supervisor commits the agency to it. Hidden rather than
+                  disabled for someone who does not hold it -- a greyed button
+                  invites them to ask why, and the answer is that this is not
+                  their decision to make.
+                */}
+                <CanAccess permission={PERMISSIONS.DISTRIBUTION_APPROVE}>
+                  <Button
+                    size="sm"
+                    onClick={onConfirm}
+                    disabled={
+                      isConfirming || draft.length === 0 || dirty || adaHambatan
+                    }
+                    title={
+                      dirty
+                        ? "Simpan draf terlebih dahulu"
+                        : adaHambatan
+                          ? "Selesaikan hambatan di atas sebelum konfirmasi"
+                          : "Kunci rencana dan serahkan ke dispatch"
+                    }
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    Konfirmasi
+                  </Button>
+                </CanAccess>
               </>
             ) : plan.status === "Terkonfirmasi" ? (
               <Button variant="outline" size="sm" onClick={onCancelPlan}>

@@ -48,6 +48,13 @@ export const PERMISSIONS = {
   DISTRIBUTION_VIEW: "distribution.read.distribution_orders",
   DISTRIBUTION_CREATE: "distribution.create.distribution_orders",
   DISTRIBUTION_EDIT: "distribution.update.distribution_orders",
+  /**
+   * Signing a plan off, which the backend treats as an approval rather than an
+   * edit: a planner builds the day and a supervisor commits the agency to it.
+   * Cancelling is an edit and rides on DISTRIBUTION_EDIT — it returns quota to
+   * the agreement, which is a change to a document the planner owns.
+   */
+  DISTRIBUTION_APPROVE: "distribution.approve.distribution_orders",
 
   // Payments
   PAYMENTS_VIEW: "finance.read.payments",
@@ -86,17 +93,11 @@ export const PERMISSIONS = {
   //
   // Each disappears the moment its backend counterpart is seeded:
   //
-  //   DISTRIBUTION_DELETE the catalogue gives distribution_orders read/create/
-  //                       update/approve/reject and no delete. That looks
-  //                       deliberate — a plan is cancelled, not erased — so the
-  //                       console should probably drop this rather than the
-  //                       backend gain it.
   //   REPORTS_*           catalogue.go refuses these by name: "Reports have no
   //                       table and no route yet. A permission that guards
   //                       nothing is worse than a missing one, because it reads
   //                       as coverage."
   // ---------------------------------------------------------------------
-  DISTRIBUTION_DELETE: "console.delete.distribution_orders",
   REPORTS_VIEW: "console.read.reports",
   REPORTS_EXPORT: "console.export.reports",
 } as const;

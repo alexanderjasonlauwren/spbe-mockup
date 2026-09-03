@@ -116,6 +116,41 @@ describe("plan mapping", () => {
     expect(plan.nomorSA).toBe("Beberapa SA");
   });
 
+  /**
+   * A plan with no stops still names its agreement.
+   *
+   * This is the case the per-stop derivation cannot answer, and it is the
+   * ordinary one: a planner opens the day, picks the SA, and has not added a
+   * stop yet. Without the order's own `default_sa_id` the screen forgot the
+   * choice the moment the plan was created, reported "sisa kuota 0", and
+   * refused the first stop as exceeding a quota it could not see.
+   */
+  it("names the agreement on a plan with no stops", async () => {
+    getOne.mockResolvedValue(
+      order({
+        items: [],
+        agreement_id: SA_ID,
+        agreement_number: "SA-2026-09-001",
+        agreement_remaining: 4200,
+      }),
+    );
+
+    const plan = await distributionApiHttp.getPlan(PLAN_ID);
+
+    expect(plan.saId).toBe(SA_ID);
+    expect(plan.nomorSA).toBe("SA-2026-09-001");
+    expect(plan.sisaKuotaSA).toBe(4200);
+  });
+
+  /** The choice is sent on create, so the service can remember it. */
+  it("sends the chosen agreement when opening a plan", async () => {
+    send.mockResolvedValue(order({ items: [] }));
+
+    await distributionApiHttp.createPlan({ tanggal: "2026-09-05", saId: SA_ID });
+
+    expect(send.mock.calls[0][2].agreement_id).toBe(SA_ID);
+  });
+
   it("names the agreement when every stop draws on the same one", async () => {
     getOne.mockResolvedValue(order());
 
@@ -252,6 +287,40 @@ describe("stop mapping", () => {
     expect(rows[0].driverId).toBe("d1");
     expect(rows[0].driver).toBe("Slamet");
     expect(rows[0].tripNo).toBe(2);
+  });
+});
+
+describe("driver options", () => {
+  /**
+   * A driver nobody has crewed yet still has a ceiling to plan against.
+   *
+   * Capacity belongs to the truck and the pairing is decided when the run is
+   * built, so before that the honest ceiling is the largest truck the depot
+   * could give them. Reporting zero — which is what "no trip, no capacity"
+   * produced — made the planning screen call every stop an overload and refuse
+   * to confirm the plan at all.
+   */
+  it("falls back to the largest available truck for an uncrewed driver", async () => {
+    getList
+      .mockResolvedValueOnce({
+        items: [{ id: "d1", code: "DRV-001", full_name: "Slamet", status: "atv" }],
+        pagination: {},
+      })
+      .mockResolvedValueOnce({
+        items: [
+          { capacity_qty: 240, operational_status: "available" },
+          { capacity_qty: 560, operational_status: "available" },
+          { capacity_qty: 9000, operational_status: "maintenance" },
+        ],
+        pagination: {},
+      });
+    getOne.mockRejectedValue(new Error("no board"));
+
+    const [driver] = await distributionApiHttp.getDriverOptions(PLAN_ID);
+
+    // 560, not 9000: a truck in the workshop is not one the depot can give.
+    expect(driver.kapasitas).toBe(560);
+    expect(driver.muatan).toBe(0);
   });
 });
 

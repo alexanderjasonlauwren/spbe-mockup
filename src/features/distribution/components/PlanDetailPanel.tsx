@@ -20,6 +20,7 @@ import { getStatusVariant } from "@/lib/status";
 import { SelectInput, TextInput } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/useToast";
 import { CanAccess } from "@/features/rbac/components/CanAccess";
 import { PERMISSIONS } from "@/features/rbac/permissions";
 import { formatDateLong, formatNumber } from "@/lib/format";
@@ -151,7 +152,22 @@ export function PlanDetailPanel({
   const editable = plan?.status === "Draft";
 
   const total = draft.reduce((s, r) => s + r.jumlahUnit, 0);
-  const overQuota = plan ? total > plan.sisaKuotaSA : false;
+  /**
+   * How much MORE this draft would draw than the plan already has.
+   *
+   * `sisaKuotaSA` is what the agreement has left, and against the service that
+   * figure already accounts for this plan's saved stops — the quota moves when
+   * a stop is written, not when the plan is confirmed, because
+   * `quota_allocations.allocated_qty > 0` means the row and the first draw are
+   * the same event.
+   *
+   * So subtracting the whole draft from it counts this plan's own stops twice:
+   * a saved 100-cylinder stop against a 5.000 agreement showed 4.800 left when
+   * the database said 4.900. Only the unsaved delta is new.
+   */
+  const saved = rows.reduce((s, r) => s + r.jumlahUnit, 0);
+  const belumTersimpan = total - saved;
+  const overQuota = plan ? belumTersimpan > plan.sisaKuotaSA : false;
 
   /**
    * Trips, in the order they are driven.
@@ -183,6 +199,7 @@ export function PlanDetailPanel({
    * and it is why this writes into the draft rather than calling the service.
    */
   const [isSuggesting, setIsSuggesting] = useState(false);
+  const { toast } = useToast();
 
   const suggest = async () => {
     if (!plan) return;
@@ -195,6 +212,20 @@ export function PlanDetailPanel({
       // different answer from the other for the same screen. The button is
       // disabled while the draft is dirty for exactly that reason.
       suggestion = await suggestAssignment(plan.id);
+    } catch (error) {
+      // A refused suggestion has to say so.
+      //
+      // The service can decline for reasons the planner can act on -- "this
+      // branch has no coordinates, so no route can be measured from it" is the
+      // first one it says -- and this handler used to swallow every one of
+      // them: the button spun, nothing changed on screen, and the advice went
+      // to the network tab where nobody was looking.
+      toast({
+        title: "Usulan tidak bisa disusun",
+        description: error instanceof Error ? error.message : String(error),
+        tone: "error",
+      });
+      return;
     } finally {
       setIsSuggesting(false);
     }
@@ -379,7 +410,9 @@ export function PlanDetailPanel({
         />
         <Figure
           label="Sisa kuota SA"
-          value={formatNumber(Math.max(0, plan.sisaKuotaSA - (editable ? total : 0)))}
+          value={formatNumber(
+            Math.max(0, plan.sisaKuotaSA - (editable ? belumTersimpan : 0)),
+          )}
           unit={unitLabel()}
           tone={overQuota ? "rust" : undefined}
         />
@@ -416,7 +449,9 @@ export function PlanDetailPanel({
           {overQuota && (
             <Blocker>
               Muatan melebihi sisa kuota {plan.nomorSA} sebanyak{" "}
-              <span className="data">{formatNumber(total - plan.sisaKuotaSA)}</span>{" "}
+              <span className="data">
+                {formatNumber(belumTersimpan - plan.sisaKuotaSA)}
+              </span>{" "}
               {unitLabel()}. Kurangi jumlah, atau aktifkan agreement lain di{" "}
               <Link to="/sa" className="font-semibold text-ink underline decoration-signal decoration-2 underline-offset-2">
                 Schedule Agreement

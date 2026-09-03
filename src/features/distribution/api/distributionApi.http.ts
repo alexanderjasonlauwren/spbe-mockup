@@ -77,6 +77,9 @@ interface OrderResponse {
   total_drivers: number;
   total_qty: number;
   notes?: string;
+  agreement_id?: string;
+  agreement_number?: string;
+  agreement_remaining?: number;
   confirmed_by?: string;
   confirmed_at?: string;
   completed_at?: string;
@@ -194,7 +197,15 @@ function derivedAgreement(items: OrderItemResponse[]): { id: string; number: str
 }
 
 function toPlanView(order: OrderResponse): DistributionPlan {
-  const agreement = derivedAgreement(order.items ?? []);
+  // The order's own default first, the stops' agreement second.
+  //
+  // The default is what the planner chose when they opened the day, so it is
+  // right even for a plan with no stops yet — which is the case the derivation
+  // cannot answer at all. Where a plan has stops that disagree with it, the
+  // stops are what the regulator traces, so they win the label.
+  const derived = derivedAgreement(order.items ?? []);
+  const agreement =
+    derived.id !== "" ? derived : { id: order.agreement_id ?? "", number: order.agreement_number ?? derived.number };
   return {
     id: order.id,
     kode: order.order_number,
@@ -205,10 +216,10 @@ function toPlanView(order: OrderResponse): DistributionPlan {
     status: toPlanStatus(order.order_status),
     saId: agreement.id,
     nomorSA: agreement.number,
-    // Not on the order: the ceiling belongs to the agreement, and a list of
-    // plans cannot carry one number for it without a request per row. The
-    // planner reads it from the SA picker, which does carry it.
-    sisaKuotaSA: 0,
+    // What is left of the agreement, summed across its products, from the
+    // order's own read. Zero when no agreement is set — the screen shows the
+    // planner an agreement to choose rather than a quota to exceed.
+    sisaKuotaSA: order.agreement_remaining ?? 0,
     catatan: order.notes,
     // The service records who confirmed a plan and not who drafted it: a draft
     // is attributed by created_by, which is not on the wire.
@@ -312,12 +323,10 @@ async function getBoard(planId: string): Promise<BoardResponse | undefined> {
 async function createPlan(input: { tanggal: string; saId: string }): Promise<DistributionPlan> {
   const created = await send<OrderResponse>("post", "/distribution/orders", {
     planned_delivery_date: input.tanggal,
+    agreement_id: input.saId || undefined,
     items: [],
   });
-  // The chosen agreement is not sent: the service has nowhere to put it until
-  // the plan has a stop. It is returned on the plan object so the screen that
-  // asked for it keeps it for the first save.
-  return { ...toPlanView(created), saId: input.saId };
+  return toPlanView(created);
 }
 
 /**
@@ -333,8 +342,8 @@ async function saveDraft(planId: string, rows: PlanRow[], version: number): Prom
   const agreementId = plan.saId;
   if (!agreementId) {
     throw new Error(
-      "Rencana ini belum terikat ke Schedule Agreement. Pilih SA saat membuat rencana, " +
-        "lalu tambahkan titik singgah.",
+      "Rencana ini belum terikat ke Schedule Agreement. Buka kembali rencana dan pilih SA " +
+        "sebelum menambahkan titik singgah.",
     );
   }
 
@@ -407,14 +416,33 @@ async function getDefaultProductId(): Promise<string> {
  * and the service settles the vehicle when the assignment is applied.
  */
 async function getDriverOptions(planId: string): Promise<DriverOption[]> {
-  const [page, board] = await Promise.all([
+  const [page, board, fleet] = await Promise.all([
     getList<{ id: string; code: string; full_name: string; status: string }>("/drivers", {
       pageSize: OPTION_PAGE_SIZE,
       sort: [{ field: "full_name" }],
       filters: [{ field: "status", operator: "eq", value: "atv" }],
     }),
     getBoard(planId),
+    getList<{ capacity_qty: number; operational_status: string }>("/vehicles", {
+      pageSize: OPTION_PAGE_SIZE,
+      filters: [{ field: "status", operator: "eq", value: "atv" }],
+    }),
   ]);
+
+  // The ceiling for a driver nobody has crewed yet.
+  //
+  // Capacity belongs to the truck, and which truck this driver gets is decided
+  // when the run is built — so before that the honest ceiling is the largest
+  // one the depot could give them. Zero was the alternative and it was worse
+  // than wrong: the planning screen read it as "this driver can carry nothing",
+  // reported every stop as an overload, and refused to let the plan be
+  // confirmed at all.
+  const largest = Math.max(
+    0,
+    ...fleet.items
+      .filter((v) => v.operational_status !== "maintenance")
+      .map((v) => v.capacity_qty),
+  );
 
   const crewed = new Map(
     (board?.trips ?? []).map((t) => [
@@ -429,7 +457,7 @@ async function getDriverOptions(planId: string): Promise<DriverOption[]> {
       id: d.id,
       label: d.full_name,
       sublabel: trip ? `${trip.plate} · ${d.code}` : d.code,
-      kapasitas: trip?.capacity ?? 0,
+      kapasitas: trip?.capacity ?? largest,
       muatan: trip?.load ?? 0,
       status: d.status === "atv" ? "Aktif" : d.status,
       disabled: false,

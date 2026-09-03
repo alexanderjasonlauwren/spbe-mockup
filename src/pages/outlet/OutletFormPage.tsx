@@ -121,6 +121,10 @@ export function OutletFormPage() {
     e.preventDefault();
     const next: typeof errors = {};
     if (!form.nama.trim()) next.nama = `Nama ${outletLabel()} wajib diisi.`;
+    // Required by the service, which makes it unique per tenant. The mock used
+    // to invent one and the hint said so -- against the API that produced a 422
+    // naming a field the form had told the operator to leave blank.
+    if (!form.kode.trim()) next.kode = "Kode wajib diisi.";
     if (!form.kecamatan.trim()) next.kecamatan = "Kecamatan wajib dipilih.";
     if (!form.telepon.trim()) next.telepon = "Nomor telepon wajib diisi agar dapat dihubungi kurir.";
     if (form.kuotaBulanan <= 0) next.kuotaBulanan = "Kuota bulanan harus lebih dari nol.";
@@ -177,15 +181,24 @@ export function OutletFormPage() {
                 />
               </Field>
 
+              {/*
+                The hint used to promise "dibuat otomatis jika dikosongkan".
+                The mock did invent one; the service does not, and refuses a
+                create without it — so the form was telling the operator to
+                leave blank the one field that would fail the save.
+              */}
               <Field
                 label="Kode"
                 htmlFor="kode"
-                hint={isEdit ? undefined : "Dibuat otomatis jika dikosongkan."}
+                error={errors.kode}
+                required
+                hint="Referensi milik agen, mis. PKL-0025."
               >
                 <TextInput
                   id="kode"
                   mono
                   value={form.kode}
+                  invalid={!!errors.kode}
                   placeholder="PKL-0025"
                   onChange={(e) => set("kode", e.target.value)}
                 />
@@ -239,11 +252,22 @@ export function OutletFormPage() {
                 hint={`Batas ${unitLabel()} yang boleh diterima ${outletLabel()} ini setiap bulan.`}
                 required
               >
+                {/*
+                  step="any", not a spinner increment.
+
+                  `step` is a VALIDITY constraint, not a nudge: with min={1} and
+                  step={50} the only legal values were 1, 51, 101 … so a monthly
+                  quota of 600 was refused by the browser. And refused silently
+                  — the form's own validation passed, so nothing rendered, the
+                  submit handler never ran, and pressing "Daftarkan pangkalan"
+                  did nothing at all. Six inputs across the console had the same
+                  trap, each with a `min` one off its `step`.
+                */}
                 <TextInput
                   id="kuota"
                   type="number"
                   min={1}
-                  step={50}
+                  step="any"
                   mono
                   value={form.kuotaBulanan}
                   invalid={!!errors.kuotaBulanan}
@@ -276,7 +300,7 @@ export function OutletFormPage() {
                   id="plafon"
                   type="number"
                   min={0}
-                  step={1_000_000}
+                  step="any"
                   mono
                   value={form.batasKredit}
                   onChange={(e) => set("batasKredit", Number(e.target.value))}

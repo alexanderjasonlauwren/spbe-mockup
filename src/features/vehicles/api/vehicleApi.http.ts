@@ -83,6 +83,11 @@ function toWire(input: Partial<VehicleEntity>) {
     if (value !== undefined) body[key] = value;
   };
   put("plate_number", input.plat);
+  // The console shows one phrase where the service keeps make and model apart.
+  // Sent whole as `brand`, which round-trips to the same phrase because toView
+  // joins the two -- splitting "Isuzu Elf NMR" on a space would guess where the
+  // make ends, and guess wrong on "Mitsubishi Fuso Fighter".
+  put("brand", input.armada);
   put("capacity_qty", input.kapasitas);
   put("capacity_kg", input.kapasitasKg);
   put("operational_status", toWireOperational(input.status));

@@ -128,6 +128,26 @@ describe("writing", () => {
     expect(body.capacity_qty).toBe(300);
   });
 
+  /**
+   * The fleet description is sent, and round-trips to the same phrase.
+   *
+   * It was dropped on the first live create: the form collected "Isuzu Elf NMR"
+   * and the row came back reading "truck", because the payload carried no make
+   * at all and toView fell back to the vehicle type.
+   */
+  it("sends the fleet description and reads it back whole", async () => {
+    send.mockResolvedValue(wire({ brand: "Isuzu Elf NMR", model: undefined }));
+
+    const saved = await vehicleApiHttp.createOrUpdateVehicle({
+      plat: "H 9999 ZZ",
+      armada: "Isuzu Elf NMR",
+      kapasitas: 240,
+    });
+
+    expect(send.mock.calls[0][2].brand).toBe("Isuzu Elf NMR");
+    expect(saved.armada).toBe("Isuzu Elf NMR");
+  });
+
   it("posts a create without a version", async () => {
     send.mockResolvedValue(wire());
     await vehicleApiHttp.createOrUpdateVehicle({ plat: "H 9999 ZZ", kapasitas: 240 });

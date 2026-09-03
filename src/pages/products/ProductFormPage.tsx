@@ -167,7 +167,7 @@ export function ProductFormPage() {
                   id="beli"
                   type="number"
                   min={0}
-                  step={100}
+                  step="any"
                   mono
                   value={form.hargaBeli}
                   invalid={!!errors.hargaBeli}
@@ -185,7 +185,7 @@ export function ProductFormPage() {
                   id="jual"
                   type="number"
                   min={1}
-                  step={100}
+                  step="any"
                   mono
                   value={form.hargaJual}
                   invalid={!!errors.hargaJual}

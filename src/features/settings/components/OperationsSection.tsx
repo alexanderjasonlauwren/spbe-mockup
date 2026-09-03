@@ -117,7 +117,7 @@ export function OperationsSection() {
                 mono
                 min={50}
                 max={5000}
-                step={50}
+                step="any"
                 value={form.radiusGeofenceMeter}
                 onChange={(e) =>
                   setForm({ ...form, radiusGeofenceMeter: Number(e.target.value) })
@@ -136,7 +136,7 @@ export function OperationsSection() {
               mono
               min={15}
               max={240}
-              step={15}
+              step="any"
               value={form.durasiSinggahMenit}
               onChange={(e) =>
                 setForm({ ...form, durasiSinggahMenit: Number(e.target.value) })

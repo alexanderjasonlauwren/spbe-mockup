@@ -477,7 +477,7 @@ export function OrderListPage() {
                 id="jumlah"
                 type="number"
                 min={1}
-                step={10}
+                step="any"
                 mono
                 value={form.jumlahUnit}
                 onChange={(e) =>

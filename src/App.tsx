@@ -22,6 +22,7 @@ import { OutletFormPage } from "./pages/outlet/OutletFormPage";
 import { OutletDetailPage } from "./pages/outlet/OutletDetailPage";
 import { DriverPage } from "./pages/drivers/DriverPage";
 import { DriverDetailPage } from "./pages/drivers/DriverDetailPage";
+import { VehiclePage } from "./pages/vehicles/VehiclePage";
 import { ProductListPage } from "./pages/products/ProductListPage";
 import { ProductFormPage } from "./pages/products/ProductFormPage";
 import { UserListPage } from "./pages/users/UserListPage";
@@ -153,6 +154,11 @@ const router = createBrowserRouter([
       { path: "drivers/:id", element: (
         <RequirePermission permission={PERMISSIONS.DRIVERS_VIEW}>
           <DriverDetailPage />
+        </RequirePermission>
+      ) },
+      { path: "vehicles", element: (
+        <RequirePermission permission={PERMISSIONS.VEHICLES_VIEW}>
+          <VehiclePage />
         </RequirePermission>
       ) },
       { path: "products", element: (

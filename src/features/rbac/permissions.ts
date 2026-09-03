@@ -72,6 +72,11 @@ export const PERMISSIONS = {
   DRIVERS_ASSIGN: "distribution.update.distribution_orders",
   DRIVERS_MANAGE: "masterdata.update.drivers",
 
+  // The fleet is its own resource, with its own permissions, because the
+  // service keeps drivers and vehicles apart -- the pairing belongs to a run.
+  VEHICLES_VIEW: "masterdata.read.vehicles",
+  VEHICLES_MANAGE: "masterdata.update.vehicles",
+
   // Orders. Distinct from distribution_orders on the backend: an order is what
   // an outlet asks for, a distribution order is the day's plan.
   ORDERS_VIEW: "distribution.read.orders",

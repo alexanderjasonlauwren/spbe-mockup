@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import type { ToastOptions } from "@/components/ui/toast-context";
 
@@ -41,10 +42,33 @@ export function useDeskMutation<TArgs, TResult>({
     onError: (error, args) => {
       toast({
         title: errorTitle,
-        description: error.message,
+        description: describeFailure(error),
         tone: "error",
       });
       onFail?.(error, args);
     },
   });
+}
+
+/**
+ * What to put under the error title.
+ *
+ * A 422 from the service says "The request failed validation" and carries the
+ * fields that failed in `details` — which `ApiError` already parses and nothing
+ * was reading. So the console showed a sentence the operator could not act on:
+ * a missing outlet code and a malformed phone number were the same message,
+ * with nothing to say which field to look at.
+ *
+ * The field names are the wire's (`code`, `phone`), not the form's. Translating
+ * them here would need a map per form that drifts the first time a field is
+ * renamed; naming the field the server named is worse copy and better help.
+ */
+function describeFailure(error: Error): string {
+  if (!(error instanceof ApiError) || error.violations.length === 0) {
+    return error.message;
+  }
+  const fields = error.violations
+    .map((v) => (v.message ? `${v.field}: ${v.message}` : v.field))
+    .join(" · ");
+  return `${error.message} — ${fields}`;
 }

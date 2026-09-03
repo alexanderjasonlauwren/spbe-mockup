@@ -72,14 +72,14 @@ export function DriverPage() {
 
   const saveMutation = useDeskMutation({
     mutationFn: (values: FormState) => createOrUpdateDriver(values),
-    errorTitle: "Data armada tidak tersimpan",
+    errorTitle: "Data driver tidak tersimpan",
     success: (d) => ({ title: `${d.nama} tersimpan` }),
     onDone: () => setEditing(null),
   });
 
   const deleteMutation = useDeskMutation({
     mutationFn: (id: string) => removeDriver(id),
-    errorTitle: "Hapus armada gagal",
+    errorTitle: "Hapus driver gagal",
     success: "Armada dihapus",
     onDone: () => setPendingDelete(null),
   });
@@ -89,7 +89,7 @@ export function DriverPage() {
     errorTitle: "Unduh gagal",
     success: (count) => ({
       title: "Berkas CSV diunduh",
-      description: `${count} armada diekspor.`,
+      description: `${count} driver diekspor.`,
     }),
   });
 
@@ -108,6 +108,7 @@ export function DriverPage() {
     const next: typeof errors = {};
     if (!editing.nama.trim()) next.nama = "Nama driver wajib diisi.";
     if (!editing.kode.trim()) next.kode = "Kode driver wajib diisi.";
+    if (!editing.telepon.trim()) next.telepon = "Nomor telepon wajib diisi.";
     setErrors(next);
     if (Object.keys(next).length > 0) return;
     saveMutation.mutate(editing);
@@ -153,26 +154,36 @@ export function DriverPage() {
       key: "tugas",
       header: "Singgah hari ini",
       align: "right",
-      render: (row) => (
-        <span className="data text-ink">
-          {formatNumber(row.selesaiHariIni)}
-          <span className="text-ink-muted"> / {formatNumber(row.tugasHariIni)}</span>
-        </span>
-      ),
+      // Counted from core.deliveries. "0 / 0" would report a driver who was
+      // given nothing today, which is a claim this build cannot make.
+      render: (row) =>
+        row.statistikTersedia ? (
+          <span className="data text-ink">
+            {formatNumber(row.selesaiHariIni)}
+            <span className="text-ink-muted"> / {formatNumber(row.tugasHariIni)}</span>
+          </span>
+        ) : (
+          <span className="text-xs text-ink-muted">—</span>
+        ),
       sortValue: (row) => row.tugasHariIni,
     },
     {
       key: "kinerja",
       header: "30 hari",
       align: "right",
-      render: (row) => (
-        <>
-          <span className="data block text-ink">{formatNumber(row.unit30Hari)}</span>
-          <span className="data block text-2xs text-ink-muted">
-            {formatPercentId(row.ketepatan * 100)} tepat
-          </span>
-        </>
-      ),
+      // Likewise. "0 · 0% tepat" reads as a driver with a perfect record of
+      // having done nothing, which is worse than saying nothing at all.
+      render: (row) =>
+        row.statistikTersedia ? (
+          <>
+            <span className="data block text-ink">{formatNumber(row.unit30Hari)}</span>
+            <span className="data block text-2xs text-ink-muted">
+              {formatPercentId(row.ketepatan * 100)} tepat
+            </span>
+          </>
+        ) : (
+          <span className="text-xs text-ink-muted">—</span>
+        ),
       sortValue: (row) => row.unit30Hari,
     },
     {
@@ -226,8 +237,8 @@ export function DriverPage() {
     <div className="space-y-5">
       <PageHeader
         eyebrow="Data induk"
-        title="Armada & Driver"
-        description="Kendaraan yang tersedia untuk penugasan, kapasitas angkutnya, dan kinerja pengemudi selama 30 hari terakhir."
+        title="Driver"
+        description="Pengemudi yang dapat ditugaskan. Armada dan kapasitasnya ada di daftar Armada — pasangan driver dan kendaraan ditetapkan per rit di papan berangkat."
         actions={
           <>
             <Button
@@ -240,28 +251,28 @@ export function DriverPage() {
             </Button>
             <Button onClick={() => openEditor(EMPTY)}>
               <Plus className="h-3.5 w-3.5" />
-              Tambah armada
+              Tambah driver
             </Button>
           </>
         }
         meta={
           <span className="text-xs text-ink-muted">
             <span className="data">{bertugas}</span> dari{" "}
-            <span className="data">{rows.length}</span> armada bertugas hari ini
+            <span className="data">{rows.length}</span> driver bertugas hari ini
           </span>
         }
       />
 
       <Panel>
         <PanelHeader
-          title="Daftar armada"
+          title="Daftar driver"
           hint={`${rows.length} baris`}
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <SearchInput
                 value={search}
                 onChange={setSearch}
-                placeholder="Nama, plat, atau jenis armada"
+                placeholder="Nama, kode, atau nomor SIM"
                 className="w-56"
               />
               <SegmentedControl
@@ -281,11 +292,11 @@ export function DriverPage() {
           pageSize={12}
           defaultSortKey="nama"
           emptyIcon={Truck}
-          emptyMessage="Tidak ada armada yang cocok"
-          emptyDescription="Ubah filter, atau tambahkan kendaraan baru ke daftar."
+          emptyMessage="Tidak ada driver yang cocok"
+          emptyDescription="Ubah filter, atau tambahkan pengemudi baru ke daftar."
           emptyAction={
             <Button size="sm" onClick={() => openEditor(EMPTY)}>
-              Tambah armada
+              Tambah driver
             </Button>
           }
           dense
@@ -297,11 +308,11 @@ export function DriverPage() {
           <form onSubmit={submit}>
             <DialogHeader>
               <DialogTitle>
-                {editing?.id ? `Ubah ${editing.nama}` : "Tambah armada"}
+                {editing?.id ? `Ubah ${editing.nama}` : "Tambah driver"}
               </DialogTitle>
               <DialogDescription>
-                Kapasitas menentukan batas muatan yang boleh ditugaskan ke kendaraan
-                ini pada satu rencana distribusi.
+                Data pengemudi. Kendaraan dan kapasitasnya didaftarkan di Armada,
+                dan dipasangkan dengan driver saat rit disusun.
               </DialogDescription>
             </DialogHeader>
 
@@ -339,7 +350,9 @@ export function DriverPage() {
                   />
                 </Field>
 
-                <Field label="Telepon" htmlFor="d-telp">
+                {/* Required by the service, which also validates the format —
+                    an unreachable driver is not a record worth keeping. */}
+                <Field label="Telepon" htmlFor="d-telp" error={errors.telepon} required>
                   <TextInput
                     id="d-telp"
                     mono
@@ -382,7 +395,7 @@ export function DriverPage() {
                 Batal
               </Button>
               <Button type="submit" disabled={saveMutation.isPending}>
-                Simpan armada
+                Simpan driver
               </Button>
             </DialogFooter>
           </form>

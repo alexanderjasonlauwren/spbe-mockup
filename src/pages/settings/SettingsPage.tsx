@@ -521,7 +521,7 @@ export function SettingsPage() {
                 id="target"
                 type="number"
                 min={1}
-                step={50}
+                step="any"
                 mono
                 value={form.targetHarian}
                 onChange={(e) => set("targetHarian", Number(e.target.value))}

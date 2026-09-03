@@ -7,6 +7,7 @@ import {
   ClipboardList,
   FileText,
   Fuel,
+  IdCard,
   LayoutDashboard,
   Map,
   Receipt,
@@ -122,10 +123,19 @@ export const NAV_GROUPS: NavGroup[] = [
         hint: `Daftar ${outletLabel()}, kuota, dan penanggung jawab`,
       },
       {
-        name: "Armada & Driver",
+        name: "Driver",
         href: "/drivers",
+        icon: IdCard,
+        hint: "Pengemudi, SIM, dan kinerja 30 hari",
+      },
+      // Two entries, because the service serves two lists. A driver swaps
+      // trucks and a truck swaps drivers, so neither owns the other and the
+      // pairing belongs to the run -- see mocks/fleet.ts.
+      {
+        name: "Armada",
+        href: "/vehicles",
         icon: Truck,
-        hint: "Kendaraan, kapasitas, dan kinerja pengemudi",
+        hint: "Kendaraan, kapasitas angkut, dan masa berlaku STNK/KIR",
       },
       {
         name: "Produk",

@@ -635,7 +635,7 @@ function LoadEditor({
           <TextInput
             type="number"
             min={1}
-            step={10}
+            step="any"
             mono
             aria-label={`Jumlah baris ${i + 1} untuk ${row.outlet}`}
             className="w-20 shrink-0 py-1.5 text-right text-xs"

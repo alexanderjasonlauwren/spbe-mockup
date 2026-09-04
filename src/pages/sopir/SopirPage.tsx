@@ -1,3 +1,4 @@
+import { usesApi } from "@/lib/dataSource";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -64,6 +65,12 @@ export function SopirPage() {
   const [dipilih, setDipilih] = useState<string>("");
   const driverId = user?.driverId ?? dipilih;
 
+  // Against the service the run comes from the session: `GET /deliveries/mine`
+  // resolves the driver from who is signed in, so there is no id to choose and
+  // nothing to choose it from. Asking anyway left the page on a picker with an
+  // empty list — a dead end the driver could not get out of.
+  const sessionResolvesDriver = usesApi;
+
   const [completing, setCompleting] = useState<RunStop | null>(null);
   const [holding, setHolding] = useState<RunStop | null>(null);
   const [form, setForm] = useState<{
@@ -76,7 +83,7 @@ export function SopirPage() {
   const run = useQuery({
     queryKey: [...scopeKey(), "sopir-run", driverId],
     queryFn: () => getMyRun(driverId),
-    enabled: !!driverId,
+    enabled: sessionResolvesDriver || !!driverId,
     // The desk moves drops too, and a stale card invites a double delivery.
     refetchInterval: 30_000,
   });
@@ -84,7 +91,7 @@ export function SopirPage() {
   const options = useQuery({
     queryKey: [...scopeKey(), "sopir-driver-options"],
     queryFn: getDriverOptions,
-    enabled: !user?.driverId,
+    enabled: !sessionResolvesDriver && !user?.driverId,
   });
 
   const departMutation = useDeskMutation({
@@ -148,7 +155,7 @@ export function SopirPage() {
       />
 
       {/* Whose run is this */}
-      {!user?.driverId && (
+      {!sessionResolvesDriver && !user?.driverId && (
         <Panel spine="text-signal">
           <PanelBody>
             <Field
@@ -173,7 +180,7 @@ export function SopirPage() {
         </Panel>
       )}
 
-      {!driverId ? (
+      {!sessionResolvesDriver && !driverId ? (
         <Panel>
           <EmptyState
             icon={Truck}

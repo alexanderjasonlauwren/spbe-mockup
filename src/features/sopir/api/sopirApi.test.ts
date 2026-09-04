@@ -1,0 +1,265 @@
+import { expect, it, vi, beforeEach, describe } from "vitest";
+
+/**
+ * The driver's run, and the translation the split leaves this adapter holding.
+ *
+ * The service issues one surat jalan per product; the driver parks once. The
+ * read side of that is grouped by the server, but the write side is here — one
+ * call per document, filed from one press of one button. These pin that
+ * fan-out, because getting it wrong does not throw: it closes some documents
+ * and leaves others open, and the stop looks finished on the phone while the
+ * office still has work outstanding against it.
+ */
+
+const getOne = vi.fn();
+const send = vi.fn();
+
+vi.mock("@/lib/api", () => ({
+  getList: vi.fn(),
+  getOne: (...args: unknown[]) => getOne(...args),
+  send: (...args: unknown[]) => send(...args),
+  upload: vi.fn(),
+}));
+
+vi.mock("@/lib/geo", () => ({
+  capturePosition: async () => ({ lat: -6.9932, lng: 110.3453, status: "ok" }),
+  geoVerdict: () => "sesuai",
+}));
+
+const { sopirApiHttp } = await import("./sopirApi.http");
+
+const D3 = "aaaaaaaa-1111-4111-8111-111111111111";
+const D12 = "bbbbbbbb-2222-4222-8222-222222222222";
+const P3 = "cccccccc-3333-4333-8333-333333333333";
+const P12 = "dddddddd-4444-4444-8444-444444444444";
+
+function delivery(overrides: Record<string, unknown> = {}) {
+  return {
+    id: D3,
+    delivery_number: "SJ-SLT-20260904-0002",
+    product_id: P3,
+    product_name: "LPG 3 Kg Subsidi",
+    dispatched_qty: 50,
+    delivered_qty: 0,
+    returned_qty: 0,
+    empties_collected: 0,
+    delivery_status: "pending",
+    version: 1,
+    ...overrides,
+  };
+}
+
+/** One outlet, two cylinder sizes, one visit. */
+function run(overrides: Record<string, unknown> = {}) {
+  return {
+    date: "2026-09-04",
+    driver_id: "eeeeeeee-5555-4555-8555-555555555555",
+    driver_name: "Slamet",
+    plate: "H 1234 AB",
+    stops: [
+      {
+        sequence_no: 1,
+        outlet_id: "ffffffff-6666-4666-8666-666666666666",
+        outlet_code: "PGKL-0001",
+        outlet_name: "Pangkalan Melati",
+        owner_name: "Bu Sri",
+        phone: "081234567890",
+        address: "Jl. Melati No. 1",
+        district: "Ngaliyan",
+        latitude: -6.9932,
+        longitude: 110.3453,
+        deliveries: [
+          delivery(),
+          delivery({
+            id: D12,
+            delivery_number: "SJ-SLT-20260904-0003",
+            product_id: P12,
+            product_name: "LPG 12 Kg",
+            dispatched_qty: 20,
+            version: 4,
+          }),
+        ],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  getOne.mockReset();
+  send.mockReset();
+  // The server answers a filing with the updated document, and the row
+  // versioning trigger has moved the counter on. Mocking that rather than an
+  // empty object is what lets a completion assert the version it filed at.
+  send.mockImplementation(async (_m: string, path: string, body: { version: number }) => ({
+    version: path.includes("/arrive") ? body.version + 1 : body.version,
+  }));
+});
+
+/** Draws the run, which is what the screen does before it offers any button. */
+async function load(payload: Record<string, unknown> = run()) {
+  getOne.mockImplementation(async (path: string) =>
+    path.startsWith("/deliveries/mine")
+      ? payload
+      : { vehicle_type: "truck", capacity_qty: 240 },
+  );
+  return sopirApiHttp.getMyRun("ignored", "2026-09-04");
+}
+
+describe("reading the run", () => {
+  it("keeps a two-product drop as one stop the driver parks at once", async () => {
+    const r = await load();
+
+    expect(r.stops).toHaveLength(1);
+    expect(r.stops[0].lines.map((l) => l.nama)).toEqual([
+      "LPG 3 Kg Subsidi",
+      "LPG 12 Kg",
+    ]);
+    expect(r.stops[0].target).toBe(70);
+  });
+
+  it("names every document the outlet signs for, not just the first", async () => {
+    const r = await load();
+    expect(r.stops[0].kode).toBe("SJ-SLT-20260904-0002, SJ-SLT-20260904-0003");
+  });
+
+  it("carries the address and the number the driver rings at the gate", async () => {
+    const r = await load();
+    expect(r.stops[0].alamat).toBe("Jl. Melati No. 1");
+    expect(r.stops[0].telepon).toBe("081234567890");
+    expect(r.stops[0].lat).toBeCloseTo(-6.9932);
+  });
+
+  it("does not ask the driver for a driver id: the run is the session", async () => {
+    await load();
+    const asked = getOne.mock.calls.map((c) => c[0] as string);
+    expect(asked[0]).toBe("/deliveries/mine?date=2026-09-04");
+    expect(asked[0]).not.toContain("driver");
+  });
+
+  it("reads the stage off the filings, not off a status set at dispatch", async () => {
+    // Issued paperwork nobody has moved is queued, whatever the row says.
+    expect((await load()).stops[0].status).toBe("Antrian");
+
+    const departed = run();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (departed.stops[0].deliveries[0] as any).departed_at = "2026-09-04T01:00:00Z";
+    expect((await load(departed)).stops[0].status).toBe("Proses");
+  });
+
+  it("still renders the route when the fleet read fails", async () => {
+    getOne.mockImplementation(async (path: string) => {
+      if (path.startsWith("/deliveries/mine")) return run();
+      throw new Error("fleet is down");
+    });
+    const r = await sopirApiHttp.getMyRun("ignored", "2026-09-04");
+    expect(r.stops).toHaveLength(1);
+    expect(r.driver?.kapasitas).toBe(0);
+  });
+});
+
+describe("filing against a stop", () => {
+  it("closes every document on the stop, each at its own version", async () => {
+    const r = await load();
+
+    await sopirApiHttp.completeStop({
+      deliveryId: r.stops[0].id,
+      lines: [
+        { productId: P3, realisasi: 48, kembali: 40 },
+        { productId: P12, realisasi: 20 },
+      ],
+      diterimaOleh: "Bu Sri",
+    });
+
+    expect(send).toHaveBeenCalledTimes(2);
+    const [, path3, body3] = send.mock.calls[0];
+    const [, path12, body12] = send.mock.calls[1];
+
+    expect(path3).toBe(`/deliveries/${D3}/complete`);
+    expect(body3).toMatchObject({
+      version: 1,
+      delivered_qty: 48,
+      // 50 left the yard and 48 were taken: the two the outlet refused are a
+      // fact of their own, not a rounding of the total.
+      returned_qty: 2,
+      empties_collected: 40,
+      recipient_name: "Bu Sri",
+      latitude: -6.9932,
+    });
+
+    expect(path12).toBe(`/deliveries/${D12}/complete`);
+    // The second document's version is its own, not the first one's.
+    expect(body12).toMatchObject({ version: 4, delivered_qty: 20, returned_qty: 0 });
+  });
+
+  it("closes a document the driver did not touch at what it carried", async () => {
+    const r = await load();
+
+    await sopirApiHttp.completeStop({
+      deliveryId: r.stops[0].id,
+      lines: [{ productId: P3, realisasi: 50 }],
+      diterimaOleh: "Bu Sri",
+    });
+
+    const [, , body12] = send.mock.calls[1];
+    // Left open, the stop would read as finished on the phone while the office
+    // still has a surat jalan outstanding against it.
+    expect(body12).toMatchObject({ delivered_qty: 20, returned_qty: 0 });
+  });
+
+  it("files one call per document and lets the service stamp the arrival", async () => {
+    const r = await load();
+
+    await sopirApiHttp.completeStop({
+      deliveryId: r.stops[0].id,
+      lines: [{ productId: P3, realisasi: 50 }],
+      diterimaOleh: "Bu Sri",
+    });
+
+    // Two documents, one write each. The service stamps arrived_at in the same
+    // write when the driver never filed one, so a separate arrival call would
+    // be a second round trip on a phone at a gate for nothing.
+    expect(send.mock.calls.map((c) => c[1])).toEqual([
+      `/deliveries/${D3}/complete`,
+      `/deliveries/${D12}/complete`,
+    ]);
+  });
+
+  it("holds every document on the stop, with the reason the service requires", async () => {
+    const r = await load();
+
+    await sopirApiHttp.holdStop({ deliveryId: r.stops[0].id, catatan: "Pangkalan tutup" });
+
+    expect(send.mock.calls.map((c) => c[1])).toEqual([
+      `/deliveries/${D3}/fail`,
+      `/deliveries/${D12}/fail`,
+    ]);
+    expect(send.mock.calls[0][2]).toMatchObject({ failure_reason: "Pangkalan tutup" });
+  });
+
+  it("finishes a stop whose other document is already closed", async () => {
+    const half = run();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (half.stops[0].deliveries[0] as any).completed_at = "2026-09-04T03:00:00Z";
+    const r = await load(half);
+
+    await sopirApiHttp.completeStop({
+      deliveryId: r.stops[0].id,
+      lines: [{ productId: P12, realisasi: 20 }],
+      diterimaOleh: "Bu Sri",
+    });
+
+    // Only the open one. Filing against the settled half answers "already
+    // partial" and takes the rest of the stop down with it.
+    expect(send.mock.calls.map((c) => c[1])).toEqual([
+      `/deliveries/${D12}/complete`,
+    ]);
+  });
+
+  it("refuses to file against a stop it never loaded", async () => {
+    await expect(sopirApiHttp.departStop("a-stop-from-nowhere")).rejects.toThrow(
+      /Muat ulang/,
+    );
+    expect(send).not.toHaveBeenCalled();
+  });
+});

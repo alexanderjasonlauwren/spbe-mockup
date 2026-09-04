@@ -10,6 +10,8 @@ import {
   getDriverOptions,
   getOutletOptions,
   getProductOptions,
+  getVehicleOptions,
+  applyAssignment,
   getPlan,
   getPlanDetail,
   getPlanList,
@@ -71,6 +73,11 @@ export function useDistributionPlan() {
     enabled: !!selectedPlanId,
   });
 
+  const vehicleOptions = useQuery({
+    queryKey: [...scopeKey(), "vehicle-options"],
+    queryFn: getVehicleOptions,
+  });
+
   const productOptions = useQuery({
     queryKey: [...scopeKey(), "product-options"],
     queryFn: getProductOptions,
@@ -86,11 +93,36 @@ export function useDistributionPlan() {
   // is the number the caller actually saw.
   const version = () => selectedPlanQuery.data?.version ?? 1;
 
+  /**
+   * Saving a board is two writes, and both must happen.
+   *
+   * The stops and the crew live in different places — the plan's items, and the
+   * runs those items ride on — with different permissions behind them. Saving
+   * only the stops is what left the console able to plan a day and unable to
+   * dispatch it: the driver and truck the dispatcher chose went nowhere, the
+   * re-read came back with no crew, and the board was permanently unsaved.
+   *
+   * The assignment goes second, so a rejected stop list never leaves runs
+   * pointing at items that were not written.
+   *
+   * A run with no truck is skipped rather than sent. The service requires one
+   * and would refuse the whole board; skipping keeps the stops saved and leaves
+   * the incomplete run visibly unassigned, which is what the dispatcher is
+   * looking at anyway.
+   */
   const saveDraftMutation = useDeskMutation({
-    mutationFn: ({ planId, rows }: { planId: string; rows: PlanRow[] }) =>
-      saveDraft(planId, rows, version()),
+    mutationFn: async ({ planId, rows }: { planId: string; rows: PlanRow[] }) => {
+      await saveDraft(planId, rows, version());
+
+      const trips = toTripAssignments(rows);
+      if (trips.length > 0) await applyAssignment(planId, trips);
+      return { trips: trips.length };
+    },
     errorTitle: "Draf tidak tersimpan",
-    success: "Draf disimpan",
+    success: ({ trips }) =>
+      trips > 0
+        ? { title: "Draf disimpan", description: `${trips} rit ditetapkan.` }
+        : { title: "Draf disimpan" },
   });
 
   const confirmPlanMutation = useDeskMutation({
@@ -150,6 +182,7 @@ export function useDistributionPlan() {
     selectedPlanId,
     setSelectedPlanId,
     outletOptions: outletOptions.data ?? [],
+    vehicleOptions: vehicleOptions.data ?? [],
     productOptions: productOptions.data ?? [],
     driverOptions: driverOptions.data ?? [],
     saOptions: saOptions.data ?? [],
@@ -160,4 +193,36 @@ export function useDistributionPlan() {
     addOrdersMutation,
     printMutation,
   };
+}
+
+/**
+ * Turns the board's stops into the runs the service commits.
+ *
+ * Grouped by `(driver, trip)`, which is what a run is. The stop order is the
+ * delivery order the dispatcher arranged — `sequence_no` starts at 1 because the
+ * service validates `gte=1`, and positions need only be distinct within a run,
+ * not contiguous.
+ *
+ * A run missing a driver or a truck is dropped, not sent half-formed: the
+ * service refuses the whole board over one invalid run, and losing a colleague's
+ * saved stops because one row was incomplete is the worse failure.
+ */
+function toTripAssignments(rows: PlanRow[]) {
+  const byRun = new Map<string, { driverId: string; vehicleId: string; tripNo: number; stops: { outletId: string; sequenceNo: number }[] }>();
+
+  for (const row of rows) {
+    if (!row.driverId || !row.vehicleId) continue;
+    const tripNo = row.tripNo ?? 1;
+    const key = `${row.driverId}#${tripNo}`;
+    const run = byRun.get(key) ?? {
+      driverId: row.driverId,
+      vehicleId: row.vehicleId,
+      tripNo,
+      stops: [],
+    };
+    run.stops.push({ outletId: row.outletId, sequenceNo: run.stops.length + 1 });
+    byRun.set(key, run);
+  }
+
+  return [...byRun.values()].filter((run) => run.stops.length > 0);
 }

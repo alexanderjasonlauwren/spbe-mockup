@@ -26,8 +26,10 @@ export const getOutletOptions = api.getOutletOptions.bind(api);
 export const getProductOptions = api.getProductOptions.bind(api);
 export const getDefaultProductId = api.getDefaultProductId.bind(api);
 export const getDriverOptions = api.getDriverOptions.bind(api);
+export const getVehicleOptions = api.getVehicleOptions.bind(api);
 export const getActiveSaOptions = api.getActiveSaOptions.bind(api);
 export const suggestAssignment = api.suggestAssignment.bind(api);
+export const applyAssignment = api.applyAssignment.bind(api);
 
 /**
  * Scheduling approved orders onto a plan is mock-only, and says so.

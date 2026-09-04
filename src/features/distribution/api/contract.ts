@@ -15,7 +15,24 @@ import type {
   DriverOption,
   PlanOption,
   PlanRow,
+  VehicleOption,
 } from "../types";
+
+/**
+ * One crewed run being committed: who drives, what they drive, and the stops in
+ * order.
+ *
+ * The vehicle is not optional. `dispatch_trips.vehicle_id` and
+ * `deliveries.vehicle_id` are both NOT NULL — the service will not record a run
+ * without a truck, and the delivery it later produces names the truck that
+ * carried it.
+ */
+export interface TripAssignment {
+  driverId: string;
+  vehicleId: string;
+  tripNo: number;
+  stops: { outletId: string; sequenceNo: number }[];
+}
 
 /** What a stop can be loaded with. */
 export interface ProductOption {
@@ -59,6 +76,8 @@ export interface DistributionApi {
   /** The line a brand-new stop starts with, so a row is never empty. */
   getDefaultProductId(): Promise<string>;
   getDriverOptions(planId: string): Promise<DriverOption[]>;
+  /** The trucks a run can be put on. Capacity lives here, not on the driver. */
+  getVehicleOptions(): Promise<VehicleOption[]>;
   getActiveSaOptions(): Promise<PlanOption[]>;
 
   /**
@@ -74,4 +93,15 @@ export interface DistributionApi {
    * adapter promised.
    */
   suggestAssignment(planId: string): Promise<AssignmentSuggestion>;
+
+  /**
+   * Commits the board: which driver, which truck, which stops in which order.
+   *
+   * Separate from `saveDraft` because the two write different things. A draft is
+   * the plan's stops and the quota they draw; an assignment is the runs those
+   * stops ride on, and the service keeps them in different tables with different
+   * permissions. Saving the stops and forgetting the crew is what left the
+   * console able to plan a day and unable to dispatch it.
+   */
+  applyAssignment(planId: string, trips: TripAssignment[]): Promise<void>;
 }

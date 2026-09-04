@@ -345,7 +345,7 @@ describe("saving", () => {
             { productId: "p1", jumlah: 30 },
             { productId: "p2", jumlah: 5 },
           ],
-          jumlahUnit: 35, driverId: null, driver: "—", jamPengiriman: "—",
+          jumlahUnit: 35, driverId: null, driver: "—", vehicleId: null, vehicle: "—", jamPengiriman: "—",
           tripNo: null, statusBayar: "Belum Lunas", sisaKuotaOutlet: 0,
           piutang: 0, piutangJatuhTempo: 0,
         },
@@ -380,7 +380,7 @@ describe("saving", () => {
             { productId: "", jumlah: 5 },
             { productId: "p3", jumlah: 0 },
           ],
-          jumlahUnit: 30, driverId: null, driver: "—", jamPengiriman: "—",
+          jumlahUnit: 30, driverId: null, driver: "—", vehicleId: null, vehicle: "—", jamPengiriman: "—",
           tripNo: null, statusBayar: "Belum Lunas", sisaKuotaOutlet: 0,
           piutang: 0, piutangJatuhTempo: 0,
         },
@@ -417,6 +417,77 @@ describe("saving", () => {
     send.mockResolvedValue({});
     await distributionApiHttp.cancelDistributionPlan(PLAN_ID, 8);
     expect(send.mock.calls[1][2]).toEqual({ version: 8 });
+  });
+});
+
+describe("committing the board", () => {
+  /**
+   * The vehicle travels with the driver, because the service will not take one
+   * without the other: `dispatch_trips.vehicle_id` is NOT NULL. Sending a run
+   * with a driver alone is a 422 on the whole board.
+   */
+  it("sends the driver and the vehicle for each run", async () => {
+    send.mockResolvedValue({});
+
+    await distributionApiHttp.applyAssignment(PLAN_ID, [
+      {
+        driverId: "d1",
+        vehicleId: "v1",
+        tripNo: 1,
+        stops: [
+          { outletId: OUTLET_A, sequenceNo: 1 },
+          { outletId: OUTLET_B, sequenceNo: 2 },
+        ],
+      },
+    ]);
+
+    const [method, path, body] = send.mock.calls[0];
+    expect(method).toBe("put");
+    expect(path).toBe(`/distribution/orders/${PLAN_ID}/assignment`);
+    expect(body.trips[0]).toEqual({
+      driver_id: "d1",
+      vehicle_id: "v1",
+      trip_no: 1,
+      stops: [
+        { outlet_id: OUTLET_A, sequence_no: 1 },
+        { outlet_id: OUTLET_B, sequence_no: 2 },
+      ],
+    });
+  });
+
+  /**
+   * A stop's crew comes back from the dispatch board, vehicle included — that
+   * is the only place the pairing is real, since a driver owns no truck.
+   */
+  it("reads the vehicle back from the board", async () => {
+    getOne.mockResolvedValueOnce(order()).mockResolvedValueOnce({
+      trips: [
+        {
+          trip_no: 1, driver_id: "d1", driver_code: "DRV-001", driver_name: "Slamet",
+          vehicle_id: "v1", plate: "H 1234 AB",
+          stops: [{ sequence_no: 1, outlet_id: OUTLET_A, outlet_code: "PKL-001", outlet_name: "Ahmad", qty: 30, funded: true }],
+          load_qty: 30, capacity_qty: 240, at_risk_qty: 0, distance_m: 0,
+        },
+      ],
+      unroutable: [],
+      summary: { distance_m: 0, trips: 1, outlets: 1 },
+    });
+
+    const rows = await distributionApiHttp.getPlanDetail(PLAN_ID);
+
+    expect(rows[0].vehicleId).toBe("v1");
+    expect(rows[0].vehicle).toBe("H 1234 AB");
+  });
+
+  /** A truck in the workshop is not one the depot can send out today. */
+  it("offers only available trucks", async () => {
+    getList.mockResolvedValue({ items: [], pagination: {} });
+
+    await distributionApiHttp.getVehicleOptions();
+
+    expect(getList.mock.calls[0][1].filters).toContainEqual({
+      field: "operational_status", operator: "eq", value: "available",
+    });
   });
 });
 

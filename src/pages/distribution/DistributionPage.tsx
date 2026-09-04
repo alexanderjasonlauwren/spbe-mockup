@@ -35,6 +35,7 @@ export function DistributionPage() {
     selectedPlanId,
     setSelectedPlanId,
     outletOptions,
+    vehicleOptions,
     productOptions,
     driverOptions,
     saOptions,
@@ -93,6 +94,7 @@ export function DistributionPage() {
             outletOptions={outletOptions}
             productOptions={productOptions}
             driverOptions={driverOptions}
+            vehicleOptions={vehicleOptions}
             onSaveDraft={handleSaveDraft}
             onConfirm={() => setConfirming(true)}
             onCancelPlan={() => setCancelling(true)}

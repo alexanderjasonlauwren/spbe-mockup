@@ -276,6 +276,19 @@ export interface PlanRowEntity {
   planId: ID;
   outletId: ID;
   driverId: ID | null;
+  /**
+   * The truck this stop rides on. Null until the run is crewed.
+   *
+   * A driver and a vehicle are both properties of the run, not of the stop, so
+   * every row on one trip carries the same pair — the row is where they are
+   * stored because the console edits a plan as a list of stops.
+   *
+   * It exists because the service will not accept a run without one:
+   * `dispatch_trips.vehicle_id` and `deliveries.vehicle_id` are both NOT NULL.
+   * A board with drivers and no trucks cannot be applied, and the delivery it
+   * would produce cannot be written.
+   */
+  vehicleId?: ID | null;
   lines: PlanRowLine[];
   /** Derived: total units across `lines`. */
   jumlahUnit: number;

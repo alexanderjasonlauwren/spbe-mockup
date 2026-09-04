@@ -31,6 +31,7 @@ import type {
   PlanOption,
   PlanRow,
   UnroutableStop,
+  VehicleOption,
 } from "../types";
 import { suggestAssignment } from "../api/distributionApi";
 import { outletLabel, outletLabelTitle, unitLabel } from "@/lib/lexicon";
@@ -43,6 +44,7 @@ interface PlanDetailPanelProps {
   outletOptions: PlanOption[];
   productOptions: { id: string; label: string; satuan: string }[];
   driverOptions: DriverOption[];
+  vehicleOptions: VehicleOption[];
   onSaveDraft: (rows: PlanRow[]) => void;
   onConfirm: () => void;
   onCancelPlan: () => void;
@@ -65,8 +67,10 @@ const MAX_TRIP = 3;
 interface TripGroup {
   key: string;
   driverId: string;
+  vehicleId: string | null;
   tripNo: number;
   driver: DriverOption | undefined;
+  vehicle: VehicleOption | undefined;
   kapasitas: number;
   muatan: number;
   /** Cylinders on this trip that no payment has arrived for. */
@@ -84,7 +88,11 @@ function tripOf(row: PlanRow): number {
   return row.tripNo ?? 1;
 }
 
-function groupIntoTrips(rows: PlanRow[], drivers: DriverOption[]): TripGroup[] {
+function groupIntoTrips(
+  rows: PlanRow[],
+  drivers: DriverOption[],
+  vehicles: VehicleOption[],
+): TripGroup[] {
   const byKey = new Map<string, TripGroup>();
 
   for (const row of rows) {
@@ -94,12 +102,18 @@ function groupIntoTrips(rows: PlanRow[], drivers: DriverOption[]): TripGroup[] {
     let group = byKey.get(key);
     if (!group) {
       const driver = drivers.find((d) => d.id === row.driverId);
+      const vehicle = vehicles.find((v) => v.id === row.vehicleId);
       group = {
         key,
         driverId: row.driverId,
+        vehicleId: row.vehicleId,
         tripNo,
         driver,
-        kapasitas: driver?.kapasitas ?? 0,
+        vehicle,
+        // The truck's capacity, and only as a fallback the driver's — which is
+        // itself the largest truck the depot could give them. A driver has no
+        // capacity of their own; this is the ceiling of whatever they are in.
+        kapasitas: vehicle?.kapasitas ?? driver?.kapasitas ?? 0,
         muatan: 0,
         berisiko: 0,
         rows: [],
@@ -131,6 +145,7 @@ export function PlanDetailPanel({
   outletOptions,
   productOptions,
   driverOptions,
+  vehicleOptions,
   onSaveDraft,
   onConfirm,
   onCancelPlan,
@@ -177,7 +192,10 @@ export function PlanDetailPanel({
    * day. Summing both against one truck reported an overload that was not real
    * and blocked a board the fleet could actually run.
    */
-  const trips = useMemo(() => groupIntoTrips(draft, driverOptions), [draft, driverOptions]);
+  const trips = useMemo(
+    () => groupIntoTrips(draft, driverOptions, vehicleOptions),
+    [draft, driverOptions, vehicleOptions],
+  );
 
   const overloaded = trips.filter((t) => t.muatan > t.kapasitas);
   const unassigned = draft.filter((r) => !r.driverId);
@@ -271,6 +289,26 @@ export function PlanDetailPanel({
   const patchLines = (id: string, lines: PlanRow["lines"]) =>
     patchRow(id, { lines, jumlahUnit: lines.reduce((s, l) => s + l.jumlah, 0) });
 
+  /**
+   * Puts a truck on a run — every stop of it.
+   *
+   * The trip key is `driverId#tripNo`, which is exactly the set of rows the
+   * service will send as one `TripRequest`. Patching them together is what keeps
+   * the board expressible: a run carries one vehicle, and rows that disagreed
+   * would have no valid shape to be committed in.
+   */
+  const setTripVehicle = (tripKey: string, vehicleId: string) => {
+    const label = vehicleOptions.find((v) => v.id === vehicleId)?.label ?? "Belum ditetapkan";
+    setDraft((prev) =>
+      prev.map((row) => {
+        if (!row.driverId) return row;
+        if (`${row.driverId}#${tripOf(row)}` !== tripKey) return row;
+        return { ...row, vehicleId: vehicleId || null, vehicle: label };
+      }),
+    );
+    setDirty(true);
+  };
+
   const addRow = () => {
     const used = new Set(draft.map((r) => r.outletId));
     const next = outletOptions.find((p) => !used.has(p.id));
@@ -282,6 +320,8 @@ export function PlanDetailPanel({
       {
         id: `baru-${tempSeq}`,
         outletId: next.id,
+        vehicleId: null,
+        vehicle: "Belum ditetapkan",
         outlet: next.label,
         alamat: next.sublabel ?? "",
         lines: [{ productId: productOptions[0]?.id ?? "", jumlah: 100 }],
@@ -547,7 +587,13 @@ export function PlanDetailPanel({
             <tbody>
               {trips.map((trip) => (
                 <Fragment key={trip.key}>
-                  <TripHeader trip={trip} colSpan={editable ? 6 : 5} />
+                  <TripHeader
+                    trip={trip}
+                    colSpan={editable ? 6 : 5}
+                    editable={editable}
+                    vehicleOptions={vehicleOptions}
+                    onVehicleChange={setTripVehicle}
+                  />
                   {trip.rows.map((row) => (
                     <StopRow
                       key={row.id}
@@ -941,7 +987,19 @@ function StopRow({
  * property of the trip. Repeating it per row invited the reading that each stop
  * had its own capacity, and made an overload look like several problems.
  */
-function TripHeader({ trip, colSpan }: { trip: TripGroup; colSpan: number }) {
+function TripHeader({
+  trip,
+  colSpan,
+  editable,
+  vehicleOptions,
+  onVehicleChange,
+}: {
+  trip: TripGroup;
+  colSpan: number;
+  editable: boolean;
+  vehicleOptions: VehicleOption[];
+  onVehicleChange: (tripKey: string, vehicleId: string) => void;
+}) {
   const over = trip.muatan > trip.kapasitas;
 
   return (
@@ -954,6 +1012,38 @@ function TripHeader({ trip, colSpan }: { trip: TripGroup; colSpan: number }) {
           </span>
           {trip.driver?.sublabel && (
             <span className="data text-2xs text-ink-muted">{trip.driver.sublabel}</span>
+          )}
+
+          {/*
+            The truck, chosen once for the whole run.
+            It sits here rather than on each stop because a run has one vehicle:
+            offering it per row would let two stops on the same trip disagree
+            about what is carrying them, and the service would refuse the board
+            with no way to say which row was wrong. Choosing here patches every
+            stop on the trip.
+
+            It is required, not decorative. `dispatch_trips.vehicle_id` is NOT
+            NULL, so a run without a truck cannot be committed at all — which is
+            why an unchosen one is called out rather than left blank.
+          */}
+          {editable ? (
+            <SelectInput
+              aria-label={`Armada trip ${trip.tripNo}`}
+              className={cn("h-7 w-40 text-2xs", !trip.vehicleId && "border-rust")}
+              value={trip.vehicleId ?? ""}
+              onChange={(e) => onVehicleChange(trip.key, e.target.value)}
+            >
+              <option value="">Pilih armada</option>
+              {vehicleOptions.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label} · {formatNumber(v.kapasitas)}
+                </option>
+              ))}
+            </SelectInput>
+          ) : (
+            <span className="data text-2xs text-ink-muted">
+              {trip.vehicle?.label ?? "Armada tidak ditetapkan"}
+            </span>
           )}
 
           <span className="ml-auto flex items-center gap-2">

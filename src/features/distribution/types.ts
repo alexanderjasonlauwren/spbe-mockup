@@ -40,6 +40,16 @@ export interface PlanRow {
   jumlahUnit: number;
   driverId: string | null;
   driver: string;
+  /**
+   * The truck for this stop's run. Null until one is chosen.
+   *
+   * Capacity lives here rather than on the driver: a driver has no capacity of
+   * their own, and which truck they take is a fact about today. The service
+   * requires it — `dispatch_trips.vehicle_id` is NOT NULL — so a board without
+   * it cannot be applied.
+   */
+  vehicleId: string | null;
+  vehicle: string;
   jamPengiriman: string;
   statusBayar: "Lunas" | "Belum Lunas";
   /** Cylinders this outlet may still take this month. */
@@ -58,6 +68,12 @@ export interface PlanOption {
   label: string;
   sublabel?: string;
   disabled?: boolean;
+}
+
+/** A truck the dispatcher can put a run on. */
+export interface VehicleOption extends PlanOption {
+  /** Units one load holds. The ceiling a trip is judged against. */
+  kapasitas: number;
 }
 
 export interface DriverOption extends PlanOption {
@@ -94,6 +110,8 @@ export interface SuggestedTrip {
   tripNo: TripNo;
   driverId: string;
   driver: string;
+  /** The truck the proposal put this run on, where the source knows one. */
+  vehicleId?: string;
   /** Plate and vehicle, as the driver options carry them. */
   armada: string;
   kapasitas: number;

@@ -6,7 +6,7 @@
  * was: what changed is that it is now one of two adapters behind a contract,
  * rather than the only thing the console can talk to.
  */
-import { crewedArmada } from "@/mocks/fleet";
+import { crewedArmada, crewedVehicle } from "@/mocks/fleet";
 import { scopedDb } from "@/mocks/scope";
 import { latency } from "@/mocks/db";
 import {
@@ -27,8 +27,9 @@ import type {
   DriverOption,
   PlanOption,
   PlanRow,
+  VehicleOption,
 } from "../types";
-import type { DistributionApi } from "./contract";
+import type { DistributionApi, TripAssignment } from "./contract";
 import { suggestAssignment as suggestAssignmentLocal } from "./suggestAssignment";
 import { outletLabelTitle, unitLabel, unitLabelTitle } from "@/lib/lexicon";
 
@@ -104,6 +105,14 @@ async function getPlanDetail(planId: string): Promise<PlanRow[]> {
         jumlahUnit: r.jumlahUnit,
         driverId: r.driverId,
         driver: driver?.nama ?? "Belum ditetapkan",
+        // The truck the run is on. Falls back to `crewedVehicle` for a board
+        // saved before vehicles existed — the same stand-in the rest of the
+        // demo uses for a pairing the service keeps on the trip.
+        vehicleId: r.vehicleId ?? (r.driverId ? crewedVehicle(db, r.driverId)?.id ?? null : null),
+        vehicle:
+          db.vehicles.find(
+            (v) => v.id === (r.vehicleId ?? (r.driverId ? crewedVehicle(db, r.driverId)?.id : null)),
+          )?.plat ?? "Belum ditetapkan",
         jamPengiriman: r.jamPengiriman,
         tripNo: r.tripNo ?? null,
         statusBayar: exp.terblokir ? "Belum Lunas" : "Lunas",
@@ -123,6 +132,7 @@ async function saveDraft(planId: string, rows: PlanRow[]): Promise<void> {
       id: r.id,
       outletId: r.outletId,
       driverId: r.driverId,
+      vehicleId: r.vehicleId,
       // A row edited on a screen that still only knows totals keeps its mix and
       // pushes the change onto the first line, rather than dropping the rest.
       lines: r.lines.filter((l) => l.productId && l.jumlah > 0),
@@ -213,6 +223,59 @@ async function getDriverOptions(planId: string): Promise<DriverOption[]> {
     status: d.status,
     disabled: d.status === "Cuti",
   }));
+}
+
+async function getVehicleOptions(): Promise<VehicleOption[]> {
+  await latency("read");
+  return scopedDb()
+    .vehicles.filter((v) => v.status === "Aktif")
+    .sort((a, b) => a.plat.localeCompare(b.plat))
+    .map((v) => ({
+      id: v.id,
+      label: v.plat,
+      sublabel: v.armada,
+      kapasitas: v.kapasitas,
+    }));
+}
+
+/**
+ * Commits the board to the browser store.
+ *
+ * The mock has no trips table, so a run is expressed the way the store already
+ * holds it: the driver, the vehicle and the trip number written onto each stop
+ * of that run. The service keeps them on `dispatch_trips`; the shape the caller
+ * passes is the same either way, which is the point of the contract.
+ */
+async function applyAssignment(planId: string, trips: TripAssignment[]): Promise<void> {
+  await latency("write");
+  const placement = new Map<string, { driverId: string; vehicleId: string; tripNo: number }>();
+  for (const trip of trips) {
+    for (const stop of trip.stops) {
+      placement.set(stop.outletId, {
+        driverId: trip.driverId,
+        vehicleId: trip.vehicleId,
+        tripNo: trip.tripNo,
+      });
+    }
+  }
+
+  const db = scopedDb();
+  const rows = db.planRows
+    .filter((r) => r.planId === planId)
+    .map((r) => {
+      const at = placement.get(r.outletId);
+      return {
+        id: r.id,
+        outletId: r.outletId,
+        driverId: at?.driverId ?? null,
+        vehicleId: at?.vehicleId ?? null,
+        lines: r.lines,
+        jumlahUnit: r.jumlahUnit,
+        jamPengiriman: r.jamPengiriman,
+        tripNo: at?.tripNo ?? null,
+      };
+    });
+  savePlanRows(planId, rows);
 }
 
 async function getActiveSaOptions(): Promise<PlanOption[]> {
@@ -315,6 +378,8 @@ export const distributionApiMock: DistributionApi = {
   getProductOptions,
   getDefaultProductId,
   getDriverOptions,
+  getVehicleOptions,
   getActiveSaOptions,
   suggestAssignment: suggestAssignmentMock,
+  applyAssignment,
 };

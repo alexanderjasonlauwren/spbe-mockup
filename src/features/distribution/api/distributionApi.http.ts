@@ -38,11 +38,12 @@ import type {
   PlanOption,
   PlanRow,
   PlanStatus,
+  VehicleOption,
   SuggestedStop,
   SuggestedTrip,
   UnroutableStop,
 } from "../types";
-import type { DistributionApi, ProductOption } from "./contract";
+import type { DistributionApi, ProductOption, TripAssignment } from "./contract";
 
 /* ── wire shapes, mirroring the backend exactly ────────────────────────── */
 
@@ -137,6 +138,17 @@ interface ProductResponse {
   name: string;
   unit_abbreviation?: string;
   weight_kg: number;
+  status: string;
+}
+
+interface VehicleResponse {
+  id: string;
+  plate_number: string;
+  vehicle_type: string;
+  brand?: string;
+  model?: string;
+  capacity_qty: number;
+  operational_status: string;
   status: string;
 }
 
@@ -239,12 +251,17 @@ function toPlanView(order: OrderResponse): DistributionPlan {
  * without appearing twice on the route.
  */
 function toPlanRows(items: OrderItemResponse[], board?: BoardResponse): PlanRow[] {
-  const crewByOutlet = new Map<string, { driverId: string; driver: string; tripNo: number }>();
+  const crewByOutlet = new Map<
+    string,
+    { driverId: string; driver: string; vehicleId: string; vehicle: string; tripNo: number }
+  >();
   for (const trip of board?.trips ?? []) {
     for (const stop of trip.stops) {
       crewByOutlet.set(stop.outlet_id, {
         driverId: trip.driver_id,
         driver: trip.driver_name,
+        vehicleId: trip.vehicle_id,
+        vehicle: trip.plate,
         tripNo: trip.trip_no,
       });
     }
@@ -268,6 +285,8 @@ function toPlanRows(items: OrderItemResponse[], board?: BoardResponse): PlanRow[
       jumlahUnit: 0,
       driverId: crew?.driverId ?? null,
       driver: crew?.driver ?? "Belum ditetapkan",
+      vehicleId: crew?.vehicleId ?? null,
+      vehicle: crew?.vehicle ?? "Belum ditetapkan",
       // The service plans a delivery date, not a time of day. A clock here
       // would be a field only the demo fills.
       jamPengiriman: "—",
@@ -465,6 +484,45 @@ async function getDriverOptions(planId: string): Promise<DriverOption[]> {
   });
 }
 
+async function getVehicleOptions(): Promise<VehicleOption[]> {
+  const page = await getList<VehicleResponse>("/vehicles", {
+    pageSize: OPTION_PAGE_SIZE,
+    sort: [{ field: "plate_number" }],
+    filters: [
+      { field: "status", operator: "eq", value: "atv" },
+      // A truck in the workshop is not one the depot can send out today.
+      { field: "operational_status", operator: "eq", value: "available" },
+    ],
+  });
+  return page.items.map((v) => ({
+    id: v.id,
+    label: v.plate_number,
+    sublabel: [v.brand, v.model].filter(Boolean).join(" ") || v.vehicle_type,
+    kapasitas: v.capacity_qty,
+  }));
+}
+
+/**
+ * Commits the board.
+ *
+ * The service replaces the plan's runs wholesale rather than diffing them: a
+ * board is edited as a whole and applied as a whole, and a partial apply would
+ * leave stops on runs that no longer exist.
+ */
+async function applyAssignment(planId: string, trips: TripAssignment[]): Promise<void> {
+  await send("put", `/distribution/orders/${planId}/assignment`, {
+    trips: trips.map((trip) => ({
+      driver_id: trip.driverId,
+      vehicle_id: trip.vehicleId,
+      trip_no: trip.tripNo,
+      stops: trip.stops.map((stop) => ({
+        outlet_id: stop.outletId,
+        sequence_no: stop.sequenceNo,
+      })),
+    })),
+  });
+}
+
 async function getActiveSaOptions(): Promise<PlanOption[]> {
   const page = await getList<AgreementListResponse>("/schedule-agreements", {
     pageSize: OPTION_PAGE_SIZE,
@@ -499,6 +557,7 @@ async function suggestAssignment(planId: string): Promise<AssignmentSuggestion> 
     tripNo: trip.trip_no,
     driverId: trip.driver_id,
     driver: trip.driver_name,
+    vehicleId: trip.vehicle_id,
     armada: trip.plate,
     kapasitas: trip.capacity_qty,
     muatan: trip.load_qty,
@@ -545,6 +604,8 @@ export const distributionApiHttp: DistributionApi = {
   getProductOptions,
   getDefaultProductId,
   getDriverOptions,
+  getVehicleOptions,
   getActiveSaOptions,
   suggestAssignment,
+  applyAssignment,
 };

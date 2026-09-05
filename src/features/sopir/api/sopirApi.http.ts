@@ -42,6 +42,8 @@ interface DeliveryResponse {
   delivery_status: string;
   failure_reason?: string;
   notes?: string;
+  /** Who took the load, from the newest recipient proof. Run endpoint only. */
+  recipient_name?: string;
   version: number;
 }
 
@@ -148,7 +150,10 @@ function toStop(stop: StopResponse, urutan: number): RunStop {
   const sum = (pick: (r: DeliveryResponse) => number) =>
     rows.reduce((total, r) => total + pick(r), 0);
   const empties = sum((r) => r.empties_collected);
-  const recipient = rows.find((r) => r.notes)?.notes;
+  // The stop's documents are closed from one conversation at one gate, so the
+  // first name filed is the stop's. `notes` is the driver's free text and is
+  // not a fallback for it — a note is not a signature.
+  const recipient = rows.find((r) => r.recipient_name)?.recipient_name;
 
   return {
     id,
@@ -170,8 +175,15 @@ function toStop(stop: StopResponse, urutan: number): RunStop {
     target: sum((r) => r.dispatched_qty),
     realisasi: sum((r) => r.delivered_qty),
     unitKembali: empties || undefined,
+    diterimaOleh: recipient,
     status: toStage(rows),
-    catatan: rows.find((r) => r.failure_reason)?.failure_reason ?? recipient,
+    // The earliest arrival on the stop: the driver reached the gate once, and
+    // the documents are closed one after another from that same visit.
+    tibaPada: rows
+      .map((r) => r.arrived_at)
+      .filter((at): at is string => !!at)
+      .sort()[0],
+    catatan: rows.find((r) => r.failure_reason)?.failure_reason ?? rows.find((r) => r.notes)?.notes,
     selesaiPada: rows.find((r) => r.completed_at)?.completed_at,
     // Filings come from each document's own event log, which is a request per
     // stop. The card renders without them, so they are not fetched here.
@@ -265,16 +277,34 @@ async function departStop(deliveryId: string): Promise<StopReceipt> {
 }
 
 /**
+ * Reaching the gate.
+ *
+ * The service will stamp `arrived_at` itself at completion if this is never
+ * filed, which keeps a drop closeable — but then arrival and completion share
+ * an instant and the wait at the gate reads as zero for every stop, every day.
+ * That gap is the one thing a delay report is actually made of, so the driver
+ * files it: one tap on arriving, before anything is unloaded.
+ *
+ * Already-arrived documents are skipped rather than refiled. The service
+ * refuses a second arrival, and it is right to — the truck arrived once.
+ */
+async function arriveStop(deliveryId: string): Promise<StopReceipt> {
+  const rows = documentsFor(deliveryId);
+  const at = await position();
+  for (const row of rows.filter((r) => isOpen(r) && !r.arrived_at)) {
+    await send("post", `/deliveries/${row.id}/arrive`, { version: row.version, ...at });
+  }
+  return receipt(rows, 0);
+}
+
+/**
  * Closing a stop.
  *
- * No separate arrival call: the service stamps arrived_at itself when the
- * driver never filed one, in the same write and from the same instant. The
- * console has always had two buttons — pressing "I am here" and then "here is
- * what they took" is one action at one gate — and this keeps it that way.
- *
- * The cost is that the wait at the gate reads as nothing. An agency that wants
- * that gap measured needs a "Tiba" button, which is a change to what the
- * driver is asked to do rather than something to infer here.
+ * `recipient_name` is filed per document and the service writes it to
+ * core.delivery_proofs as evidence, alongside the position this call carries.
+ * It is a name, not a signature — see the proof_type vocabulary — and a drop
+ * where the driver could not get one is filed without it rather than with a
+ * placeholder.
  */
 async function completeStop(input: CompleteStopInput): Promise<StopReceipt> {
   const rows = documentsFor(input.deliveryId);
@@ -328,6 +358,7 @@ async function getDriverOptions(): Promise<DriverOption[]> {
 export const sopirApiHttp: SopirApi = {
   getMyRun,
   departStop,
+  arriveStop,
   completeStop,
   holdStop,
   getDriverOptions,

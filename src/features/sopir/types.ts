@@ -13,7 +13,7 @@ export type StopStage = "Antrian" | "Proses" | "Selesai" | "Tertunda";
 
 /** Where a filing came from, as the driver's own card shows it back to them. */
 export interface StopFiling {
-  tipe: "berangkat" | "selesai" | "tertunda";
+  tipe: "berangkat" | "tiba" | "selesai" | "tertunda";
   at: string;
   posisi: GeoStamp;
   jarakMeter?: number;
@@ -53,6 +53,14 @@ export interface RunStop {
   diterimaOleh?: string;
   status: StopStage;
   catatan?: string;
+  /**
+   * When the driver filed their arrival, if they did.
+   *
+   * Not a fifth `StopStage`: arriving does not change what the stop is, it
+   * records when the waiting started. The card uses it to decide which of the
+   * two buttons to offer, and the office uses the gap to it from departure.
+   */
+  tibaPada?: string;
   selesaiPada?: string;
   /** Newest first. Empty until the sopir files something from a device. */
   filings: StopFiling[];

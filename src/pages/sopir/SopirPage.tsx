@@ -17,6 +17,7 @@ import {
 import { scopeKey } from "@/mocks/scope";
 import { useAuthStore } from "@/features/auth/store/authStore";
 import {
+  arriveStop,
   completeStop,
   departStop,
   getDriverOptions,
@@ -100,6 +101,15 @@ export function SopirPage() {
     success: (d) => ({
       title: `${d.kode} berangkat`,
       description: "Kantor sekarang melihat armada Anda dalam perjalanan.",
+    }),
+  });
+
+  const arriveMutation = useDeskMutation({
+    mutationFn: (deliveryId: string) => arriveStop(deliveryId),
+    errorTitle: "Gagal mencatat kedatangan",
+    success: (d) => ({
+      title: `${d.kode} tiba di lokasi`,
+      description: "Waktu tunggu di lokasi mulai dihitung dari sekarang.",
     }),
   });
 
@@ -269,10 +279,12 @@ export function SopirPage() {
                   rekamLokasi={data?.rekamLokasi ?? false}
                   isPending={
                     departMutation.isPending ||
+                    arriveMutation.isPending ||
                     completeMutation.isPending ||
                     holdMutation.isPending
                   }
                   onDepart={() => departMutation.mutate(stop.id)}
+                  onArrive={() => arriveMutation.mutate(stop.id)}
                   onComplete={() => openComplete(stop)}
                   onHold={() => {
                     setAlasan("");
@@ -433,6 +445,7 @@ function StopCard({
   rekamLokasi,
   isPending,
   onDepart,
+  onArrive,
   onComplete,
   onHold,
 }: {
@@ -441,6 +454,7 @@ function StopCard({
   rekamLokasi: boolean;
   isPending: boolean;
   onDepart: () => void;
+  onArrive: () => void;
   onComplete: () => void;
   onHold: () => void;
 }) {
@@ -533,6 +547,9 @@ function StopCard({
                 {stop.diterimaOleh && (
                   <Row label="Diterima oleh" value={stop.diterimaOleh} />
                 )}
+                {stop.tibaPada && (
+                  <Row label="Tiba" value={formatTime(stop.tibaPada)} />
+                )}
                 {stop.selesaiPada && (
                   <Row label="Jam" value={formatTime(stop.selesaiPada)} />
                 )}
@@ -577,6 +594,11 @@ function StopCard({
             </a>
           </Button>
 
+          {/* Three filings, one at a time, in the order the day happens:
+              leaving, reaching the gate, and what the outlet took. Arrival is
+              its own tap rather than folded into the completion — the wait
+              between the two is the only thing a delay report is made of, and
+              a single button makes it zero on every stop. */}
           {stop.status === "Antrian" ? (
             <Button
               size="lg"
@@ -587,11 +609,25 @@ function StopCard({
               <Play className="h-4 w-4" />
               Berangkat ke {outletLabel()} ini
             </Button>
+          ) : !stop.tibaPada ? (
+            <Button size="lg" className="w-full" disabled={isPending} onClick={onArrive}>
+              <MapPin className="h-4 w-4" />
+              Tiba di lokasi
+            </Button>
           ) : (
             <Button size="lg" className="w-full" disabled={isPending} onClick={onComplete}>
               <PackageCheck className="h-4 w-4" />
               Selesai — catat penerimaan
             </Button>
+          )}
+
+          {/* Once arrived, closing is the expected next tap but not the only
+              one — a driver who arrived and then could not deliver still needs
+              the kendala button below. */}
+          {!!stop.tibaPada && stop.status !== "Antrian" && (
+            <p className="w-full text-2xs text-ink-muted">
+              Tiba {formatTime(stop.tibaPada)}
+            </p>
           )}
 
           <Button
@@ -690,6 +726,7 @@ function ProductBlock({
 
 const FILING_LABEL: Record<StopFiling["tipe"], string> = {
   berangkat: "Berangkat",
+  tiba: "Tiba",
   selesai: "Selesai",
   tertunda: "Kendala",
 };

@@ -9,7 +9,7 @@ import type { SopirApi } from "./contract";
 import { crewedArmada } from "@/mocks/fleet";
 import { scopedDb } from "@/mocks/scope";
 import { latency } from "@/mocks/db";
-import { updateDeliveryStatus } from "@/mocks/rules";
+import { recordDeliveryArrival, updateDeliveryStatus } from "@/mocks/rules";
 import { todayIso } from "@/mocks/selectors";
 import { capturePosition, geoVerdict } from "@/lib/geo";
 import { productOf } from "@/mocks/lines";
@@ -98,6 +98,7 @@ async function getMyRun(
         diterimaOleh: d.diterimaOleh,
         status: d.status,
         catatan: d.catatan,
+        tibaPada: d.tibaPada,
         selesaiPada: d.selesaiPada,
       };
     });
@@ -141,6 +142,19 @@ async function departStop(deliveryId: string) {
   const posisi = await stamp();
   await latency("write");
   return updateDeliveryStatus(deliveryId, "Proses", undefined, { posisi });
+}
+
+/**
+ * Reaching the gate, before anything is unloaded.
+ *
+ * Leaves the stop in Proses: the driver has arrived, not finished. What it
+ * records is when the waiting started, which is the half of the day a
+ * completion-only filing cannot see.
+ */
+async function arriveStop(deliveryId: string) {
+  const posisi = await stamp();
+  await latency("write");
+  return recordDeliveryArrival(deliveryId, posisi);
 }
 
 /**
@@ -200,6 +214,7 @@ async function getDriverOptions(): Promise<DriverOption[]> {
 export const sopirApiMock: SopirApi = {
   getMyRun,
   departStop,
+  arriveStop,
   completeStop,
   holdStop,
   getDriverOptions,

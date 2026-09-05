@@ -701,6 +701,40 @@ export function updateDeliveryStatus(
   });
 }
 
+/**
+ * The truck reached the gate.
+ *
+ * Its own function rather than a fifth status, because arriving does not change
+ * what the drop is — it is still in progress. What it changes is when the
+ * waiting started, and the gap from `mulaiPada` to here is the travel time
+ * while the gap from here to `selesaiPada` is the wait at the gate. Folded into
+ * the completion those two are indistinguishable, and the second one reads as
+ * zero.
+ *
+ * Filing twice is a no-op rather than an error: the truck arrived once, and a
+ * driver double-tapping in a cab should not see a failure.
+ */
+export function recordDeliveryArrival(deliveryId: ID, posisi: GeoStamp) {
+  return mutate((db) => {
+    const d = db.deliveries.find((x) => x.id === deliveryId);
+    if (!d) throw new ApiError("Surat jalan tidak ditemukan.", 404);
+    if (d.status === "Selesai" || d.status === "Tertunda") {
+      throw new ApiError(`${d.kode} sudah ditutup.`);
+    }
+    if (d.tibaPada) return d;
+
+    d.tibaPada = posisi.at;
+    recordAudit(db, {
+      action: "delivery.status",
+      entity: "Delivery",
+      entityId: d.id,
+      summary: `${d.kode} tiba di lokasi.`,
+    });
+    appendDeliveryEvent(db, d, "tiba", posisi);
+    return d;
+  });
+}
+
 const EVENT_TYPE: Partial<Record<DeliveryEntity["status"], DeliveryEventType>> = {
   Proses: "berangkat",
   Selesai: "selesai",
@@ -722,7 +756,18 @@ function recordDeliveryEvent(
 ) {
   const tipe = EVENT_TYPE[status];
   if (!tipe) return;
+  return appendDeliveryEvent(db, d, tipe, posisi, catatan, status === "Selesai");
+}
 
+/** The append itself, shared with filings that are not a status change. */
+function appendDeliveryEvent(
+  db: Database,
+  d: DeliveryEntity,
+  tipe: DeliveryEventType,
+  posisi: GeoStamp,
+  catatan?: string,
+  arrivedForGood = false,
+) {
   const pkl = db.outlets.find((p) => p.id === d.outletId);
   const jarakMeter =
     posisi.status === "ok" && posisi.lat != null && posisi.lng != null && pkl
@@ -749,7 +794,7 @@ function recordDeliveryEvent(
 
   // A real fix is better than the simulated position the ops clock invents, so
   // it takes over as the truck's last known whereabouts while the run is live.
-  if (posisi.status === "ok" && status !== "Selesai") {
+  if (posisi.status === "ok" && !arrivedForGood) {
     d.driverLat = posisi.lat;
     d.driverLng = posisi.lng;
   }

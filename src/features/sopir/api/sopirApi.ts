@@ -15,6 +15,7 @@ const api: SopirApi = pick(sopirApiMock, sopirApiHttp);
 
 export const getMyRun = api.getMyRun.bind(api);
 export const departStop = api.departStop.bind(api);
+export const arriveStop = api.arriveStop.bind(api);
 export const completeStop = api.completeStop.bind(api);
 export const holdStop = api.holdStop.bind(api);
 export const getDriverOptions = api.getDriverOptions.bind(api);

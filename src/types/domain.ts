@@ -369,6 +369,15 @@ export interface DeliveryEntity extends Scoped {
   realisasi: number;
   status: DeliveryStatus;
   mulaiPada?: string;
+  /**
+   * When the truck reached the gate, filed separately from closing the drop.
+   *
+   * The two are separate facts: a driver can wait at a pangkalan for an hour
+   * while somebody finds the person who signs, and that gap is the whole of
+   * what a delay report is made of. Without this the wait reads as zero,
+   * because the arrival gets stamped at the same instant as the completion.
+   */
+  tibaPada?: string;
   selesaiPada?: string;
   driverLat?: number;
   driverLng?: number;
@@ -386,7 +395,7 @@ export interface DeliveryEntity extends Scoped {
 
 /* ── delivery events ───────────────────────────────────────────────────── */
 
-export type DeliveryEventType = "berangkat" | "selesai" | "tertunda";
+export type DeliveryEventType = "berangkat" | "tiba" | "selesai" | "tertunda";
 
 /**
  * One thing the sopir filed, and where they were when they filed it.

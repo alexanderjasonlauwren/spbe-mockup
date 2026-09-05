@@ -41,6 +41,15 @@ export interface SopirApi {
   getMyRun(driverId: string, tanggal?: string): Promise<DriverRun>;
 
   departStop(deliveryId: string): Promise<StopReceipt>;
+  /**
+   * At the gate, before anything is unloaded.
+   *
+   * Separate from `completeStop` because they are separate facts. A driver can
+   * wait at a pangkalan while somebody finds the person who signs, and that
+   * wait is what a delay report is made of — folded into the completion it
+   * reads as zero, every time, for every agency.
+   */
+  arriveStop(deliveryId: string): Promise<StopReceipt>;
   completeStop(input: CompleteStopInput): Promise<StopReceipt>;
   /** Could not deliver. Leaves the stop open and raises no invoice. */
   holdStop(input: { deliveryId: string; catatan: string }): Promise<StopReceipt>;

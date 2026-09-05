@@ -158,6 +158,170 @@ describe("reading the run", () => {
   });
 });
 
+describe("arriving at a stop", () => {
+  it("files one arrival per document, with the position and the version", async () => {
+    const r = await load(
+      run({
+        stops: [
+          {
+            ...run().stops[0],
+            deliveries: [
+              delivery({ departed_at: "2026-09-04T01:00:00Z", delivery_status: "on_route" }),
+              delivery({
+                id: D12,
+                delivery_number: "SJ-SLT-20260904-0003",
+                product_id: P12,
+                dispatched_qty: 20,
+                version: 4,
+                departed_at: "2026-09-04T01:00:00Z",
+                delivery_status: "on_route",
+              }),
+            ],
+          },
+        ],
+      }),
+    );
+
+    await sopirApiHttp.arriveStop(r.stops[0].id);
+
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenNthCalledWith(1, "post", `/deliveries/${D3}/arrive`, {
+      version: 1,
+      latitude: -6.9932,
+      longitude: 110.3453,
+    });
+    expect(send).toHaveBeenNthCalledWith(2, "post", `/deliveries/${D12}/arrive`, {
+      version: 4,
+      latitude: -6.9932,
+      longitude: 110.3453,
+    });
+  });
+
+  // The service refuses a second arrival, and it is right to: the truck
+  // arrived once. Refiling one would 409 and take the rest of the stop with
+  // it, leaving a half-arrived stop the driver could never finish arriving at.
+  it("skips a document that has already been marked as arrived", async () => {
+    const r = await load(
+      run({
+        stops: [
+          {
+            ...run().stops[0],
+            deliveries: [
+              delivery({ arrived_at: "2026-09-04T02:00:00Z", delivery_status: "on_route" }),
+              delivery({
+                id: D12,
+                delivery_number: "SJ-SLT-20260904-0003",
+                product_id: P12,
+                dispatched_qty: 20,
+                version: 4,
+                delivery_status: "on_route",
+              }),
+            ],
+          },
+        ],
+      }),
+    );
+
+    await sopirApiHttp.arriveStop(r.stops[0].id);
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith("post", `/deliveries/${D12}/arrive`, {
+      version: 4,
+      latitude: -6.9932,
+      longitude: 110.3453,
+    });
+  });
+
+  // The card decides which of the two buttons to offer from this, so a stop
+  // that has been arrived at must say so — otherwise the driver is asked to
+  // arrive again at a gate they are standing at.
+  it("reports the earliest arrival on the stop, so the card offers the right button", async () => {
+    const r = await load(
+      run({
+        stops: [
+          {
+            ...run().stops[0],
+            deliveries: [
+              delivery({ arrived_at: "2026-09-04T02:05:00Z" }),
+              delivery({ id: D12, product_id: P12, arrived_at: "2026-09-04T02:00:00Z" }),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(r.stops[0].tibaPada).toBe("2026-09-04T02:00:00Z");
+  });
+
+  // Departing is not arriving. A truck that has left the yard for this stop is
+  // on the road, and inferring the arrival from the departure would hide the
+  // travel time as well as the wait -- the two things splitting the button was
+  // for.
+  it("does not treat a departure as an arrival", async () => {
+    const r = await load(
+      run({
+        stops: [
+          {
+            ...run().stops[0],
+            deliveries: [
+              delivery({ departed_at: "2026-09-04T01:00:00Z", delivery_status: "on_route" }),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(r.stops[0].status).toBe("Proses");
+    expect(r.stops[0].tibaPada).toBeUndefined();
+  });
+});
+
+describe("showing a closed stop back to the driver", () => {
+  // Someone whose filing is recorded should be able to see what was recorded
+  // -- the same principle the position filings are shown under. Before the run
+  // carried it back, the name went into core.delivery_proofs and vanished from
+  // the driver's own card.
+  it("shows who took the load, from the proof rather than from the note", async () => {
+    const r = await load(
+      run({
+        stops: [
+          {
+            ...run().stops[0],
+            deliveries: [
+              delivery({
+                completed_at: "2026-09-04T03:00:00Z",
+                delivery_status: "delivered",
+                recipient_name: "Pak Andi Wijaya",
+                notes: "pangkalan minta dua rit",
+              }),
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(r.stops[0].diterimaOleh).toBe("Pak Andi Wijaya");
+    // A note is not a signature: it stays in `catatan` and does not become the
+    // recipient just because no name came back.
+    expect(r.stops[0].catatan).toBe("pangkalan minta dua rit");
+  });
+
+  it("leaves the recipient blank on a drop nobody named one for", async () => {
+    const r = await load(
+      run({
+        stops: [
+          {
+            ...run().stops[0],
+            deliveries: [delivery({ notes: "pangkalan minta dua rit" })],
+          },
+        ],
+      }),
+    );
+
+    expect(r.stops[0].diterimaOleh).toBeUndefined();
+  });
+});
+
 describe("filing against a stop", () => {
   it("closes every document on the stop, each at its own version", async () => {
     const r = await load();

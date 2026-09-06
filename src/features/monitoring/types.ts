@@ -51,6 +51,13 @@ export interface MonitoringRow {
   driverId: string;
   driver: string;
   jamRencana: string;
+  /**
+   * Position in the driver's round, 1-based. The plan carries a stop's
+   * *position*, not a clock time — `jamRencana` is empty against the real
+   * service, so ordering the round by it would be a no-op that only worked
+   * by accident of a stable sort. This is what actually orders it.
+   */
+  urutan: number;
   target: number;
   realisasi: number;
   pencapaianPersen: number;
@@ -59,6 +66,12 @@ export interface MonitoringRow {
   /** From the most recent filing, when the driver's device supplied one. */
   lokasi?: FilingLocation;
   catatan?: string;
+  /**
+   * The optimistic-locking counter the http adapter reads off the board and
+   * echoes back on a write. The mock does not version its rows, so this is
+   * `0` there — nothing reads it in that build.
+   */
+  version: number;
 }
 
 /**

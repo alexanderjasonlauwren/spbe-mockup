@@ -8,8 +8,7 @@ import { DistribusiMap } from "@/features/monitoring/components/DistribusiMap";
 import { MonitoringTable } from "@/features/monitoring/components/MonitoringTable";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelHeader } from "@/components/common/Panel";
-import { ConfirmDialog } from "@/components/common/ConfirmDialog";
-import { Field, SegmentedControl, TextInput } from "@/components/common/Field";
+import { Field, SegmentedControl, TextInput, TextareaInput } from "@/components/common/Field";
 import {
   Dialog,
   DialogContent,
@@ -55,6 +54,7 @@ export function MonitoringPage() {
   const [completing, setCompleting] = useState<MonitoringRow | null>(null);
   const [realisasi, setRealisasi] = useState(0);
   const [holding, setHolding] = useState<MonitoringRow | null>(null);
+  const [alasan, setAlasan] = useState("");
 
   const capaian =
     totals && totals.target > 0 ? (totals.realisasi / totals.target) * 100 : 0;
@@ -209,7 +209,12 @@ export function MonitoringPage() {
         <MonitoringTable
           data={monitoringTable}
           isLoading={isLoading}
-          pendingId={statusMutation.variables?.deliveryId}
+          // Only while the mutation is actually in flight -- react-query
+          // keeps `variables` set to whatever was last sent even after it
+          // settles, so without `isPending` a row whose status change keeps
+          // it in the same action branch (Antrian -> Proses both still show
+          // "Selesai") ends up permanently disabled after its first filing.
+          pendingId={statusMutation.isPending ? statusMutation.variables?.deliveryId : undefined}
           onStart={(row) =>
             statusMutation.mutate({ deliveryId: row.id, status: "Proses" })
           }
@@ -217,7 +222,10 @@ export function MonitoringPage() {
             setRealisasi(row.realisasi || row.target);
             setCompleting(row);
           }}
-          onHold={setHolding}
+          onHold={(row) => {
+            setAlasan("");
+            setHolding(row);
+          }}
           onPrint={(row) => printMutation.mutate(row.id)}
         />
       </Panel>
@@ -280,22 +288,53 @@ export function MonitoringPage() {
         </DialogContent>
       </Dialog>
 
-      <ConfirmDialog
-        isOpen={!!holding}
-        title={`Tandai ${holding?.kode} tertunda?`}
-        message={`Pengiriman ke ${holding?.outlet} dicatat gagal diselesaikan hari ini.`}
-        details="Surat jalan tetap terbuka dan tidak menerbitkan tagihan. Jadwalkan ulang lewat rencana distribusi berikutnya."
-        confirmLabel="Tandai tertunda"
-        isPending={statusMutation.isPending}
-        onCancel={() => setHolding(null)}
-        onConfirm={() =>
-          holding &&
-          statusMutation.mutate(
-            { deliveryId: holding.id, status: "Tertunda" },
-            { onSettled: () => setHolding(null) },
-          )
-        }
-      />
+      {/*
+        A reason is required, not optional: POST /deliveries/:id/fail refuses
+        a failure nobody explained (ck_deliveries_failure_reason), and a
+        canned string here would satisfy that constraint while defeating the
+        reason it exists — an auditor reading this later gets nothing to
+        argue from. Mirrors the driver's own kendala dialog on /sopir.
+      */}
+      <Dialog open={!!holding} onOpenChange={(open) => !open && setHolding(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Tandai {holding?.kode} tertunda?</DialogTitle>
+            <DialogDescription>
+              Pengiriman ke {holding?.outlet} dicatat gagal diselesaikan hari ini. Surat
+              jalan tetap terbuka dan tidak menerbitkan tagihan.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Field label="Apa yang terjadi" htmlFor="m-alasan" required>
+            <TextareaInput
+              id="m-alasan"
+              rows={3}
+              value={alasan}
+              onChange={(e) => setAlasan(e.target.value)}
+              placeholder={`Contoh: ${holding?.outlet ?? "outlet"} tutup saat armada tiba.`}
+            />
+          </Field>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHolding(null)}>
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!alasan.trim() || statusMutation.isPending}
+              onClick={() =>
+                holding &&
+                statusMutation.mutate(
+                  { deliveryId: holding.id, status: "Tertunda", catatan: alasan },
+                  { onSettled: () => setHolding(null) },
+                )
+              }
+            >
+              Tandai tertunda
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

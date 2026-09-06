@@ -50,9 +50,14 @@ export function buildRoundSequence(
 ): RoundSequence {
   if (!driverId) return EMPTY;
 
+  // Sorted by urutan, the stop's actual position in the round -- not
+  // jamRencana, which the real service leaves empty (the plan carries a
+  // position, not a clock time). Sorting by an empty string is a no-op that
+  // only ever "worked" because Array.sort is stable and the rows happened to
+  // arrive in sequence order already.
   const mine = rows
     .filter((r) => r.driverId === driverId)
-    .sort((a, b) => a.jamRencana.localeCompare(b.jamRencana));
+    .sort((a, b) => a.urutan - b.urutan);
 
   if (mine.length === 0) return EMPTY;
 

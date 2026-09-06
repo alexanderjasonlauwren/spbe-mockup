@@ -30,11 +30,15 @@ export function useMonitoring() {
   const statusMutation = useDeskMutation({
     mutationFn: setDeliveryStatus,
     errorTitle: "Gagal memperbarui surat jalan",
+    // No invoice claim here: the service has no billing module behind this
+    // board yet, and a toast promising one would be a promise the system
+    // does not keep. Dropped from both builds rather than made conditional
+    // on the data source, so the demo does not train anyone to expect it.
     success: (delivery) => ({
       title: `${delivery.kode} → ${delivery.status}`,
       description:
         delivery.status === "Selesai"
-          ? `Realisasi ${delivery.realisasi.toLocaleString("id-ID")} ${unitLabel()}. Tagihan otomatis diterbitkan untuk verifikasi keuangan.`
+          ? `Realisasi ${delivery.realisasi.toLocaleString("id-ID")} ${unitLabel()} tercatat.`
           : undefined,
     }),
   });

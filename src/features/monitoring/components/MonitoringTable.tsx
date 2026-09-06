@@ -37,10 +37,18 @@ export function MonitoringTable({
       render: (row) => (
         <>
           <span className="data block text-xs text-ink">{row.kode}</span>
-          <span className="data block text-2xs text-ink-muted">{row.jamRencana}</span>
+          {/* jamRencana is empty against the real service — the plan has no
+              per-stop clock time, only a position — so the round's own order
+              is shown instead of a blank line. */}
+          <span className="data block text-2xs text-ink-muted">
+            {row.jamRencana || `Urutan ${row.urutan}`}
+          </span>
         </>
       ),
-      sortValue: (row) => row.jamRencana,
+      // Sorted by urutan, not jamRencana: against the API build jamRencana is
+      // always "", and sorting by it would be a no-op that only worked by
+      // accident of a stable sort landing on server order.
+      sortValue: (row) => row.urutan,
     },
     {
       key: outletLabel(),

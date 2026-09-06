@@ -28,6 +28,23 @@ export interface CompleteStopInput {
   catatan?: string;
 }
 
+/**
+ * One reported position, as the run tracker captures it.
+ *
+ * This is not `@/lib/geo.ts`'s corroboration read — that fixes one instant at
+ * the moment of a filing. This is the driver's own choice to share their
+ * route while a run is open, one batch at a time.
+ */
+export interface GpsFixInput {
+  /** Device timestamp at capture, ISO. */
+  at: string;
+  lat: number;
+  lng: number;
+  speedKmh?: number;
+  heading?: number;
+  accuracy?: number;
+}
+
 export interface SopirApi {
   /**
    * One driver's run for a day.
@@ -59,4 +76,11 @@ export interface SopirApi {
    * covering the radio, or an admin checking what the driver sees.
    */
   getDriverOptions(): Promise<DriverOption[]>;
+
+  /**
+   * Reports a batch of positions for the caller's own currently-dispatched
+   * run. There is no trip id in the input — the service resolves it from the
+   * session, the same way `getMyRun` does.
+   */
+  postGpsFixes(fixes: GpsFixInput[]): Promise<void>;
 }

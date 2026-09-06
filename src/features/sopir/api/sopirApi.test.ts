@@ -81,6 +81,7 @@ function run(overrides: Record<string, unknown> = {}) {
         ],
       },
     ],
+    record_driver_location: true,
     ...overrides,
   };
 }
@@ -107,6 +108,17 @@ async function load(payload: Record<string, unknown> = run()) {
 }
 
 describe("reading the run", () => {
+  // The driver's own account cannot read tenant settings, so the switch has
+  // to arrive on the run itself -- hardcoding true here is exactly the bug
+  // that shipped before this was wired up.
+  it("reads the recording switch from the run rather than assuming it is on", async () => {
+    const on = await load(run({ record_driver_location: true }));
+    expect(on.rekamLokasi).toBe(true);
+
+    const off = await load(run({ record_driver_location: false }));
+    expect(off.rekamLokasi).toBe(false);
+  });
+
   it("keeps a two-product drop as one stop the driver parks at once", async () => {
     const r = await load();
 

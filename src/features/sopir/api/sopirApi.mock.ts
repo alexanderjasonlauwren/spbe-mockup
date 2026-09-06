@@ -211,6 +211,16 @@ async function getDriverOptions(): Promise<DriverOption[]> {
     }));
 }
 
+/**
+ * The demo build never starts the run tracker at all -- `useGpsStream` gates
+ * on `usesApi`, so this is never actually called in the mock build. It exists
+ * only so the contract has one implementation on both sides; there is no
+ * gps_tracks table in the mock store to write it into.
+ */
+async function postGpsFixes(): Promise<void> {
+  await latency("write");
+}
+
 export const sopirApiMock: SopirApi = {
   getMyRun,
   departStop,
@@ -218,4 +228,5 @@ export const sopirApiMock: SopirApi = {
   completeStop,
   holdStop,
   getDriverOptions,
+  postGpsFixes,
 };

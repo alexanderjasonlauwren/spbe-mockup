@@ -23,7 +23,7 @@
 import { getOne, send } from "@/lib/api";
 import { capturePosition } from "@/lib/geo";
 import { unitLabel } from "@/lib/lexicon";
-import type { CompleteStopInput, SopirApi, StopReceipt } from "./contract";
+import type { CompleteStopInput, GpsFixInput, SopirApi, StopReceipt } from "./contract";
 import type { DriverOption, DriverRun, RunStop, StopLine } from "../types";
 
 /** Mirrors the backend's DeliveryResponse. */
@@ -70,6 +70,9 @@ interface RunResponse {
   vehicle_id?: string;
   plate?: string;
   stops: StopResponse[];
+  // The agency's own switch, resolved server-side because this account has
+  // no permission to read tenant settings directly.
+  record_driver_location: boolean;
 }
 
 interface VehicleResponse {
@@ -216,8 +219,9 @@ async function getMyRun(_driverId: string, tanggal?: string): Promise<DriverRun>
   const open = stops.filter((s) => s.status !== "Selesai" && s.status !== "Tertunda");
 
   return {
-    // The service records a position on every filing it is given one for.
-    rekamLokasi: true,
+    // From the run, not assumed -- the driver's own account cannot read
+    // tenant settings, so the server resolves this and hands it back.
+    rekamLokasi: run.record_driver_location,
     driver: run.driver_id
       ? {
           id: run.driver_id,
@@ -355,6 +359,26 @@ async function getDriverOptions(): Promise<DriverOption[]> {
   return [];
 }
 
+/**
+ * Reports a batch of positions for the run tracker.
+ *
+ * No trip id here either, for the same reason as every other write in this
+ * file: the service resolves the driver's own currently-dispatched run from
+ * the session, and an id in flight would be an id a caller could change.
+ */
+async function postGpsFixes(fixes: GpsFixInput[]): Promise<void> {
+  await send("post", "/gps/tracks", {
+    fixes: fixes.map((f) => ({
+      tracked_at: f.at,
+      latitude: f.lat,
+      longitude: f.lng,
+      speed_kmh: f.speedKmh,
+      heading_deg: f.heading,
+      accuracy_m: f.accuracy,
+    })),
+  });
+}
+
 export const sopirApiHttp: SopirApi = {
   getMyRun,
   departStop,
@@ -362,4 +386,5 @@ export const sopirApiHttp: SopirApi = {
   completeStop,
   holdStop,
   getDriverOptions,
+  postGpsFixes,
 };

@@ -32,7 +32,8 @@ import { Panel, PanelBody, Meter, Skeleton } from "@/components/common/Panel";
 import { EmptyState } from "@/components/common/EmptyState";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { getStatusVariant, spineFor } from "@/lib/status";
-import { Field, SelectInput, TextInput, TextareaInput } from "@/components/common/Field";
+import { Field, SelectInput, TextInput, TextareaInput, Toggle } from "@/components/common/Field";
+import { useGpsStream } from "@/features/sopir/hooks/useGpsStream";
 import {
   Dialog,
   DialogContent,
@@ -88,6 +89,19 @@ export function SopirPage() {
     // The desk moves drops too, and a stale card invites a double delivery.
     refetchInterval: 30_000,
   });
+
+  // The run tracker: off by default, the driver's own choice, offered only
+  // when there is somewhere left to drive to today. `run.data.rekamLokasi` is
+  // the agency's own switch, resolved server-side because this account has no
+  // permission to read tenant settings directly.
+  const trackingOffered =
+    usesApi &&
+    !!run.data?.rekamLokasi &&
+    (run.data?.stops.some((s) => s.status !== "Selesai" && s.status !== "Tertunda") ?? false);
+  const tripKey = run.data?.driver
+    ? `${run.data.driver.id}:${run.data.tanggal}`
+    : null;
+  const gpsStream = useGpsStream({ enabled: trackingOffered, tripKey });
 
   const options = useQuery({
     queryKey: [...scopeKey(), "sopir-driver-options"],
@@ -225,6 +239,31 @@ export function SopirPage() {
                     label={data.driver.status}
                   />
                 </div>
+
+                {/* Off by default. This is not the fix @/lib/geo.ts captures
+                    at the moment of a filing -- that always happens,
+                    whatever this is set to. This is a continuous trail, and
+                    it exists only because the driver pressed the button. */}
+                {trackingOffered && (
+                  <div className="border-t border-line pt-1">
+                    <Toggle
+                      checked={gpsStream.wanted}
+                      onChange={() => gpsStream.toggle()}
+                      label="Rekam perjalanan"
+                      description={
+                        gpsStream.active
+                          ? "Posisi Anda dibagikan ke kantor selama rute ini."
+                          : "Kantor tidak melihat posisi Anda kecuali Anda menyalakan ini."
+                      }
+                    />
+                    {gpsStream.active && (
+                      <p className="flex items-center gap-1.5 text-2xs text-ink-muted">
+                        <span className="now-pulse h-1.5 w-1.5 rounded-full bg-signal" aria-hidden />
+                        Merekam
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <div className="mb-1.5 flex items-baseline justify-between gap-3 text-xs">

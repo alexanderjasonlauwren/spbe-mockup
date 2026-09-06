@@ -5,10 +5,20 @@
  * four kilometres from the outlet is either a mis-tap or a delivery that did
  * not happen, and that is the only question these coordinates are asked.
  *
- * So position is captured at the moment of submission and nowhere else. A
- * continuous watch would answer the same question no better while following
- * someone through their lunch break and their route home, which is a different
- * product and a different conversation with the people driving the trucks.
+ * So position is captured at the moment of submission and nowhere else, on
+ * every filing, unconditionally. Nothing in this file starts a continuous
+ * watch, and nothing here needs the driver's permission beyond the one
+ * browser prompt a single reading asks for.
+ *
+ * # The different conversation
+ *
+ * A continuous watch answers a different question — not "was this filing
+ * genuine" but "where has this truck been all day" — and that conversation with
+ * the people driving the trucks has now happened: `features/sopir/lib/gpsStream.ts`
+ * and `useGpsStream` are it. Recording there is off by default, per run, and
+ * starts only when the driver presses a button that says so — never inferred
+ * from an open stop or any other piece of app state. If you are reaching for
+ * `watchPosition`, that is almost certainly where it belongs, not here.
  */
 
 export type GeoFixStatus =

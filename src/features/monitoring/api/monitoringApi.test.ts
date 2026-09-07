@@ -209,6 +209,41 @@ describe("reading the board", () => {
     const snap = await load(board({ stops: [stop({ filed_at: undefined })] }));
     expect(snap.rows[0].lokasi).toBeUndefined();
   });
+
+  it("calls a wide fix rough rather than accusing the driver of being far away", async () => {
+    const snap = await load(
+      board({
+        geofence_radius_m: 100,
+        stops: [
+          stop({
+            filed_at: "2026-09-06T03:05:00Z",
+            filed_distance_m: 900,
+            // A cell-tower triangulation: it cannot confirm or deny a 100m
+            // geofence, and calling it "jauh" accuses a driver of something
+            // this fix simply cannot establish.
+            filed_accuracy_m: 2000,
+          }),
+        ],
+      }),
+    );
+    expect(snap.rows[0].lokasi?.verdict).toBe("kasar");
+  });
+
+  it("still judges a filing whose device stated a tight accuracy", async () => {
+    const snap = await load(
+      board({
+        geofence_radius_m: 100,
+        stops: [
+          stop({
+            filed_at: "2026-09-06T03:05:00Z",
+            filed_distance_m: 900,
+            filed_accuracy_m: 8,
+          }),
+        ],
+      }),
+    );
+    expect(snap.rows[0].lokasi?.verdict).toBe("jauh");
+  });
 });
 
 describe("the driver card", () => {

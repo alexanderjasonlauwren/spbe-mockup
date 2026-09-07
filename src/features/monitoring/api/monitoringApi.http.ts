@@ -27,11 +27,13 @@
  * it is a measurement rather than a placeholder wherever a truck is actually
  * standing at a gate.
  *
- * The `"kasar"` geofence verdict is unreachable here: `core.delivery_events`
- * carries no accuracy figure, so a filing's `GeoStamp` never has `akurasi`. A
- * driver who filed on a rough fix reads as `"jauh"` rather than `"kasar"` —
- * see `src/lib/geo.ts`, which already says the accuracy-less case cannot be
- * distinguished.
+ * The `"kasar"` verdict is reachable: the board carries `filed_accuracy_m`,
+ * the device's own stated error on the filing, and it is mapped onto the
+ * `GeoStamp`'s `akurasi` below. Without it a driver who filed on a ±2 km
+ * cell-tower fix read as `"jauh"` — an accusation `src/lib/geo.ts` says
+ * plainly the data cannot support. A device that states no accuracy still
+ * yields no `akurasi`, and that case still cannot be distinguished; the
+ * difference is that it is now the exception rather than every filing.
  *
  * # The desk files no position
  *
@@ -96,6 +98,7 @@ interface BoardStopWire {
   notes?: string;
   filed_at?: string;
   filed_distance_m?: number;
+  filed_accuracy_m?: number;
   deliveries: BoardDeliveryWire[];
 }
 
@@ -232,7 +235,7 @@ function toRow(stop: BoardStopWire, driverName: string, radiusM: number): Monito
     lokasi: stop.filed_at
       ? {
           verdict: geoVerdict(
-            { status: "ok", at: stop.filed_at },
+            { status: "ok", at: stop.filed_at, akurasi: stop.filed_accuracy_m },
             stop.filed_distance_m,
             radiusM,
           ),

@@ -10,6 +10,20 @@ import type { ToastOptions } from "@/components/ui/toast-context";
  * invalidate everything: verifying a payment changes the finance page, the
  * dashboard's pending count, and the notification bell at once. It also gives
  * every action the same confirmation and failure voice.
+ *
+ * # Why invalidating everything is still the default
+ *
+ * It is correct and it is nearly free against the mock, where a refetch is a
+ * read of an in-memory store. Narrowing it globally would be a silent
+ * regression across twenty screens that rely on the broad sweep -- a payment
+ * verified on one page would stop updating the bell on another, and nobody
+ * would notice until someone complained about a stale number.
+ *
+ * `invalidate` is the opt-out, for the one screen where the sweep is
+ * genuinely expensive: the monitoring board polls every thirty seconds and
+ * draws a Leaflet map whose rounds are road-snapped through a router, so one
+ * "Berangkat" press re-runs every one of those requests. Pass the keys that
+ * actually changed there, and leave the default everywhere else.
  */
 export function useDeskMutation<TArgs, TResult>({
   mutationFn,
@@ -17,6 +31,7 @@ export function useDeskMutation<TArgs, TResult>({
   errorTitle = "Tindakan gagal",
   onDone,
   onFail,
+  invalidate,
 }: {
   mutationFn: (args: TArgs) => Promise<TResult>;
   /** Confirmation copy. Use the past tense of the button that triggered it. */
@@ -24,6 +39,11 @@ export function useDeskMutation<TArgs, TResult>({
   errorTitle?: string;
   onDone?: (result: TResult, args: TArgs) => void;
   onFail?: (error: Error, args: TArgs) => void;
+  /**
+   * The query keys this write actually affects. Omitted, everything is
+   * invalidated -- see the note above before narrowing anything.
+   */
+  invalidate?: readonly unknown[][];
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -31,7 +51,13 @@ export function useDeskMutation<TArgs, TResult>({
   return useMutation<TResult, Error, TArgs>({
     mutationFn,
     onSuccess: (result, args) => {
-      queryClient.invalidateQueries();
+      if (invalidate) {
+        for (const queryKey of invalidate) {
+          void queryClient.invalidateQueries({ queryKey });
+        }
+      } else {
+        void queryClient.invalidateQueries();
+      }
       if (typeof success === "string") {
         toast({ title: success, tone: "success" });
       } else if (success) {

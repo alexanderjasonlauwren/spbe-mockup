@@ -29,6 +29,12 @@ export function useMonitoring() {
 
   const statusMutation = useDeskMutation({
     mutationFn: setDeliveryStatus,
+    // Just this board, not every query in the console. The default sweep is
+    // right almost everywhere and nearly free against the mock, but this
+    // screen polls every thirty seconds and draws a map whose rounds are
+    // road-snapped through a router: one "Berangkat" press re-ran every one
+    // of those requests, and against a real router that is N calls per click.
+    invalidate: [[...scopeKey(), "monitoring-snapshot"]],
     errorTitle: "Gagal memperbarui surat jalan",
     // No invoice claim here: the service has no billing module behind this
     // board yet, and a toast promising one would be a promise the system

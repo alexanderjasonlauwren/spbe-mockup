@@ -37,6 +37,8 @@ import type {
   DeliveryEventType,
   DriverEntity,
   VehicleEntity,
+  GeofenceRuleEntity,
+  GeofenceAlertEntity,
   ID,
   DeliveryLine,
   OutletEntity,
@@ -1536,5 +1538,134 @@ export function clearOverride(field: keyof Database["settings"]) {
     });
     // Re-resolved on the next getDb(), so the caller sees the parent's value.
     return db.settingsByTenant;
+  });
+}
+
+/* ── geofencing ────────────────────────────────────────────────────────── */
+
+/**
+ * Save a fence.
+ *
+ * The shape rules mirror the service's own, so the demo refuses what the API
+ * would refuse rather than accepting it and failing on the real build:
+ * ck_geofence_rules_shape wants exactly one of centre+radius or boundary, and
+ * ck_geofence_rules_territory wants an outlet on a territory rule.
+ *
+ * rule_type is fixed at create. Swapping a circle for a polygon is a different
+ * fence wearing the old one's code, and the service has no field to say so.
+ */
+export function saveGeofenceRule(
+  input: Partial<GeofenceRuleEntity> & { id?: ID },
+): GeofenceRuleEntity {
+  return mutate((db) => {
+    const kode = input.kode?.trim();
+    if (!input.id && !kode) throw new ApiError("Kode aturan wajib diisi.");
+    if (!input.nama?.trim()) throw new ApiError("Nama aturan wajib diisi.");
+    if (kode && db.geofenceRules.some((r) => r.kode === kode && r.id !== input.id)) {
+      throw new ApiError(`Kode ${kode} sudah dipakai aturan lain.`, 409);
+    }
+    if (input.subjek === "Wilayah outlet" && !input.outletId) {
+      throw new ApiError("Aturan wilayah outlet harus menyebut outlet-nya.");
+    }
+    if (input.bentuk?.jenis === "Lingkaran" && input.bentuk.radiusMeter <= 0) {
+      throw new ApiError("Radius harus lebih dari nol.");
+    }
+    if (input.bentuk?.jenis === "Poligon" && input.bentuk.batas.length < 3) {
+      throw new ApiError("Poligon memerlukan minimal 3 titik.");
+    }
+
+    if (input.id) {
+      const existing = db.geofenceRules.find((r) => r.id === input.id);
+      if (!existing) throw new ApiError("Aturan tidak ditemukan.", 404);
+      if (input.bentuk && input.bentuk.jenis !== existing.bentuk.jenis) {
+        throw new ApiError(
+          "Jenis pagar tidak bisa diubah. Buat aturan baru untuk bentuk yang lain.",
+        );
+      }
+      Object.assign(existing, input, { version: existing.version + 1 });
+      recordAudit(db, {
+        action: "geofence.update",
+        entity: "GeofenceRule",
+        entityId: existing.id,
+        summary: `Memperbarui pagar ${existing.nama}.`,
+      });
+      return existing;
+    }
+
+    if (!input.bentuk) throw new ApiError("Bentuk pagar wajib dipilih.");
+    const created: GeofenceRuleEntity = {
+      ...stampScope({}),
+      id: nextId("gfr"),
+      kode: kode!,
+      nama: input.nama.trim(),
+      keterangan: input.keterangan,
+      bentuk: input.bentuk,
+      subjek: input.subjek ?? "Rute",
+      outletId: input.outletId,
+      mode: input.mode ?? "Keluar",
+      keparahan: input.keparahan ?? "Peringatan",
+      aktif: input.aktif ?? true,
+      version: 1,
+    };
+    db.geofenceRules.unshift(created);
+    recordAudit(db, {
+      action: "geofence.create",
+      entity: "GeofenceRule",
+      entityId: created.id,
+      summary: `Menambahkan pagar ${created.nama}.`,
+    });
+    return created;
+  });
+}
+
+export function deleteGeofenceRule(id: ID) {
+  return mutate((db) => {
+    const index = db.geofenceRules.findIndex((r) => r.id === id);
+    if (index < 0) throw new ApiError("Aturan tidak ditemukan.", 404);
+    const [removed] = db.geofenceRules.splice(index, 1);
+    recordAudit(db, {
+      action: "geofence.delete",
+      entity: "GeofenceRule",
+      entityId: removed.id,
+      summary: `Menghapus pagar ${removed.nama}.`,
+    });
+  });
+}
+
+/**
+ * Move an alert along its lifecycle.
+ *
+ * The same transitions the service allows, and the same refusals: there is no
+ * way back to Terbuka, and Selesai and Bukan pelanggaran are terminal. A demo
+ * that let an operator reopen a closed alert would teach a habit the real
+ * build answers with a 409.
+ */
+export function setGeofenceAlertStatus(
+  id: ID,
+  status: GeofenceAlertEntity["status"],
+  catatan?: string,
+): GeofenceAlertEntity {
+  return mutate((db) => {
+    const alert = db.geofenceAlerts.find((a) => a.id === id);
+    if (!alert) throw new ApiError("Peringatan tidak ditemukan.", 404);
+    if (alert.status === "Selesai" || alert.status === "Bukan pelanggaran") {
+      throw new ApiError(
+        `Peringatan ini sudah ${alert.status.toLowerCase()} dan tidak bisa diubah lagi.`,
+        409,
+      );
+    }
+    if (status === "Terbuka") {
+      throw new ApiError("Peringatan tidak bisa dibuka kembali.", 409);
+    }
+    alert.status = status;
+    alert.version += 1;
+    if (catatan) alert.catatan = catatan;
+    recordAudit(db, {
+      action: "geofence.alert.update",
+      entity: "GeofenceAlert",
+      entityId: alert.id,
+      summary: `Peringatan pagar ditandai ${status.toLowerCase()}.`,
+    });
+    return alert;
   });
 }

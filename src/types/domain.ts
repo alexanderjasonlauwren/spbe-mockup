@@ -192,6 +192,52 @@ export interface VehicleEntity extends Scoped {
   terdaftarPada: string;
 }
 
+/**
+ * A geofence, as the console holds it.
+ *
+ * The shape is a discriminated pair rather than four loose numbers because the
+ * service refuses a circle carrying a boundary and a polygon carrying a
+ * centre: rule_type decides which half of the row may be populated, and
+ * ck_geofence_rules_shape enforces it underneath.
+ */
+export type GeofenceShapeEntity =
+  | { jenis: "Lingkaran"; pusat: { lat: number; lng: number }; radiusMeter: number }
+  | { jenis: "Poligon"; batas: { lat: number; lng: number }[] };
+
+export interface GeofenceRuleEntity extends Scoped {
+  id: ID;
+  kode: string;
+  nama: string;
+  keterangan?: string;
+  bentuk: GeofenceShapeEntity;
+  subjek: "Rute" | "Wilayah outlet" | "Depot" | "Area terlarang";
+  outletId?: ID;
+  mode: "Keluar" | "Masuk";
+  keparahan: "Info" | "Peringatan" | "Kritis";
+  aktif: boolean;
+  version: number;
+}
+
+/**
+ * A breach recorded against a fence.
+ *
+ * There is no route back to "Terbuka" once it has moved: reopening is the
+ * evaluator's job, by filing a fresh alert, not an operator's by rewriting an
+ * old one.
+ */
+export interface GeofenceAlertEntity extends Scoped {
+  id: ID;
+  ruleId: ID;
+  pelanggaran: "Keluar" | "Masuk";
+  posisi: { lat: number; lng: number };
+  jarakMeter?: number;
+  terdeteksi: string;
+  status: "Terbuka" | "Ditinjau" | "Selesai" | "Bukan pelanggaran";
+  driverId?: ID;
+  catatan?: string;
+  version: number;
+}
+
 export type SAStatusEntity = "Draft" | "Aktif" | "Limit" | "Selesai";
 
 export interface SAEntity extends Scoped {
@@ -950,6 +996,8 @@ export interface Database {
   outlets: OutletEntity[];
   drivers: DriverEntity[];
   vehicles: VehicleEntity[];
+  geofenceRules: GeofenceRuleEntity[];
+  geofenceAlerts: GeofenceAlertEntity[];
   scheduleAgreements: SAEntity[];
   /** Daily obligations under an agreement. Follow their SA, like plan rows. */
   saDailyTargets: SADailyTargetEntity[];

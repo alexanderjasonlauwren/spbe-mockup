@@ -22,6 +22,9 @@ import { cn } from "@/lib/utils";
 import { formatNumber, formatPercentId, formatTime } from "@/lib/format";
 import type { MonitoringRow } from "@/features/monitoring/types";
 import { outletLabel, unitLabel } from "@/lib/lexicon";
+import { GeofenceAlertPanel } from "@/features/geofence/components/AlertPanel";
+import { CanAccess } from "@/features/rbac/components/CanAccess";
+import { PERMISSIONS } from "@/features/rbac/permissions";
 
 const STATUS_TABS = ["Semua", "Antrian", "Proses", "Selesai", "Tertunda"] as const;
 
@@ -186,6 +189,13 @@ export function MonitoringPage() {
           </div>
         </div>
       </Panel>
+
+      {/* Breaches sit between the map and the documents: they are about where
+          the truck went, which is what the map above shows, and they are read
+          before anyone works through the rows below. */}
+      <CanAccess permission={PERMISSIONS.GEOFENCE_ALERTS_VIEW}>
+        <GeofenceAlertPanel />
+      </CanAccess>
 
       <Panel>
         <PanelHeader

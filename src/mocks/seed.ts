@@ -18,6 +18,7 @@ import type {
   DeliveryEntity,
   DriverEntity,
   VehicleEntity,
+  GeofenceRuleEntity,
   NotificationEntity,
   OutletEntity,
   PaymentEntity,
@@ -40,7 +41,7 @@ import type {
   UserEntity,
 } from "./types";
 
-export const DB_VERSION = 12;
+export const DB_VERSION = 13;
 
 /* ── deterministic RNG ─────────────────────────────────────────────────── */
 
@@ -1339,6 +1340,64 @@ function seedNotifications(
   return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+/**
+ * Two fences the demo can show, and no alerts.
+ *
+ * A circle round the Salatiga pool and a polygon over the district it serves:
+ * one of each shape, because they are edited differently and a demo with only
+ * circles hides half the screen.
+ *
+ * geofenceAlerts starts empty, and that is the honest state rather than a
+ * missing fixture. Alerts are raised by the backend's evaluator from a
+ * driver's own GPS trail; nothing in the browser produces one, and seeding
+ * invented breaches would put a name against a driver who did not commit one.
+ * The panel says "belum ada pelanggaran tercatat" for exactly this reason.
+ */
+function seedGeofenceRules(): GeofenceRuleEntity[] {
+  const b = BRANCHES[0];
+  const scope = { tenantId: b.tenantId, branchId: b.id };
+  return [
+    {
+      ...scope,
+      id: "gfr-001",
+      kode: "pool-salatiga-500m",
+      nama: "Pool Salatiga",
+      keterangan: "Armada dianggap berangkat setelah keluar dari radius ini.",
+      bentuk: {
+        jenis: "Lingkaran",
+        pusat: { lat: b.lat, lng: b.lng },
+        radiusMeter: 500,
+      },
+      subjek: "Depot",
+      mode: "Keluar",
+      keparahan: "Peringatan",
+      aktif: true,
+      version: 1,
+    },
+    {
+      ...scope,
+      id: "gfr-002",
+      kode: "wilayah-argomulyo",
+      nama: "Wilayah Argomulyo",
+      keterangan: "Area layanan yang disepakati untuk rute selatan.",
+      bentuk: {
+        jenis: "Poligon",
+        batas: [
+          { lat: -7.3520, lng: 110.4880 },
+          { lat: -7.3480, lng: 110.5320 },
+          { lat: -7.3820, lng: 110.5280 },
+          { lat: -7.3860, lng: 110.4920 },
+        ],
+      },
+      subjek: "Area terlarang",
+      mode: "Masuk",
+      keparahan: "Kritis",
+      aktif: true,
+      version: 1,
+    },
+  ];
+}
+
 /* ── entry point ───────────────────────────────────────────────────────── */
 
 export function createSeedDatabase(): Database {
@@ -1377,6 +1436,10 @@ export function createSeedDatabase(): Database {
     outlets,
     drivers,
     vehicles,
+    geofenceRules: seedGeofenceRules(),
+    // Raised by the backend evaluator from a real GPS trail. Nothing in the
+    // browser produces one, and inventing breaches would accuse a driver.
+    geofenceAlerts: [],
     scheduleAgreements,
     saDailyTargets,
     // Uploads are made in the browser, so the seeded day starts with none.

@@ -10,6 +10,7 @@ import {
   IdCard,
   LayoutDashboard,
   Map,
+  MapPin,
   Receipt,
   ReceiptText,
   Route,
@@ -164,6 +165,13 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Truck,
         hint: "Kendaraan, kapasitas angkut, dan masa berlaku STNK/KIR",
         permission: PERMISSIONS.VEHICLES_VIEW,
+      },
+      {
+        name: "Pagar Geografis",
+        href: "/geofence",
+        icon: MapPin,
+        hint: "Batas depot dan wilayah yang diperiksa terhadap posisi armada",
+        permission: PERMISSIONS.GEOFENCE_VIEW,
       },
       {
         name: "Produk",

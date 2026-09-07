@@ -20,6 +20,7 @@ import { TransactionListPage } from "./pages/transactions/TransactionListPage";
 import { OutletListPage } from "./pages/outlet/OutletListPage";
 import { OutletFormPage } from "./pages/outlet/OutletFormPage";
 import { OutletDetailPage } from "./pages/outlet/OutletDetailPage";
+import { GeofenceRulePage } from "./pages/geofence/GeofenceRulePage";
 import { DriverPage } from "./pages/drivers/DriverPage";
 import { DriverDetailPage } from "./pages/drivers/DriverDetailPage";
 import { VehiclePage } from "./pages/vehicles/VehiclePage";
@@ -149,6 +150,11 @@ const router = createBrowserRouter([
       { path: `${outletLabel()}/:id/edit`, element: (
         <RequirePermission permission={PERMISSIONS.OUTLETS_EDIT}>
           <OutletFormPage />
+        </RequirePermission>
+      ) },
+      { path: "geofence", element: (
+        <RequirePermission permission={PERMISSIONS.GEOFENCE_VIEW}>
+          <GeofenceRulePage />
         </RequirePermission>
       ) },
       { path: "drivers", element: (

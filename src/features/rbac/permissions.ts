@@ -84,6 +84,34 @@ export const PERMISSIONS = {
   ORDERS_EDIT: "distribution.update.orders",
   ORDERS_DELETE: "distribution.delete.orders",
 
+  // Outlets are their own masterdata resource on the backend, and until now
+  // the console had no constant for them: all four outlet routes were gated on
+  // masterdata.*.products. A dispatcher granted outlets and not products --
+  // which is exactly what a dispatcher is -- was refused a page they were
+  // entitled to, and the monitoring board's own deep links to an outlet were
+  // dead ends for the board's primary user.
+  OUTLETS_VIEW: "masterdata.read.outlets",
+  OUTLETS_EDIT: "masterdata.update.outlets",
+
+  // Live telemetry. Read is operations watching the map; there is no console
+  // constant for create, because writing a position belongs to the driver's
+  // own device and the console never asks for it.
+  //
+  // The monitoring board requires this AND deliveries read, because the board
+  // carries where a named person is right now. A role holding only deliveries
+  // read -- warehouse_staff, finance_officer, auditor_viewer -- must not be
+  // shown the page, or they meet a 403 the nav promised would work.
+  GPS_TRACKS_VIEW: "distribution.read.gps_tracks",
+
+  // Geofencing. Rules are the fences themselves; alerts are the breaches
+  // recorded against them, and acknowledging one is an update to the alert.
+  GEOFENCE_VIEW: "distribution.read.geofence_rules",
+  GEOFENCE_EDIT: "distribution.update.geofence_rules",
+  GEOFENCE_CREATE: "distribution.create.geofence_rules",
+  GEOFENCE_DELETE: "distribution.delete.geofence_rules",
+  GEOFENCE_ALERTS_VIEW: "distribution.read.geofence_alerts",
+  GEOFENCE_ALERTS_ACK: "distribution.update.geofence_alerts",
+
   // Settings edits the tenant, which is what the settings page writes.
   SETTINGS_VIEW: "iam.read.tenants",
   SETTINGS_EDIT: "iam.update.tenants",

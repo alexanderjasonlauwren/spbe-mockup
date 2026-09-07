@@ -31,6 +31,20 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.USERS_VIEW,
     PERMISSIONS.PRODUCTS_VIEW,
     PERMISSIONS.PRODUCTS_EDIT,
+    // Outlets are their own resource now. Roles that reached the outlet pages
+    // through masterdata.*.products keep them by holding the real code.
+    PERMISSIONS.OUTLETS_VIEW,
+    PERMISSIONS.OUTLETS_EDIT,
+    // The board needs both, as the backend does. Mirrors ops_manager, which
+    // holds deliveries read, gps_tracks read and the whole geofence set.
+    PERMISSIONS.DELIVERIES_VIEW,
+    PERMISSIONS.GPS_TRACKS_VIEW,
+    PERMISSIONS.GEOFENCE_VIEW,
+    PERMISSIONS.GEOFENCE_CREATE,
+    PERMISSIONS.GEOFENCE_EDIT,
+    PERMISSIONS.GEOFENCE_DELETE,
+    PERMISSIONS.GEOFENCE_ALERTS_VIEW,
+    PERMISSIONS.GEOFENCE_ALERTS_ACK,
     PERMISSIONS.SA_VIEW,
     PERMISSIONS.SA_CREATE,
     PERMISSIONS.SA_EDIT,
@@ -60,6 +74,7 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.REPORTS_VIEW,
     PERMISSIONS.REPORTS_EXPORT,
     PERMISSIONS.PRODUCTS_VIEW,
+    PERMISSIONS.OUTLETS_VIEW,
     PERMISSIONS.SETTINGS_VIEW,
   ],
   staff: [
@@ -71,6 +86,11 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.DRIVERS_ASSIGN,
     PERMISSIONS.DELIVERIES_VIEW,
     PERMISSIONS.DELIVERIES_EXECUTE,
+    // A dispatcher watches the board and the fences it reports against, and
+    // follows its rows through to the outlet they are for.
+    PERMISSIONS.GPS_TRACKS_VIEW,
+    PERMISSIONS.GEOFENCE_ALERTS_VIEW,
+    PERMISSIONS.OUTLETS_VIEW,
     PERMISSIONS.ORDERS_VIEW,
     PERMISSIONS.ORDERS_CREATE,
     PERMISSIONS.ORDERS_EDIT,
@@ -84,8 +104,13 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.ORDERS_VIEW,
     PERMISSIONS.PAYMENTS_VIEW,
     PERMISSIONS.PRODUCTS_VIEW,
+    PERMISSIONS.OUTLETS_VIEW,
     PERMISSIONS.DRIVERS_VIEW,
     PERMISSIONS.REPORTS_VIEW,
+    // Deliberately no GPS_TRACKS_VIEW, and therefore no Monitoring in the
+    // nav. This is the demo's copy of the real gap: warehouse_staff,
+    // finance_officer and auditor_viewer all hold deliveries read without
+    // telemetry read, and the board requires both.
   ],
   /**
    * A sopir sees one thing: their own run, and what they must record on it.

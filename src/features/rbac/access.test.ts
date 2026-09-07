@@ -84,3 +84,68 @@ describe("the driver console", () => {
     expect(landingPathFor(undefined)).toBe("/dashboard");
   });
 });
+
+describe("the nav a role is shown", () => {
+  const hrefs = (permissions: readonly string[]) =>
+    navGroupsFor(permissions).flatMap((g) => g.items.map((i) => i.href));
+
+  // The bug this whole gate exists for. GET /monitoring/board requires
+  // deliveries read AND gps_tracks read; warehouse_staff, finance_officer and
+  // auditor_viewer hold the first without the second. Before the nav knew
+  // that, all three were shown "Monitoring Distribusi", clicked it, and met a
+  // 403 the menu had promised would work.
+  it("hides Monitoring from a role holding deliveries read but not telemetry", () => {
+    expect(hrefs([PERMISSIONS.DELIVERIES_VIEW])).not.toContain("/monitoring");
+  });
+
+  it("shows Monitoring only when both permissions are held", () => {
+    expect(
+      hrefs([PERMISSIONS.DELIVERIES_VIEW, PERMISSIONS.GPS_TRACKS_VIEW]),
+    ).toContain("/monitoring");
+  });
+
+  // Outlets are their own resource. A role granted outlets and not products --
+  // which is exactly what a dispatcher is -- must reach the outlet pages the
+  // monitoring board deep-links to.
+  it("shows outlets to a role holding outlets read, without products", () => {
+    expect(hrefs([PERMISSIONS.OUTLETS_VIEW])).toContain("/outlet");
+    expect(hrefs([PERMISSIONS.OUTLETS_VIEW])).not.toContain("/products");
+  });
+
+  it("hides outlets from a role holding only products read", () => {
+    expect(hrefs([PERMISSIONS.PRODUCTS_VIEW])).not.toContain("/outlet");
+  });
+
+  // A viewer was shown "Buku Besar" -- the agency's whole finance position --
+  // and found out by clicking.
+  it("hides a page a role cannot open rather than letting them find out", () => {
+    const viewer = [PERMISSIONS.SA_VIEW, PERMISSIONS.ORDERS_VIEW];
+    const shown = hrefs(viewer);
+    expect(shown).toContain("/sa");
+    expect(shown).toContain("/orders");
+    expect(shown).not.toContain("/ledger");
+    expect(shown).not.toContain("/users");
+  });
+
+  // Otherwise "Keuangan" renders as a heading with nothing under it.
+  it("drops a group whose every item was filtered away", () => {
+    const labels = navGroupsFor([PERMISSIONS.SA_VIEW]).map((g) => g.label);
+    expect(labels).not.toContain("Keuangan");
+  });
+
+  // The two ungated routes stay reachable: an item with no permission means
+  // "always show", not "show to nobody".
+  it("keeps an item that names no permission", () => {
+    expect(hrefs([]).length).toBeGreaterThan(0);
+    expect(hrefs([])).toContain("/dashboard");
+  });
+
+  // A sopir gets a different menu, not a filtered one, and that must survive
+  // the filtering being added around it.
+  it("still gives a sopir their own console rather than a filtered tree", () => {
+    const driver = [PERMISSIONS.DELIVERIES_EXECUTE];
+    expect(usesDriverConsole(driver)).toBe(true);
+    expect(hrefs(driver)).toContain("/sopir");
+    expect(hrefs(driver)).not.toContain("/dashboard");
+  });
+});

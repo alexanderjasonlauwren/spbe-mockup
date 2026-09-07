@@ -80,8 +80,13 @@ const router = createBrowserRouter([
           <DistributionPage />
         </RequirePermission>
       ) },
+      // Both, because GET /monitoring/board requires both and Require is an
+      // AND. Gated on DELIVERIES_VIEW alone this page opened for three roles
+      // whose only request on it answers 403.
       { path: "monitoring", element: (
-        <RequirePermission permission={PERMISSIONS.DELIVERIES_VIEW}>
+        <RequirePermission
+          permissions={[PERMISSIONS.DELIVERIES_VIEW, PERMISSIONS.GPS_TRACKS_VIEW]}
+        >
           <MonitoringPage />
         </RequirePermission>
       ) },
@@ -127,22 +132,22 @@ const router = createBrowserRouter([
 
       // Data induk.
       { path: outletLabel(), element: (
-        <RequirePermission permission={PERMISSIONS.PRODUCTS_VIEW}>
+        <RequirePermission permission={PERMISSIONS.OUTLETS_VIEW}>
           <OutletListPage />
         </RequirePermission>
       ) },
       { path: `${outletLabel()}/new`, element: (
-        <RequirePermission permission={PERMISSIONS.PRODUCTS_EDIT}>
+        <RequirePermission permission={PERMISSIONS.OUTLETS_EDIT}>
           <OutletFormPage />
         </RequirePermission>
       ) },
       { path: `${outletLabel()}/:id`, element: (
-        <RequirePermission permission={PERMISSIONS.PRODUCTS_VIEW}>
+        <RequirePermission permission={PERMISSIONS.OUTLETS_VIEW}>
           <OutletDetailPage />
         </RequirePermission>
       ) },
       { path: `${outletLabel()}/:id/edit`, element: (
-        <RequirePermission permission={PERMISSIONS.PRODUCTS_EDIT}>
+        <RequirePermission permission={PERMISSIONS.OUTLETS_EDIT}>
           <OutletFormPage />
         </RequirePermission>
       ) },

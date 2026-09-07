@@ -28,6 +28,21 @@ export interface NavItem {
   icon: LucideIcon;
   /** One line explaining what the page is for, used in the command palette. */
   hint: string;
+  /**
+   * The permission this item's route asserts, mirrored here so the link is
+   * hidden rather than merely refused.
+   *
+   * Undefined means "always show", which is honest for the two ungated routes
+   * (Notifikasi, Pengaturan). Where it is set it must match what App.tsx
+   * actually checks — a nav entry claiming a different permission than its
+   * route is worse than none, because it hides a page somebody may open.
+   *
+   * Several permissions means all of them, matching the backend's own AND:
+   * the monitoring board needs deliveries read AND gps_tracks read, and a
+   * role holding only the first must not be shown a page whose one request
+   * answers 403.
+   */
+  permission?: string | readonly string[];
 }
 
 export interface NavGroup {
@@ -51,24 +66,28 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/orders",
         icon: ClipboardList,
         hint: "Permintaan masuk yang menunggu persetujuan",
+        permission: PERMISSIONS.ORDERS_VIEW,
       },
       {
         name: "Schedule Agreement",
         href: "/sa",
         icon: FileText,
         hint: `Kuota dari ${supplierLabel()} dan sisa yang bisa ditarik`,
+        permission: PERMISSIONS.SA_VIEW,
       },
       {
         name: "Perencanaan Distribusi",
         href: "/distribution",
         icon: Truck,
         hint: "Susun rute, tetapkan armada, konfirmasi rencana",
+        permission: PERMISSIONS.DISTRIBUTION_VIEW,
       },
       {
         name: "Monitoring Distribusi",
         href: "/monitoring",
         icon: Map,
         hint: "Posisi armada dan status tiap surat jalan",
+        permission: [PERMISSIONS.DELIVERIES_VIEW, PERMISSIONS.GPS_TRACKS_VIEW],
       },
     ],
   },
@@ -80,36 +99,42 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/ocr",
         icon: Receipt,
         hint: "Pindai bukti bayar dan terbitkan tagihan",
+        permission: PERMISSIONS.PAYMENTS_VIEW,
       },
       {
         name: "Piutang",
         href: "/receivables",
         icon: ReceiptText,
         hint: "Umur piutang, tagihan, dan nota kredit",
+        permission: PERMISSIONS.PAYMENTS_VIEW,
       },
       {
         name: "Penerimaan Kas",
         href: "/payments",
         icon: Wallet,
         hint: "Uang masuk dan alokasinya ke tagihan",
+        permission: PERMISSIONS.PAYMENTS_VIEW,
       },
       {
         name: "Buku Besar",
         href: "/ledger",
         icon: BookOpen,
         hint: "Jurnal, neraca saldo, dan laba rugi",
+        permission: PERMISSIONS.REPORTS_VIEW,
       },
       {
         name: "Laporan",
         href: "/reports",
         icon: FileText,
         hint: "Rekap distribusi dan pendapatan per periode",
+        permission: PERMISSIONS.REPORTS_VIEW,
       },
       {
         name: "Rekap Transaksi",
         href: "/transactions",
         icon: Table2,
         hint: "Daftar seluruh transaksi, disaring dan diekspor ke Excel",
+        permission: PERMISSIONS.REPORTS_VIEW,
       },
     ],
   },
@@ -121,12 +146,14 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/outlet",
         icon: Store,
         hint: `Daftar ${outletLabel()}, kuota, dan penanggung jawab`,
+        permission: PERMISSIONS.OUTLETS_VIEW,
       },
       {
         name: "Driver",
         href: "/drivers",
         icon: IdCard,
         hint: "Pengemudi, SIM, dan kinerja 30 hari",
+        permission: PERMISSIONS.DRIVERS_VIEW,
       },
       // Two entries, because the service serves two lists. A driver swaps
       // trucks and a truck swaps drivers, so neither owns the other and the
@@ -136,12 +163,14 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/vehicles",
         icon: Truck,
         hint: "Kendaraan, kapasitas angkut, dan masa berlaku STNK/KIR",
+        permission: PERMISSIONS.VEHICLES_VIEW,
       },
       {
         name: "Produk",
         href: "/products",
         icon: Fuel,
         hint: `Katalog ${unitLabel()}, harga, dan stok gudang`,
+        permission: PERMISSIONS.PRODUCTS_VIEW,
       },
       {
         // Above Pengguna & Akses on purpose: a user belongs to a tenant, so the
@@ -150,12 +179,14 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/tenants",
         icon: Network,
         hint: "Struktur perusahaan, sub-tenant, dan cabang pertamanya",
+        permission: PERMISSIONS.SETTINGS_VIEW,
       },
       {
         name: "Pengguna & Akses",
         href: "/users",
         icon: Users,
         hint: "Akun tim dan jejak aktivitas sistem",
+        permission: PERMISSIONS.USERS_VIEW,
       },
     ],
   },
@@ -178,6 +209,7 @@ export const DRIVER_NAV_GROUPS: NavGroup[] = [
         href: "/sopir",
         icon: Route,
         hint: "Pemberhentian hari ini dan pencatatan penerimaan",
+        permission: PERMISSIONS.DELIVERIES_EXECUTE,
       },
     ],
   },
@@ -228,9 +260,43 @@ export function usesDriverConsole(permissions: readonly string[] = []): boolean 
   );
 }
 
-/** The menu this person actually works from. */
+/**
+ * Whether this person may open the page an item links to.
+ *
+ * All of them when several are named, matching what the route asserts and what
+ * the backend enforces.
+ */
+export function mayOpen(item: NavItem, permissions: readonly string[]): boolean {
+  if (!item.permission) return true;
+  const required = Array.isArray(item.permission)
+    ? item.permission
+    : [item.permission as string];
+  return required.every((code) => permissions.includes(code));
+}
+
+/**
+ * The menu this person actually works from.
+ *
+ * Two things happen here. A sopir gets a different menu, not a filtered one --
+ * their console is one screen and the twenty-item tree would be noise. Everyone
+ * else gets the full tree with the items they cannot open removed.
+ *
+ * Filtering matters more than it looks: until this existed, every role saw all
+ * twenty links and found out by clicking. A viewer was shown "Buku Besar" --
+ * the agency's whole finance position -- and met a refusal panel. Hiding a link
+ * is not access control (RequirePermission is), but showing one that cannot
+ * work is a promise the console does not keep.
+ *
+ * A group whose items are all filtered away is dropped, or "Keuangan" renders
+ * as a heading with nothing under it.
+ */
 export function navGroupsFor(permissions?: readonly string[]): NavGroup[] {
-  return usesDriverConsole(permissions) ? DRIVER_NAV_GROUPS : NAV_GROUPS;
+  if (usesDriverConsole(permissions)) return DRIVER_NAV_GROUPS;
+  const held = permissions ?? [];
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => mayOpen(item, held)),
+  })).filter((group) => group.items.length > 0);
 }
 
 /**

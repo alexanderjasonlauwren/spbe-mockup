@@ -1,9 +1,14 @@
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { NAV_GROUPS } from "@/layouts/nav";
+import { navGroupsFor } from "@/layouts/nav";
+import { useAuthStore } from "@/features/auth/store/authStore";
 
 export function NotFoundPage() {
+  // "Halaman yang tersedia" has to mean available to *this* person: listing
+  // pages they cannot open turns a wrong-address page into a second one.
+  const groups = navGroupsFor(useAuthStore((s) => s.user?.permissions));
+
   return (
     <div className="mx-auto max-w-2xl py-10">
       <p className="label text-2xs text-ink-muted">Kesalahan 404</p>
@@ -28,7 +33,7 @@ export function NotFoundPage() {
       <div className="mt-10 border-t border-line pt-6">
         <p className="label mb-4 text-2xs text-ink-muted">Halaman yang tersedia</p>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-          {NAV_GROUPS.map((group) => (
+          {groups.map((group) => (
             <div key={group.label}>
               <p className="mb-2 text-xs font-semibold text-ink">{group.label}</p>
               <ul className="space-y-1.5">

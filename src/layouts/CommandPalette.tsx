@@ -7,9 +7,14 @@ import { useQuery } from "@tanstack/react-query";
 import { CornerDownLeft, Search, Store, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDb } from "@/mocks/db";
-import { ALL_NAV_ITEMS } from "./nav";
+import { ALL_NAV_ITEMS, mayOpen } from "./nav";
+import { useAuthStore } from "@/features/auth/store/authStore";
 import { outletLabel, outletLabelTitle } from "@/lib/lexicon";
 import { useResettableState } from "@/hooks/useResettableState";
+
+// A stable reference: `?? []` inside the selector would return a new array
+// on every render and re-run the memo below forever.
+const EMPTY_PERMISSIONS: readonly string[] = [];
 
 interface Entry {
   id: string;
@@ -59,8 +64,12 @@ export function CommandPalette({
     enabled: open,
   });
 
+  const held = useAuthStore((s) => s.user?.permissions) ?? EMPTY_PERMISSIONS;
+
   const entries = useMemo<Entry[]>(() => {
-    const nav: Entry[] = ALL_NAV_ITEMS.map((i) => ({
+    // Filtered like the sidebar: ⌘K offering a page that answers a refusal
+    // panel is the same broken promise, just faster to reach.
+    const nav: Entry[] = ALL_NAV_ITEMS.filter((i) => mayOpen(i, held)).map((i) => ({
       id: `nav-${i.href}`,
       label: i.name,
       hint: i.hint,
@@ -88,7 +97,7 @@ export function CommandPalette({
     }));
 
     return [...nav, ...outlet, ...drivers];
-  }, [records.data]);
+  }, [records.data, held]);
 
   // Each opening starts clean. Reset during render rather than in an effect,
   // so the palette never paints one frame carrying the previous search.

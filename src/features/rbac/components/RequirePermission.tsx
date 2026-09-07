@@ -7,28 +7,54 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/button";
 
 /**
- * Gates a route on a permission.
+ * Gates a route on a permission, or on several.
  *
- * The sidebar already hides what a role cannot use, but hiding a link is not
- * access control — a sopir who types /ledger reached the general ledger, which
- * is the whole finance position of the agency. `ProtectedRoute` only ever asked
+ * The sidebar hides what a role cannot use, but hiding a link is not access
+ * control — a sopir who types /ledger reached the general ledger, which is the
+ * whole finance position of the agency. `ProtectedRoute` only ever asked
  * whether someone was signed in.
  *
  * Renders a stated refusal rather than redirecting: a silent bounce to the
  * dashboard reads as a broken link, and leaves the person guessing whether the
  * page exists.
+ *
+ * # Why this takes a list
+ *
+ * Some endpoints require more than one permission, and `authorizer.Require` on
+ * the backend is an AND. `GET /monitoring/board` wants both
+ * `read.deliveries` and `read.gps_tracks`, because the board carries where a
+ * named person is right now. Gating the route on the first alone let three
+ * roles that hold it — warehouse_staff, finance_officer, auditor_viewer —
+ * open a page whose only request answers 403.
+ *
+ * The prop shape mirrors `CanAccess` deliberately, rather than inventing a
+ * second vocabulary for the same idea one directory apart.
  */
 export function RequirePermission({
   permission,
+  permissions: required,
+  requireAll = true,
   children,
 }: {
-  permission: string;
+  permission?: string;
+  /** Several permissions. Defaults to requiring all of them, matching the
+   * backend's own AND; pass requireAll={false} for any-of. */
+  permissions?: readonly string[];
+  requireAll?: boolean;
   children: React.ReactNode;
 }) {
   const hasPermission = useAuthStore((s) => s.hasPermission);
   const permissions = useAuthStore((s) => s.user?.permissions);
 
-  if (hasPermission(permission)) return <>{children}</>;
+  const granted = permission
+    ? hasPermission(permission)
+    : required
+      ? requireAll
+        ? required.every((code) => hasPermission(code))
+        : required.some((code) => hasPermission(code))
+      : true;
+
+  if (granted) return <>{children}</>;
 
   return (
     <Panel spine="text-rust">

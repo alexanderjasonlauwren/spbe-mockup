@@ -11,7 +11,7 @@ VITE_DATA_SOURCE=api npm run build     # integration
 
 ## Why not two repositories
 
-The mock coupling is confined to twenty feature API directories. A fork would
+The mock coupling is confined to twenty-one feature API directories. A fork would
 duplicate every page, component and layout *around* them — so each UI change
 happens twice, and the demo is the copy nobody runs day to day. It breaks
 quietly, and you find out in front of a client.
@@ -60,6 +60,7 @@ unbuilt work.
 | auth | mock + http | — |
 | distribution | mock + http | scheduling approved orders onto a plan (no `core.orders` module); the printed route sheet (no per-stop address/time on the wire) |
 | drivers | mock + http | a driver's today-only stop list (`getDriverSchedule`; the dispatch board is keyed by plan, not by driver) |
+| geofence | mock + http | — |
 | monitoring | mock + http | — |
 | outlet | mock + http | an outlet's recent surat jalan (`getOutletHistory`; not exposed by the service) |
 | sa (schedule agreements) | mock + http | — |

@@ -75,15 +75,29 @@ unbuilt work.
 | dashboard, notification, ocr, orders, reports, system | mock only | no backend endpoint yet — no contract/mock/http split |
 | transactions | mock only | no single backend resource behind it — every row joins a delivery, its invoice, its driver and its schedule agreement, none of which the service returns pre-joined. Building this against the API is a real design task (which entity to page by, how the other three get resolved without an N+1 request per row), not a copy of the vehicles pattern, and is deliberately left for a dedicated pass rather than a shaky partial join done in passing here. |
 
-**A known, reproducible bug, found live and NOT caused by anything in this
-table:** `SettingsPage` hangs on its loading skeleton forever against the API
-build (confirmed: the underlying `GET /tenants/:id/settings` calls succeed
-with valid data — tested directly with the page's own token — but `form`
-never populates). Not caused by the `bankaccounts` split above; `git diff`
-confirms `settingsApi.http.ts` and `SettingsPage.tsx` were untouched when
-this was found. Root cause not yet identified. This blocks live-verifying
-`BankSection` (and anything else rendered inside Settings) until fixed —
-flag before starting D3's B-Step 3/B-Step 4, both of which touch this page.
+**A bug found live against the API build, fixed 2026-09-10:** `SettingsPage`
+could hang on its loading skeleton forever with no visible error. Root
+cause: `useScope()` calls `setActiveScope(scope)` unconditionally on every
+render, computed from `tenantRegistry()` — filled asynchronously by the
+layout's tenant-list query. Any render where that registry reads
+momentarily empty (an HMR module reset while diagnosing this is one way it
+was reproduced; the fix is not specific to that cause) wiped the module-level
+acting tenant to `""`. Any query building a request path from
+`getActingTenant()` synchronously at that instant — `SettingsPage`'s own
+`getSettingsDetail` among them — failed with "Tidak ada tenant aktif", and
+with this app's `retry: 0` default that failure was permanent, since
+nothing re-ran the query once the registry recovered a render later.
+
+Fixed two ways: `mocks/scope.ts`'s `setActiveScope` now refuses to regress
+the acting tenant to empty once a real one has been set (the root-cause
+fix, mutation-tested in `scope.test.ts`); `SettingsPage.tsx` also now
+checks `settings.isError` before its `if (!form)` loading guard, so a
+genuine failure — including the residual cold-start case this guard does
+*not* cover (the very first render of a session, before any tenant has
+ever loaded once) — shows an error with a retry action instead of an
+eternal skeleton. Both verified live: reproduced the cold-start error on a
+fresh session, confirmed "Coba lagi" recovers cleanly, then verified
+`BankSection`'s full create/delete lifecycle inside the now-working page.
 
 A "mock + http" row still throwing on the API build somewhere means an
 exception was missed here. Every deliberate gap is named in its adapter file —

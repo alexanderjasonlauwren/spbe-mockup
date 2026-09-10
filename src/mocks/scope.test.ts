@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { subtreeOf } from "./scope";
+import { getActiveScope, setActiveScope, subtreeOf, type ActiveScope } from "./scope";
+import { getActingTenant } from "./actingTenant";
 import type { TenantEntity } from "@/types/domain";
 
 /**
@@ -89,5 +90,53 @@ describe("subtreeOf", () => {
     ];
 
     expect(subtreeOf(tenants, "grup")).toContain("operating");
+  });
+});
+
+describe("setActiveScope", () => {
+  function scope(overrides: Partial<ActiveScope> = {}): ActiveScope {
+    return {
+      actingTenantId: "tenant-a",
+      visibleTenantIds: ["tenant-a"],
+      branchId: null,
+      allowedBranchIds: [],
+      ...overrides,
+    };
+  }
+
+  // Order matters in this block: this must run first, while the module's
+  // `active` is still whatever it started as (null) -- the one case an
+  // empty acting tenant is genuinely allowed to pass through. Once any test
+  // below sets a real one, the guard applies for the rest of the file.
+  it("passes an empty scope through before any real tenant has ever been set", () => {
+    setActiveScope(scope({ actingTenantId: "", visibleTenantIds: [] }));
+    expect(getActiveScope().actingTenantId).toBe("");
+    expect(getActingTenant()).toBe("");
+  });
+
+  it("updates the acting tenant on a normal scope change", () => {
+    setActiveScope(scope({ actingTenantId: "tenant-a" }));
+    setActiveScope(scope({ actingTenantId: "tenant-b", visibleTenantIds: ["tenant-b"] }));
+    expect(getActiveScope().actingTenantId).toBe("tenant-b");
+    expect(getActingTenant()).toBe("tenant-b");
+  });
+
+  /**
+   * The bug this guard exists for: `useScope` calls `setActiveScope` on
+   * every render, computed from `tenantRegistry()` — filled asynchronously
+   * by the layout's tenant-list query. Found live: that registry read
+   * empty for one render partway through a session that had already
+   * resolved a real tenant, `setActiveScope` wiped the acting tenant to
+   * "", and `SettingsPage`'s own query — which reads it synchronously
+   * while building a request path — failed with "Tidak ada tenant aktif".
+   * With this app's `retry: 0` default that failure was permanent: nothing
+   * re-ran the query once the registry recovered a render later, and the
+   * page hung on its loading skeleton forever with no visible error.
+   */
+  it("refuses to regress the acting tenant to empty once a real one is set", () => {
+    setActiveScope(scope({ actingTenantId: "tenant-c", visibleTenantIds: ["tenant-c"] }));
+    setActiveScope(scope({ actingTenantId: "", visibleTenantIds: [] }));
+    expect(getActiveScope().actingTenantId).toBe("tenant-c");
+    expect(getActingTenant()).toBe("tenant-c");
   });
 });

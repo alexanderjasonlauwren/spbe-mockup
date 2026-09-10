@@ -46,14 +46,44 @@ export interface ActiveScope {
 
 let active: ActiveScope | null = null;
 
+/**
+ * Sets the active scope — except a regression to no acting tenant once a
+ * real one has already been set.
+ *
+ * `useScope` calls this unconditionally on every render, computed from
+ * `tenantRegistry()` (see its own header: filled asynchronously by the
+ * layout's tenant-list query). `tenantRegistry()` can read empty for an
+ * instant it never should have — an HMR module reset during development
+ * is one way, but the guard is not specific to that cause; any transient
+ * emptiness between two renders has the same effect. A query that reads
+ * `getActingTenant()` synchronously during that instant (any `*Api.http.ts`
+ * building a request path from it) fails with "Tidak ada tenant aktif" —
+ * and with this app's `retry: 0` default, that failure is permanent, not
+ * transient, because nothing re-runs the query once the scope recovers a
+ * render later.
+ *
+ * Found live: `SettingsPage` hung on its own loading skeleton forever
+ * against the API build, `settings.status` had actually moved to `"error"`
+ * with exactly this message, and the page's `if (!form)` guard could not
+ * tell that apart from still loading. This is the root-cause fix; see
+ * SettingsPage.tsx for the belt-and-braces fix on the consumer side.
+ *
+ * Never legitimate to defend against: an intentional "no tenant" scope is
+ * not a state this application has — every real switch names a tenant
+ * explicitly (`useScope`'s `setTenant`), so a blank incoming value here is
+ * always the transient case, never a deliberate one.
+ */
 export function setActiveScope(scope: ActiveScope) {
+  if (!scope.actingTenantId && active?.actingTenantId) return;
   active = scope;
   // Mirrored so getDb() can resolve settings without importing this module —
   // see mocks/actingTenant.ts for why that would recurse.
   setActingTenant(scope.actingTenantId);
   // Scope bugs look exactly like stale data, so make the active scope
-  // inspectable from the console while developing.
-  if (import.meta.env.DEV) {
+  // inspectable from the console while developing. Guarded on `window`
+  // existing, not just DEV -- the unit test suite runs this same function
+  // under Node, deliberately with no DOM (see vite.config.ts's own note).
+  if (import.meta.env.DEV && typeof window !== "undefined") {
     (window as unknown as Record<string, unknown>).__scope = scope;
   }
 }

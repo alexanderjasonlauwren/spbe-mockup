@@ -9,6 +9,7 @@ import {
   Play,
   RotateCcw,
   Sun,
+  TriangleAlert,
 } from "lucide-react";
 import {
   exportData,
@@ -29,6 +30,7 @@ import { useToast } from "@/hooks/useToast";
 import { PageHeader } from "@/components/common/PageHeader";
 import { InheritableField } from "@/features/settings/components/InheritableField";
 import { Panel, PanelBody, PanelHeader, Skeleton } from "@/components/common/Panel";
+import { EmptyState } from "@/components/common/EmptyState";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import {
   Field,
@@ -205,6 +207,34 @@ export function SettingsPage() {
       tone: steps > 0 ? "success" : "info",
     });
   };
+
+  /**
+   * Belt-and-braces: `if (!form)` alone cannot tell "still loading" from
+   * "failed" — both leave `form` null — so a genuine error read as an
+   * eternal skeleton, with nothing on screen explaining why. Found live
+   * against the API build; see mocks/scope.ts's `setActiveScope` for the
+   * root-cause fix this is deliberately kept alongside, not instead of.
+   */
+  if (settings.isError) {
+    return (
+      <Panel>
+        <EmptyState
+          icon={TriangleAlert}
+          title="Pengaturan gagal dimuat"
+          description={
+            settings.error instanceof Error
+              ? settings.error.message
+              : "Terjadi kesalahan yang tidak diketahui."
+          }
+          action={
+            <Button size="sm" onClick={() => settings.refetch()}>
+              Coba lagi
+            </Button>
+          }
+        />
+      </Panel>
+    );
+  }
 
   if (!form) {
     return (

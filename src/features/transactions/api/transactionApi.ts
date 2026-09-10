@@ -85,6 +85,21 @@ function buildRows(): TransactionRow[] {
     db.invoices.filter((i) => i.deliveryId).map((i) => [i.deliveryId!, i]),
   );
 
+  // The date an invoice was actually paid, not the date it fell due. Money
+  // only counts once a receipt is verified (the ledger itself posts on
+  // verification, not on receipt), so this is diverifikasiPada, the latest
+  // one when several receipts settled the same invoice.
+  const paidOnByInvoice = new Map<string, string>();
+  for (const p of db.payments) {
+    if (p.status !== "Terverifikasi" || !p.diverifikasiPada) continue;
+    for (const a of p.alokasi) {
+      const current = paidOnByInvoice.get(a.invoiceId);
+      if (!current || p.diverifikasiPada > current) {
+        paidOnByInvoice.set(a.invoiceId, p.diverifikasiPada);
+      }
+    }
+  }
+
   const fromDeliveries: TransactionRow[] = db.deliveries.map((d) => {
     const pkl = outletById.get(d.outletId);
     const drv = driverById.get(d.driverId);
@@ -124,7 +139,7 @@ function buildRows(): TransactionRow[] {
       statusKirim: d.status,
       statusBayar: inv?.status ?? "Belum ditagih",
       diverifikasiOleh: inv?.dibuatOleh ?? "—",
-      tanggalBayar: inv?.jatuhTempo ?? "",
+      tanggalBayar: (inv && paidOnByInvoice.get(inv.id)) ?? "",
       keterangan: inv?.catatan ?? d.catatan ?? "",
     };
   });
@@ -159,7 +174,7 @@ function buildRows(): TransactionRow[] {
         statusKirim: "—" as const,
         statusBayar: p.status,
         diverifikasiOleh: p.dibuatOleh,
-        tanggalBayar: p.jatuhTempo,
+        tanggalBayar: paidOnByInvoice.get(p.id) ?? "",
         keterangan: p.catatan ?? "",
       };
     });

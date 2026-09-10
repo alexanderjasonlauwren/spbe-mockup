@@ -9,6 +9,8 @@ import {
   getTrialBalance,
 } from "@/features/finance/api/financeApi";
 import { defaultRange } from "@/features/transactions/api/transactionApi";
+import { useAuthStore } from "@/features/auth/store/authStore";
+import { PERMISSIONS } from "@/features/rbac/permissions";
 import { PageHeader } from "@/components/common/PageHeader";
 import {
   Panel,
@@ -27,6 +29,11 @@ type Tab = "jurnal" | "neraca-saldo" | "laba-rugi" | "bagan";
 export function LedgerPage() {
   const [tab, setTab] = useState<Tab>("jurnal");
   const [range, setRange] = useState(defaultRange);
+  // Distinct from JOURNALS_VIEW, which only gates the page itself: confirmed
+  // live that finance_officer holds finance.read.journals but not
+  // finance.read.accounts (only tenant_admin does), so the chart-of-accounts
+  // tab needs its own gate or that role sees a permanently empty table.
+  const canViewAccounts = useAuthStore((s) => s.hasPermission(PERMISSIONS.ACCOUNTS_VIEW));
 
   return (
     <div className="space-y-5">
@@ -68,7 +75,9 @@ export function LedgerPage() {
               { value: "jurnal" as const, label: "Jurnal" },
               { value: "neraca-saldo" as const, label: "Neraca saldo" },
               { value: "laba-rugi" as const, label: "Laba rugi" },
-              { value: "bagan" as const, label: "Bagan akun" },
+              ...(canViewAccounts
+                ? [{ value: "bagan" as const, label: "Bagan akun" }]
+                : []),
             ]}
           />
         }
@@ -77,7 +86,7 @@ export function LedgerPage() {
       {tab === "jurnal" && <JournalSection range={range} />}
       {tab === "neraca-saldo" && <TrialBalanceSection range={range} />}
       {tab === "laba-rugi" && <ProfitLossSection range={range} />}
-      {tab === "bagan" && <ChartSection />}
+      {tab === "bagan" && canViewAccounts && <ChartSection />}
     </div>
   );
 }

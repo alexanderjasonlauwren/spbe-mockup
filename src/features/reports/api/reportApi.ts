@@ -89,7 +89,13 @@ export async function getReportSummary(range: ReportRange): Promise<ReportSummar
     pendapatan: payments
       .filter((p) => p.status === "Terverifikasi")
       .reduce((s, p) => s + p.jumlah, 0),
-    piutang: invoices.reduce((s, i) => s + (i.total - i.terbayar - i.kredit), 0),
+    // Matches financeApi.getAgingReport()'s own definition: a cancelled
+    // invoice is not a receivable, whatever its stale total/terbayar/kredit
+    // figures still say. Without this exclusion the two screens disagree on
+    // the agency's own receivable total in front of the client.
+    piutang: invoices
+      .filter((i) => i.status !== "Batal")
+      .reduce((s, i) => s + (i.total - i.terbayar - i.kredit), 0),
     ditolak: payments
       .filter((p) => p.status === "Ditolak")
       .reduce((s, p) => s + p.jumlah, 0),

@@ -26,6 +26,8 @@ import {
 } from "@/features/reports/api/reportApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { useTheme } from "@/hooks/useTheme";
+import { CanAccess } from "@/features/rbac/components/CanAccess";
+import { PERMISSIONS } from "@/features/rbac/permissions";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelBody, PanelHeader, Meter, Skeleton } from "@/components/common/Panel";
 import { DataTable, type Column } from "@/components/common/DataTable";
@@ -195,14 +197,16 @@ export function ReportsPage() {
         description="Rekapitulasi distribusi dan pendapatan untuk periode yang dipilih, siap diunduh atau dicetak untuk arsip."
         actions={
           <>
-            <Button
-              variant="outline"
-              onClick={() => exportMutation.mutate(undefined as never)}
-              disabled={exportMutation.isPending}
-            >
-              <Download className="h-3.5 w-3.5" />
-              Unduh CSV
-            </Button>
+            <CanAccess permission={PERMISSIONS.INVOICES_EXPORT}>
+              <Button
+                variant="outline"
+                onClick={() => exportMutation.mutate(undefined as never)}
+                disabled={exportMutation.isPending}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Unduh CSV
+              </Button>
+            </CanAccess>
             <Button
               onClick={() => printMutation.mutate(undefined as never)}
               disabled={printMutation.isPending}
@@ -247,7 +251,7 @@ export function ReportsPage() {
         <Stat
           label="Pendapatan terverifikasi"
           value={formatRupiahShort(s?.pendapatan ?? 0)}
-          hint="Hanya pembayaran yang sudah diverifikasi keuangan"
+          hint="Kas yang sudah diverifikasi, bukan akrual — untuk laba rugi akrual lihat Buku Besar"
           isLoading={summary.isLoading}
           tone="pine"
         />

@@ -61,6 +61,21 @@ export const PERMISSIONS = {
   PAYMENTS_CREATE: "finance.create.payments",
   PAYMENTS_VERIFY: "finance.verify.payments",
 
+  // Invoices and the general ledger. Reports and the transaction recap read
+  // invoices, not journals -- ops_manager holds these two and nothing else in
+  // the finance group, and must see both pages. The ledger reads the journal
+  // itself, which only finance_officer and tenant_admin hold.
+  INVOICES_VIEW: "finance.read.invoices",
+  INVOICES_EXPORT: "finance.export.invoices",
+  JOURNALS_VIEW: "finance.read.journals",
+  /**
+   * The chart of accounts itself, distinct from reading the journals posted
+   * against it. Confirmed live: finance_officer holds finance.read.journals
+   * but not this -- only tenant_admin does -- so LedgerPage's "Bagan akun"
+   * tab needs its own gate, not the page-level JOURNALS_VIEW one.
+   */
+  ACCOUNTS_VIEW: "finance.read.accounts",
+
   // Delivery execution — what happens at the drop, recorded by whoever is
   // there. Executing is an update to the delivery row, not a verb of its own.
   DELIVERIES_VIEW: "distribution.read.deliveries",
@@ -124,15 +139,14 @@ export const PERMISSIONS = {
   // hidden — which is correct, because the routes behind them do not exist
   // either. The mock grants them so the demo is complete.
   //
-  // Each disappears the moment its backend counterpart is seeded:
-  //
-  //   REPORTS_*           catalogue.go refuses these by name: "Reports have no
-  //                       table and no route yet. A permission that guards
-  //                       nothing is worse than a missing one, because it reads
-  //                       as coverage."
+  // Empty as of the finance ledger landing: REPORTS_VIEW and REPORTS_EXPORT
+  // were the last two entries here, gating LedgerPage, ReportsPage and
+  // TransactionListPage on a code no backend role could ever hold. They are
+  // replaced above by INVOICES_VIEW, INVOICES_EXPORT and JOURNALS_VIEW, which
+  // the catalogue actually defines. Leave this block in place, empty, as the
+  // to-do list it is -- the next console-only code goes here, not invented
+  // elsewhere.
   // ---------------------------------------------------------------------
-  REPORTS_VIEW: "console.read.reports",
-  REPORTS_EXPORT: "console.export.reports",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

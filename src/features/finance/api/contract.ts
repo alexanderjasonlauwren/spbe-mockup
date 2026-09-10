@@ -1,0 +1,183 @@
+/**
+ * What every finance adapter must provide.
+ *
+ * Same reason as `features/vehicles/api/contract.ts`: without a contract the
+ * mock and the HTTP adapter drift, and the drift shows up only in whichever
+ * screen happens to read the field one of them forgot. This one is larger
+ * than most because the backend's finance module is five real resources
+ * (invoices, payments, allocations, credit notes, journals) behind one
+ * console feature.
+ *
+ * **Adapters return domain types.** The wire shape never escapes the HTTP
+ * adapter -- mapping there is what keeps every component unaware of which
+ * source it is running against.
+ */
+import type { AccountBalance } from "@/mocks/ledger";
+import type { BankNameEntity, CreditNoteStatus, InvoiceStatus } from "@/types/domain";
+
+export const AGING_BUCKETS = [
+  "Belum jatuh tempo",
+  "1–30 hari",
+  "31–60 hari",
+  "61–90 hari",
+  "> 90 hari",
+] as const;
+
+export type AgingBucket = (typeof AGING_BUCKETS)[number];
+
+export interface InvoiceView {
+  id: string;
+  nomor: string;
+  outletId: string;
+  outlet: string;
+  kecamatan: string;
+  suratJalan: string;
+  tanggal: string;
+  jatuhTempo: string;
+  /** Negative until due, positive once overdue. */
+  umurHari: number;
+  bucket: AgingBucket;
+  jumlahUnit: number;
+  total: number;
+  terbayar: number;
+  kredit: number;
+  sisa: number;
+  status: InvoiceStatus;
+  termin: number;
+}
+
+export interface InvoiceFilters {
+  status?: InvoiceStatus | "Semua" | "Belum lunas";
+  outletId?: string;
+  bucket?: string;
+  search?: string;
+}
+
+export interface AgingRow {
+  outletId: string;
+  outlet: string;
+  termin: number;
+  batasKredit: number;
+  buckets: Record<string, number>;
+  total: number;
+  /** Overdue portion — the part that needs chasing. */
+  jatuhTempo: number;
+  terblokir: boolean;
+}
+
+export interface AgingReport {
+  rows: AgingRow[];
+  totals: Record<string, number>;
+  grandTotal: number;
+  jatuhTempoTotal: number;
+  outletMenunggak: number;
+  buckets: readonly string[];
+}
+
+export interface PaymentView {
+  id: string;
+  nomor: string;
+  outletId: string;
+  outlet: string;
+  tanggal: string;
+  jumlah: number;
+  belumDialokasikan: number;
+  bank: string;
+  noRekening: string;
+  status: string;
+  alokasi: { invoiceId: string; nomor: string; jumlah: number }[];
+  buktiTransfer?: string;
+  keterangan?: string;
+  diverifikasiOleh?: string;
+}
+
+export interface RecordPaymentInput {
+  outletId: string;
+  jumlah: number;
+  tanggal: string;
+  bank: BankNameEntity;
+  noRekening: string;
+  rekeningTujuanId?: string;
+  buktiTransfer?: string;
+  keterangan?: string;
+}
+
+export interface AllocationLine {
+  invoiceId: string;
+  jumlah: number;
+}
+
+export interface CreditNoteInput {
+  outletId: string;
+  invoiceId: string | null;
+  jumlah: number;
+  alasan: string;
+}
+
+export interface CreditNoteView {
+  id: string;
+  nomor: string;
+  outletId: string;
+  invoiceId: string | null;
+  jumlah: number;
+  alasan: string;
+  status: CreditNoteStatus;
+  tanggal: string;
+}
+
+export interface JournalLineView {
+  akun?: { id: string; kode: string; nama: string };
+  debit: number;
+  kredit: number;
+  memo?: string;
+}
+
+export interface JournalView {
+  id: string;
+  nomor: string;
+  tanggal: string;
+  keterangan: string;
+  status: "Diposting" | "Dibatalkan";
+  lines: JournalLineView[];
+  total: number;
+}
+
+export interface DateRange {
+  from?: string;
+  to?: string;
+}
+
+export interface TrialBalanceView {
+  rows: AccountBalance[];
+  totalDebit: number;
+  totalKredit: number;
+}
+
+export interface ProfitAndLossView {
+  pendapatan: AccountBalance[];
+  beban: AccountBalance[];
+  totalPendapatan: number;
+  totalBeban: number;
+  labaKotor: number;
+  labaBersih: number;
+}
+
+export interface FinanceApi {
+  getInvoices(filters?: InvoiceFilters): Promise<InvoiceView[]>;
+  getAgingReport(): Promise<AgingReport>;
+  getPayments(status?: string, search?: string): Promise<PaymentView[]>;
+  /** Open invoices for the allocation picker. */
+  getOpenInvoices(outletId: string): Promise<InvoiceView[]>;
+  submitPayment(input: RecordPaymentInput): Promise<PaymentView>;
+  submitAllocation(paymentId: string, alokasi: AllocationLine[]): Promise<PaymentView>;
+  submitPaymentDecision(
+    paymentId: string,
+    action: "verify" | "reject",
+    keterangan?: string,
+  ): Promise<PaymentView>;
+  submitCreditNote(input: CreditNoteInput): Promise<CreditNoteView>;
+  getJournals(range?: DateRange): Promise<JournalView[]>;
+  getTrialBalance(range: { from: string; to: string }): Promise<TrialBalanceView>;
+  getProfitAndLoss(range: { from: string; to: string }): Promise<ProfitAndLossView>;
+  getChartOfAccounts(): Promise<AccountBalance[]>;
+}

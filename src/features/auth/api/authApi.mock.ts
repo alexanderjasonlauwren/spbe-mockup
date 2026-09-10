@@ -60,8 +60,8 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.VEHICLES_MANAGE,
     PERMISSIONS.ORDERS_VIEW,
     PERMISSIONS.ORDERS_EDIT,
-    PERMISSIONS.REPORTS_VIEW,
-    PERMISSIONS.REPORTS_EXPORT,
+    PERMISSIONS.INVOICES_VIEW,
+    PERMISSIONS.INVOICES_EXPORT,
     PERMISSIONS.SETTINGS_VIEW,
   ],
   finance: [
@@ -71,8 +71,11 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.SA_VIEW,
     PERMISSIONS.DISTRIBUTION_VIEW,
     PERMISSIONS.ORDERS_VIEW,
-    PERMISSIONS.REPORTS_VIEW,
-    PERMISSIONS.REPORTS_EXPORT,
+    PERMISSIONS.INVOICES_VIEW,
+    PERMISSIONS.INVOICES_EXPORT,
+    // Only finance_officer and tenant_admin hold journal read on the
+    // backend -- this mock role is the finance_officer counterpart.
+    PERMISSIONS.JOURNALS_VIEW,
     PERMISSIONS.PRODUCTS_VIEW,
     PERMISSIONS.OUTLETS_VIEW,
     PERMISSIONS.SETTINGS_VIEW,
@@ -96,7 +99,7 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.ORDERS_EDIT,
     PERMISSIONS.PRODUCTS_VIEW,
     PERMISSIONS.PAYMENTS_VIEW,
-    PERMISSIONS.REPORTS_VIEW,
+    PERMISSIONS.INVOICES_VIEW,
   ],
   viewer: [
     PERMISSIONS.SA_VIEW,
@@ -106,7 +109,7 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.PRODUCTS_VIEW,
     PERMISSIONS.OUTLETS_VIEW,
     PERMISSIONS.DRIVERS_VIEW,
-    PERMISSIONS.REPORTS_VIEW,
+    PERMISSIONS.INVOICES_VIEW,
     // Deliberately no GPS_TRACKS_VIEW, and therefore no Monitoring in the
     // nav. This is the demo's copy of the real gap: warehouse_staff,
     // finance_officer and auditor_viewer all hold deliveries read without

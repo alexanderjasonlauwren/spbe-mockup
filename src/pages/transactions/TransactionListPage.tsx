@@ -31,12 +31,18 @@ import {
 import { outletLabel, outletLabelTitle, unitLabel, unitLabelTitle } from "@/lib/lexicon";
 
 const STATUS_KIRIM = ["Semua", "Antrian", "Proses", "Selesai", "Tertunda"];
+// Matches TransactionRow.statusBayar's actual type, InvoiceStatus |
+// "Belum ditagih" -- these used to be PaymentStatusEntity's values
+// ("Menunggu Verifikasi" | "Terverifikasi" | "Ditolak"), which never equal
+// an invoice's own status, so three of five options could never match a row.
 const STATUS_BAYAR = [
   "Semua",
   "Belum ditagih",
-  "Menunggu Verifikasi",
-  "Terverifikasi",
-  "Ditolak",
+  "Terbit",
+  "Sebagian",
+  "Lunas",
+  "Jatuh Tempo",
+  "Batal",
 ];
 
 export function TransactionListPage() {

@@ -37,7 +37,7 @@ describe("describeAccess", () => {
     const summary = describeAccess([
       PERMISSIONS.SA_VIEW,
       PERMISSIONS.PAYMENTS_VIEW,
-      PERMISSIONS.REPORTS_EXPORT,
+      PERMISSIONS.INVOICES_EXPORT,
     ]);
     expect(summary).toContain("Hanya membaca");
   });

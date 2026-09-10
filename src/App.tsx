@@ -116,17 +116,17 @@ const router = createBrowserRouter([
         </RequirePermission>
       ) },
       { path: "ledger", element: (
-        <RequirePermission permission={PERMISSIONS.REPORTS_VIEW}>
+        <RequirePermission permission={PERMISSIONS.JOURNALS_VIEW}>
           <LedgerPage />
         </RequirePermission>
       ) },
       { path: "reports", element: (
-        <RequirePermission permission={PERMISSIONS.REPORTS_VIEW}>
+        <RequirePermission permission={PERMISSIONS.INVOICES_VIEW}>
           <ReportsPage />
         </RequirePermission>
       ) },
       { path: "transactions", element: (
-        <RequirePermission permission={PERMISSIONS.REPORTS_VIEW}>
+        <RequirePermission permission={PERMISSIONS.INVOICES_VIEW}>
           <TransactionListPage />
         </RequirePermission>
       ) },

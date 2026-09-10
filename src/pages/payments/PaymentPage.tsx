@@ -8,11 +8,13 @@ import {
   getPayments,
   submitAllocation,
   submitPayment,
+  submitPaymentDecision,
   type PaymentView,
 } from "@/features/finance/api/financeApi";
 import { getOutletOptions } from "@/features/distribution/api/distributionApi";
-import { decidePayment } from "@/mocks/rules";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
+import { CanAccess } from "@/features/rbac/components/CanAccess";
+import { PERMISSIONS } from "@/features/rbac/permissions";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelHeader } from "@/components/common/Panel";
 import { DataTable, type Column } from "@/components/common/DataTable";
@@ -71,7 +73,7 @@ export function PaymentPage() {
       id: string;
       action: "verify" | "reject";
       keterangan?: string;
-    }) => Promise.resolve(decidePayment(input.id, input.action, input.keterangan)),
+    }) => submitPaymentDecision(input.id, input.action, input.keterangan),
     errorTitle: "Verifikasi gagal",
     success: (p) => ({
       title:
@@ -192,7 +194,7 @@ export function PaymentPage() {
             </Button>
           )}
           {row.status === "Menunggu Verifikasi" && (
-            <>
+            <CanAccess permission={PERMISSIONS.PAYMENTS_VERIFY}>
               <Button
                 size="xs"
                 onClick={() => setDecision({ payment: row, action: "verify" })}
@@ -211,7 +213,7 @@ export function PaymentPage() {
               >
                 <XCircle className="h-3 w-3" />
               </Button>
-            </>
+            </CanAccess>
           )}
         </div>
       ),
@@ -225,10 +227,12 @@ export function PaymentPage() {
         title="Penerimaan Kas"
         description={`Uang masuk dari ${outletLabel()}. Setiap penerimaan dialokasikan ke tagihan tertentu — satu transfer boleh melunasi beberapa tagihan sekaligus.`}
         actions={
-          <Button onClick={() => setRecording(true)}>
-            <Plus className="h-3.5 w-3.5" />
-            Catat penerimaan
-          </Button>
+          <CanAccess permission={PERMISSIONS.PAYMENTS_CREATE}>
+            <Button onClick={() => setRecording(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              Catat penerimaan
+            </Button>
+          </CanAccess>
         }
         meta={
           <span className="text-xs text-ink-muted">

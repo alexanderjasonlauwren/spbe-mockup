@@ -2,7 +2,7 @@ import { scopeKey } from "@/mocks/scope";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Pencil, Plus, Star, Trash2 } from "lucide-react";
-import { deleteBankAccount, getBankAccounts, saveBankAccount } from "@/features/system/api/systemApi";
+import { deleteBankAccount, getBankAccounts, saveBankAccount } from "@/features/bankaccounts/api/bankAccountApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { Panel, PanelBody, PanelHeader, Skeleton } from "@/components/common/Panel";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";

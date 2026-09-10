@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { usesApi } from "@/lib/dataSource";
 import { formatNumber, formatPercentId, formatRupiah, formatRupiahShort } from "@/lib/format";
 import { supplierLabel, unitLabel } from "@/lib/lexicon";
 
@@ -108,9 +109,11 @@ export function ProductListPage() {
       render: (row) => (
         <>
           <span className="data block text-ink">{formatRupiah(row.hargaJual)}</span>
-          <span className="data block text-2xs text-ink-muted">
-            beli {formatRupiah(row.hargaBeli)}
-          </span>
+          {row.stokTersedia && (
+            <span className="data block text-2xs text-ink-muted">
+              beli {formatRupiah(row.hargaBeli)}
+            </span>
+          )}
         </>
       ),
       sortValue: (row) => row.hargaJual,
@@ -119,36 +122,44 @@ export function ProductListPage() {
       key: "margin",
       header: "Margin",
       align: "right",
-      render: (row) => (
-        <>
-          <span className="data block text-ink">{formatRupiah(row.margin)}</span>
-          <span className="data block text-2xs text-ink-muted">
-            {formatPercentId(row.marginPersen, 1)}
-          </span>
-        </>
-      ),
+      render: (row) =>
+        row.stokTersedia ? (
+          <>
+            <span className="data block text-ink">{formatRupiah(row.margin)}</span>
+            <span className="data block text-2xs text-ink-muted">
+              {formatPercentId(row.marginPersen, 1)}
+            </span>
+          </>
+        ) : (
+          <span className="text-2xs text-ink-muted">Harga beli belum tersedia</span>
+        ),
       sortValue: (row) => row.marginPersen,
     },
     {
       key: "stok",
       header: "Stok gudang",
       width: "14rem",
-      render: (row) => (
-        <div className="min-w-[9rem]">
-          <div className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">
-            <span className="data text-ink">{formatNumber(row.stok)}</span>
-            <span className="data text-ink-muted">
-              min {formatNumber(row.stokMinimum)}
-            </span>
+      render: (row) =>
+        row.stokTersedia ? (
+          <div className="min-w-[9rem]">
+            <div className="mb-1.5 flex items-baseline justify-between gap-2 text-xs">
+              <span className="data text-ink">{formatNumber(row.stok)}</span>
+              <span className="data text-ink-muted">
+                min {formatNumber(row.stokMinimum)}
+              </span>
+            </div>
+            <Meter
+              value={row.stok}
+              max={Math.max(row.stokMinimum * 2, row.stok, 1)}
+              tone={row.stokRendah ? "rust" : "pine"}
+              label={`Stok ${row.nama}`}
+            />
           </div>
-          <Meter
-            value={row.stok}
-            max={Math.max(row.stokMinimum * 2, row.stok, 1)}
-            tone={row.stokRendah ? "rust" : "pine"}
-            label={`Stok ${row.nama}`}
-          />
-        </div>
-      ),
+        ) : (
+          <span className="text-2xs text-ink-muted">
+            Belum tersedia dari API — min {formatNumber(row.stokMinimum)}
+          </span>
+        ),
       sortValue: (row) => row.stok,
     },
     {
@@ -158,12 +169,12 @@ export function ProductListPage() {
       render: (row) =>
         !row.aktif ? (
           <StatusBadge variant="draft" label="Nonaktif" />
-        ) : row.stokRendah ? (
+        ) : row.stokTersedia && row.stokRendah ? (
           <StatusBadge variant="danger" label="Stok rendah" />
         ) : (
           <StatusBadge variant="success" label="Tersedia" />
         ),
-      sortValue: (row) => (row.aktif ? (row.stokRendah ? 1 : 0) : 2),
+      sortValue: (row) => (row.aktif ? (row.stokTersedia && row.stokRendah ? 1 : 0) : 2),
     },
     {
       key: "aksi",
@@ -172,17 +183,19 @@ export function ProductListPage() {
       width: "1%",
       render: (row) => (
         <div className="flex items-center justify-end gap-1">
-          <Button
-            variant="outline"
-            size="xs"
-            onClick={() => {
-              setDelta(0);
-              setAlasan("");
-              setAdjusting(row);
-            }}
-          >
-            Sesuaikan stok
-          </Button>
+          {row.stokTersedia && (
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => {
+                setDelta(0);
+                setAlasan("");
+                setAdjusting(row);
+              }}
+            >
+              Sesuaikan stok
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon-xs"
@@ -236,16 +249,20 @@ export function ProductListPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Produk terdaftar" value={formatNumber(s?.total ?? 0)} />
         <Stat label="Aktif dijual" value={formatNumber(s?.aktif ?? 0)} tone="pine" />
-        <Stat
-          label="Di bawah stok minimum"
-          value={formatNumber(s?.stokRendah ?? 0)}
-          tone={s && s.stokRendah > 0 ? "rust" : undefined}
-        />
-        <Stat
-          label="Nilai stok"
-          value={formatRupiahShort(s?.nilaiStok ?? 0)}
-          hint="Dihitung dari harga beli"
-        />
+        {s?.stokTersedia !== false && (
+          <>
+            <Stat
+              label="Di bawah stok minimum"
+              value={formatNumber(s?.stokRendah ?? 0)}
+              tone={s && s.stokRendah > 0 ? "rust" : undefined}
+            />
+            <Stat
+              label="Nilai stok"
+              value={formatRupiahShort(s?.nilaiStok ?? 0)}
+              hint="Dihitung dari harga beli"
+            />
+          </>
+        )}
       </div>
 
       <Panel>
@@ -266,7 +283,11 @@ export function ProductListPage() {
                 options={[
                   { value: "Semua" as const, label: "Semua" },
                   { value: "Aktif" as const, label: "Aktif" },
-                  { value: "Stok rendah" as const, label: "Stok rendah" },
+                  // Stock has no service behind it in this build — see
+                  // productApi.http.ts's own header.
+                  ...(usesApi
+                    ? []
+                    : [{ value: "Stok rendah" as const, label: "Stok rendah" }]),
                 ]}
               />
             </div>

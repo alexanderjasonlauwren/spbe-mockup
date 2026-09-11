@@ -524,3 +524,19 @@ describe("the suggestion", () => {
     expect(suggestion.dasar).toMatch(/12,5 km/);
   });
 });
+
+describe("addApprovedOrders", () => {
+  it("calls orderApi's own schedule request, not a second copy of it", async () => {
+    getOne.mockResolvedValue({ version: 5 });
+    send.mockResolvedValue(undefined);
+
+    const { addApprovedOrders } = await import("./distributionApi.http");
+    const count = await addApprovedOrders(PLAN_ID, [OUTLET_A]);
+
+    expect(count).toBe(1);
+    const [method, path, body] = send.mock.calls[0];
+    expect(method).toBe("post");
+    expect(path).toBe(`/orders/${OUTLET_A}/schedule`);
+    expect(body).toEqual({ version: 5, distribution_order_id: PLAN_ID });
+  });
+});

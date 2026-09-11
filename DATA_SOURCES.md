@@ -59,8 +59,9 @@ unbuilt work.
 | --- | --- | --- |
 | auth | mock + http | — |
 | bankaccounts | mock + http | — |
-| distribution | mock + http | scheduling approved orders onto a plan (no `core.orders` module — see D3 plan's B-Step 2); the printed route sheet (no per-stop address/time on the wire) |
+| distribution | mock + http | the printed route sheet only (no per-stop address/time on the wire). Scheduling approved orders onto a plan is real as of D3 B-Step 2 — `addApprovedOrders` calls `orderApi.http.ts`'s own `scheduleOneOrder`, not a second copy of the request. |
 | drivers | mock + http | a driver's today-only stop list (`getDriverSchedule`; the dispatch board is keyed by plan, not by driver) |
+| orders | mock + http | `sisaKuotaOutlet` (an outlet's remaining monthly quota is not on `OrderResponse`; a real number would cost a lookup per row on a list screen — renders as unbounded rather than 0, which would wrongly flag every order as over quota) and `kecamatan` (the outlet's district; belongs to the outlet module, same "arrives as unknown" choice `distributionApi.http.ts` makes for a stop's own decoration). `approveOrder`'s `catatan` parameter has nowhere to go server-side (`ApproveRequest` carries no note field) and is silently dropped — no current caller passes one. `addOrdersToPlan` is no longer atomic the way the mock's `scheduleOrders` is: the real endpoint decides one order at a time, so a batch that fails partway through leaves the earlier ones already scheduled; the thrown error says how many. |
 | finance | mock + http | an invoice row's surat jalan number (`InvoiceResponse` carries only the delivery's UUID); which invoices a payment was allocated to (no route returns allocation lines, only the total — see `financeApi.http.ts`'s own header); the credit note reason code (the dialog collects free text, the backend wants one of five fixed codes, so every note goes in as `billing_correction`); the trial balance's "Dari" date (the ledger's own trial balance is lifetime-to-date as of one date, not a range) |
 | geofence | mock + http | — |
 | monitoring | mock + http | — |
@@ -72,7 +73,7 @@ unbuilt work.
 | tenancy | mock + http | — |
 | users | mock + http | export and audit trail (no backend endpoint yet) |
 | vehicles | mock + http | — |
-| dashboard, notification, ocr, orders, reports, system | mock only | no backend endpoint yet — no contract/mock/http split |
+| dashboard, notification, ocr, reports, system | mock only | no backend endpoint yet — no contract/mock/http split |
 | transactions | mock only | no single backend resource behind it — every row joins a delivery, its invoice, its driver and its schedule agreement, none of which the service returns pre-joined. Building this against the API is a real design task (which entity to page by, how the other three get resolved without an N+1 request per row), not a copy of the vehicles pattern, and is deliberately left for a dedicated pass rather than a shaky partial join done in passing here. |
 
 **A bug found live against the API build, fixed 2026-09-10:** `SettingsPage`

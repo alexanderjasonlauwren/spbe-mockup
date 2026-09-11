@@ -31,6 +31,7 @@
  * the run rather than of one line.
  */
 import { getList, getOne, send } from "@/lib/api";
+import { scheduleOneOrder } from "@/features/orders/api/orderApi.http";
 import type {
   AssignmentSuggestion,
   DistributionPlan,
@@ -388,6 +389,30 @@ async function confirmPlan(planId: string, version: number): Promise<Distributio
 
 async function cancelDistributionPlan(planId: string, version: number): Promise<void> {
   await send("post", `/distribution/orders/${planId}/cancel`, { version });
+}
+
+/**
+ * Schedules approved orders onto a plan, via `orderApi`'s own real request --
+ * not a second copy of it. See `orderApi.http.ts`'s own header for what
+ * `/orders/:id/schedule` does and does not do (no plan line is added; a
+ * planner still adds it here, through this same feature's own row editor)
+ * and for why a batch that fails partway through is no longer atomic the way
+ * the mock's `scheduleOrders` is.
+ */
+export async function addApprovedOrders(planId: string, orderIds: string[]): Promise<number> {
+  let scheduled = 0;
+  for (const id of orderIds) {
+    try {
+      await scheduleOneOrder(id, planId);
+      scheduled += 1;
+    } catch (error) {
+      throw new Error(
+        `${scheduled} dari ${orderIds.length} pesanan terjadwalkan sebelum gagal: ` +
+          `${(error as Error).message}`,
+      );
+    }
+  }
+  return scheduled;
 }
 
 /* ── option lists for the planner ──────────────────────────────────────── */

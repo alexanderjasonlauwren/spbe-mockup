@@ -10,7 +10,10 @@ import {
   distributionApiMock,
   printRouteSheet as printRouteSheetMock,
 } from "./distributionApi.mock";
-import { distributionApiHttp } from "./distributionApi.http";
+import {
+  addApprovedOrders as addApprovedOrdersHttp,
+  distributionApiHttp,
+} from "./distributionApi.http";
 import type { DistributionApi } from "./contract";
 
 const api: DistributionApi = pick(distributionApiMock, distributionApiHttp);
@@ -32,17 +35,12 @@ export const suggestAssignment = api.suggestAssignment.bind(api);
 export const applyAssignment = api.applyAssignment.bind(api);
 
 /**
- * Scheduling approved orders onto a plan is mock-only, and says so.
- *
- * The service has no orders module yet — `core.orders` exists in the schema and
- * nothing serves it — so there is no HTTP implementation to pick. Routing it
- * through `assertMockAllowed` means the API build gets that sentence on the
- * screen that tried, rather than a list of invented orders beside real ones.
+ * Scheduling approved orders onto a plan, real now that `core.orders` has a
+ * module to serve it (D3 B-Step 2). `addApprovedOrdersHttp` is not a second
+ * implementation of this -- it calls straight into `orderApi.http.ts`'s own
+ * `scheduleOneOrder`, so there is exactly one place this request is made.
  */
-export async function addApprovedOrders(planId: string, orderIds: string[]) {
-  assertMockAllowed("distribution.addApprovedOrders");
-  return addApprovedOrdersMock(planId, orderIds);
-}
+export const addApprovedOrders = pick(addApprovedOrdersMock, addApprovedOrdersHttp);
 
 /**
  * The route sheet is mock-only for a narrower reason: it prints an address and

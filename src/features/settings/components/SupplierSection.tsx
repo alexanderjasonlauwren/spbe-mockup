@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button";
 import { formatNumber } from "@/lib/format";
 import { supplierLabel } from "@/lib/lexicon";
+import { usesApi } from "@/lib/dataSource";
 
 /* ── supply sources ────────────────────────────────────────────────────── */
 
@@ -67,7 +68,7 @@ export function SupplierSection() {
       render: (row) => (
         <>
           <span className="block font-medium text-ink">{row.nama}</span>
-          <span className="data block text-2xs text-ink-muted">{row.kode}</span>
+          {row.kode && <span className="data block text-2xs text-ink-muted">{row.kode}</span>}
         </>
       ),
       sortValue: (row) => row.nama,
@@ -114,33 +115,41 @@ export function SupplierSection() {
         />
       ),
     },
-    {
-      key: "aksi",
-      header: "",
-      align: "right",
-      width: "1%",
-      render: (row) => (
-        <div className="flex items-center justify-end gap-1">
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={`Ubah ${row.nama}`}
-            onClick={() => open({ ...row })}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={`Hapus ${row.nama}`}
-            onClick={() => setPendingDelete(row)}
-            className="hover:bg-rust-soft hover:text-rust-ink"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      ),
-    },
+    // No edit or delete column in the API build: a name here is a distinct
+    // value off core.schedule_agreements.supplier_name, not a row in a
+    // master table -- there is nothing for either action to act on. See
+    // systemApi.http.ts's own header.
+    ...(usesApi
+      ? []
+      : [
+          {
+            key: "aksi",
+            header: "",
+            align: "right" as const,
+            width: "1%",
+            render: (row: SupplierView) => (
+              <div className="flex items-center justify-end gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Ubah ${row.nama}`}
+                  onClick={() => open({ ...row })}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Hapus ${row.nama}`}
+                  onClick={() => setPendingDelete(row)}
+                  className="hover:bg-rust-soft hover:text-rust-ink"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ),
+          },
+        ]),
   ];
 
   return (
@@ -148,12 +157,18 @@ export function SupplierSection() {
       <Panel>
         <PanelHeader
           title={`Mitra ${supplierLabel()}`}
-          hint={`Sumber kuota. Setiap Schedule Agreement diterbitkan oleh salah satu ${supplierLabel()} di sini.`}
+          hint={
+            usesApi
+              ? `Nama ${supplierLabel()} berbeda yang tercatat pada Schedule Agreement. Tidak ada data induk terpisah untuk ditambah atau dihapus di sini.`
+              : `Sumber kuota. Setiap Schedule Agreement diterbitkan oleh salah satu ${supplierLabel()} di sini.`
+          }
           actions={
-            <Button size="sm" onClick={() => open(EMPTY_SUPPLIER)}>
-              <Plus className="h-3.5 w-3.5" />
-              Tambah {supplierLabel()}
-            </Button>
+            !usesApi && (
+              <Button size="sm" onClick={() => open(EMPTY_SUPPLIER)}>
+                <Plus className="h-3.5 w-3.5" />
+                Tambah {supplierLabel()}
+              </Button>
+            )
           }
         />
         <DataTable
@@ -164,11 +179,17 @@ export function SupplierSection() {
           spineFor={(row) => (row.aktif ? "text-pine" : "text-draft")}
           emptyIcon={Factory}
           emptyMessage={`Belum ada mitra ${supplierLabel()}`}
-          emptyDescription={`Tambahkan ${supplierLabel()} agar dapat dipilih saat mengunggah Schedule Agreement.`}
+          emptyDescription={
+            usesApi
+              ? `Muncul di sini begitu ada Schedule Agreement yang menyebutkan ${supplierLabel()}.`
+              : `Tambahkan ${supplierLabel()} agar dapat dipilih saat mengunggah Schedule Agreement.`
+          }
           emptyAction={
-            <Button size="sm" onClick={() => open(EMPTY_SUPPLIER)}>
-              Tambah {supplierLabel()}
-            </Button>
+            !usesApi && (
+              <Button size="sm" onClick={() => open(EMPTY_SUPPLIER)}>
+                Tambah {supplierLabel()}
+              </Button>
+            )
           }
           dense
         />

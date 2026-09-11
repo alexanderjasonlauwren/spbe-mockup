@@ -71,10 +71,11 @@ unbuilt work.
 | sa (schedule agreements) | mock + http | — |
 | settings | mock + http | exporting, resetting and advancing the simulated day (properties of the demo database, not a tenant) |
 | sopir | mock + http | — |
+| system | mock + http | suppliers are not a master table (per D3 plan's decision 5): the list is derived from `/schedule-agreements`' own `supplier_name`, with no code/address/contact fields and no create/edit/delete (the console hides those actions rather than offering ones that would fail). Numbering prefixes (`penomoran`) have no backend column at all — `core.document_sequences` fixes them at branch-creation time — so the panel shows the real, hard-coded prefixes as disabled fields rather than an editable form that saves nowhere. |
 | tenancy | mock + http | — |
 | users | mock + http | export and audit trail (no backend endpoint yet) |
 | vehicles | mock + http | — |
-| dashboard, ocr, reports, system | mock only | no backend endpoint yet — no contract/mock/http split |
+| dashboard, ocr, reports | mock only | no backend endpoint yet — no contract/mock/http split |
 | transactions | mock only | no single backend resource behind it — every row joins a delivery, its invoice, its driver and its schedule agreement, none of which the service returns pre-joined. Building this against the API is a real design task (which entity to page by, how the other three get resolved without an N+1 request per row), not a copy of the vehicles pattern, and is deliberately left for a dedicated pass rather than a shaky partial join done in passing here. |
 
 **A bug found live against the API build, fixed 2026-09-10:** `SettingsPage`

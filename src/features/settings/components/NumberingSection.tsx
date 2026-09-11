@@ -8,6 +8,7 @@ import { Field, TextInput, Toggle } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
 import type { NumberingEntity } from "@/mocks/types";
 import { outletLabel } from "@/lib/lexicon";
+import { usesApi } from "@/lib/dataSource";
 
 /* ── numbering ─────────────────────────────────────────────────────────── */
 
@@ -24,7 +25,10 @@ export function NumberingSection() {
   });
 
   const dirty =
-    !!form && !!config.data && JSON.stringify(form) !== JSON.stringify(config.data.penomoran);
+    !usesApi &&
+    !!form &&
+    !!config.data &&
+    JSON.stringify(form) !== JSON.stringify(config.data.penomoran);
 
   if (!form) return <Skeleton className="h-64 w-full" />;
 
@@ -89,6 +93,7 @@ export function NumberingSection() {
                 id={`num-${f.key}`}
                 mono
                 maxLength={6}
+                disabled={usesApi}
                 value={String(form[f.key])}
                 onChange={(e) => setForm({ ...form, [f.key]: e.target.value.toUpperCase() })}
               />
@@ -101,14 +106,22 @@ export function NumberingSection() {
             label="Sertakan tanggal pada nomor"
             description="Nomor urut dihitung ulang setiap hari, misalnya SJ-20260804-01. Tanpa ini, nomor berjalan terus."
             checked={form.sertakanTanggal}
+            disabled={usesApi}
             onChange={(sertakanTanggal) => setForm({ ...form, sertakanTanggal })}
           />
         </div>
 
-        <p className="rounded-md border border-line bg-panel-sunk px-4 py-3 text-xs leading-relaxed text-ink-muted">
-          Perubahan berlaku untuk dokumen yang terbit setelah disimpan. Nomor yang
-          sudah tercetak tidak ikut berubah, sehingga arsip lama tetap cocok.
-        </p>
+        {usesApi ? (
+          <p className="rounded-md border border-line bg-panel-sunk px-4 py-3 text-xs leading-relaxed text-ink-muted">
+            Awalan ditetapkan sistem saat cabang dibuat dan tidak dapat diubah dari
+            sini — nilai di atas adalah yang sesungguhnya dipakai.
+          </p>
+        ) : (
+          <p className="rounded-md border border-line bg-panel-sunk px-4 py-3 text-xs leading-relaxed text-ink-muted">
+            Perubahan berlaku untuk dokumen yang terbit setelah disimpan. Nomor yang
+            sudah tercetak tidak ikut berubah, sehingga arsip lama tetap cocok.
+          </p>
+        )}
       </PanelBody>
     </Panel>
   );

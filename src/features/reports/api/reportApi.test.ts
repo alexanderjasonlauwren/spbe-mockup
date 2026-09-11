@@ -88,19 +88,20 @@ function mockLists(opts: {
 
 describe("getReportSummary", () => {
   it("derives every figure from dispatched/delivered_qty and the wire's own statuses", async () => {
+    const window = resolveRange("7h");
     mockLists({
       deliveries: [
         delivery({ delivery_status: "delivered" }),
         delivery({ delivery_status: "pending", dispatched_qty: 50, delivered_qty: 0 }),
       ],
       payments: [
-        { outlet_id: OUTLET_ID, amount: 500_000, payment_date: "2026-09-05", payment_status: "verified" },
-        { outlet_id: OUTLET_ID, amount: 200_000, payment_date: "2026-09-05", payment_status: "rejected" },
+        { outlet_id: OUTLET_ID, amount: 500_000, payment_date: window.to, payment_status: "verified" },
+        { outlet_id: OUTLET_ID, amount: 200_000, payment_date: window.to, payment_status: "rejected" },
         // Outside the window -- must not be counted.
         { outlet_id: OUTLET_ID, amount: 999_999, payment_date: "2020-01-01", payment_status: "verified" },
       ],
       invoices: [
-        { outlet_id: OUTLET_ID, total_amount: 100_000, outstanding_amount: 40_000, issued_at: "2026-09-05" },
+        { outlet_id: OUTLET_ID, total_amount: 100_000, outstanding_amount: 40_000, issued_at: window.to },
         { outlet_id: OUTLET_ID, total_amount: 1, outstanding_amount: 1, issued_at: "2020-01-01" },
       ],
     });
@@ -176,11 +177,12 @@ describe("getDailySeries", () => {
 
 describe("getTopOutlet", () => {
   it("sums delivered_qty and invoice totals per outlet, joined to outlet names", async () => {
+    const window = resolveRange("7h");
     mockLists({
       deliveries: [delivery(), delivery({ delivered_qty: 10 })],
       payments: [],
       invoices: [
-        { outlet_id: OUTLET_ID, total_amount: 250_000, outstanding_amount: 0, issued_at: "2026-09-05" },
+        { outlet_id: OUTLET_ID, total_amount: 250_000, outstanding_amount: 0, issued_at: window.to },
       ],
     });
 

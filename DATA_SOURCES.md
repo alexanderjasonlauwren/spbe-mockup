@@ -65,6 +65,7 @@ unbuilt work.
 | finance | mock + http | an invoice row's surat jalan number (`InvoiceResponse` carries only the delivery's UUID); which invoices a payment was allocated to (no route returns allocation lines, only the total — see `financeApi.http.ts`'s own header); the credit note reason code (the dialog collects free text, the backend wants one of five fixed codes, so every note goes in as `billing_correction`); the trial balance's "Dari" date (the ledger's own trial balance is lifetime-to-date as of one date, not a range) |
 | geofence | mock + http | — |
 | monitoring | mock + http | — |
+| notification | mock + http | per-rule `penerima` (who receives it) and `kanal` (channel) — `notify.reminder_settings` has one tenant-wide `channels` array and no recipients concept at all; reads as an empty/`["app"]` placeholder and is silently not persisted on save. `planUnconfirmed` and `orderPending` have no column in `notify.reminder_settings` at all — always read disabled, saving them changes nothing. `whatsapp`/`email` sender configuration and `sendTestNotification` have no backend (no send infrastructure exists; WhatsApp is explicitly out of scope for D3). A notification's `href` is always absent — `subject_id` on the wire is an internal numeric id, not a UUID any route can link to. |
 | outlet | mock + http | an outlet's recent surat jalan (`getOutletHistory`; not exposed by the service) |
 | products | mock + http | cost price and stock (quantity, low-stock flag, stock value) have no service behind them yet — `internal/controller/product` is a catalogue module only; see `productApi.http.ts`'s own header. `ProductView.stokTersedia` flags this so the console hides the panels rather than showing zero as real. |
 | sa (schedule agreements) | mock + http | — |
@@ -73,7 +74,7 @@ unbuilt work.
 | tenancy | mock + http | — |
 | users | mock + http | export and audit trail (no backend endpoint yet) |
 | vehicles | mock + http | — |
-| dashboard, notification, ocr, reports, system | mock only | no backend endpoint yet — no contract/mock/http split |
+| dashboard, ocr, reports, system | mock only | no backend endpoint yet — no contract/mock/http split |
 | transactions | mock only | no single backend resource behind it — every row joins a delivery, its invoice, its driver and its schedule agreement, none of which the service returns pre-joined. Building this against the API is a real design task (which entity to page by, how the other three get resolved without an N+1 request per row), not a copy of the vehicles pattern, and is deliberately left for a dedicated pass rather than a shaky partial join done in passing here. |
 
 **A bug found live against the API build, fixed 2026-09-10:** `SettingsPage`

@@ -68,6 +68,7 @@ unbuilt work.
 | notification | mock + http | per-rule `penerima` (who receives it) and `kanal` (channel) — `notify.reminder_settings` has one tenant-wide `channels` array and no recipients concept at all; reads as an empty/`["app"]` placeholder and is silently not persisted on save. `planUnconfirmed` and `orderPending` have no column in `notify.reminder_settings` at all — always read disabled, saving them changes nothing. `whatsapp`/`email` sender configuration and `sendTestNotification` have no backend (no send infrastructure exists; WhatsApp is explicitly out of scope for D3). A notification's `href` is always absent — `subject_id` on the wire is an internal numeric id, not a UUID any route can link to. |
 | outlet | mock + http | an outlet's recent surat jalan (`getOutletHistory`; not exposed by the service) |
 | products | mock + http | cost price and stock (quantity, low-stock flag, stock value) have no service behind them yet — `internal/controller/product` is a catalogue module only; see `productApi.http.ts`'s own header. `ProductView.stokTersedia` flags this so the console hides the panels rather than showing zero as real. |
+| reports | mock + http | required a new backend endpoint (`GET /deliveries` — `core.deliveries` had no general list before D3 B-Step 5) alongside the adapter split; see `reportApi.http.ts`'s own header. `suratJalanSelesai`/`suratJalanTertunda` map onto the real 6-state `delivery_status` lifecycle (`delivered` / `pending`+`on_route`) rather than the mock's binary one — `partial`, `failed` and `cancelled` count toward neither, so the two no longer have to sum to `suratJalan`. `/payments` and `/invoices` have no date-range filter server-side, so both are fetched once at `MaxPageSize` (100, newest first) and the window is applied client-side, same limitation `financeApi.http.ts`'s own aging report already has; `/deliveries` itself is capped the same way for a range with more than 100 surat jalan. `namaPerusahaan`/`nomorAgen` on the printed recap read "—", the same placeholder `settingsApi`'s `DEFAULT_SETTINGS` already uses since neither field is owned by any endpoint. |
 | sa (schedule agreements) | mock + http | — |
 | settings | mock + http | exporting, resetting and advancing the simulated day (properties of the demo database, not a tenant) |
 | sopir | mock + http | — |
@@ -75,7 +76,7 @@ unbuilt work.
 | tenancy | mock + http | — |
 | users | mock + http | export and audit trail (no backend endpoint yet) |
 | vehicles | mock + http | — |
-| dashboard, ocr, reports | mock only | no backend endpoint yet — no contract/mock/http split |
+| dashboard, ocr | mock only | no backend endpoint yet — no contract/mock/http split |
 | transactions | mock only | no single backend resource behind it — every row joins a delivery, its invoice, its driver and its schedule agreement, none of which the service returns pre-joined. Building this against the API is a real design task (which entity to page by, how the other three get resolved without an N+1 request per row), not a copy of the vehicles pattern, and is deliberately left for a dedicated pass rather than a shaky partial join done in passing here. |
 
 **A bug found live against the API build, fixed 2026-09-10:** `SettingsPage`

@@ -126,7 +126,7 @@ const router = createBrowserRouter([
         </RequirePermission>
       ) },
       { path: "transactions", element: (
-        <RequirePermission permission={PERMISSIONS.INVOICES_VIEW}>
+        <RequirePermission permission={PERMISSIONS.TRANSACTIONS_VIEW}>
           <TransactionListPage />
         </RequirePermission>
       ) },

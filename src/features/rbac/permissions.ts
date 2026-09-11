@@ -61,13 +61,21 @@ export const PERMISSIONS = {
   PAYMENTS_CREATE: "finance.create.payments",
   PAYMENTS_VERIFY: "finance.verify.payments",
 
-  // Invoices and the general ledger. Reports and the transaction recap read
-  // invoices, not journals -- ops_manager holds these two and nothing else in
-  // the finance group, and must see both pages. The ledger reads the journal
-  // itself, which only finance_officer and tenant_admin hold.
+  // Invoices and the general ledger. Reports composes /deliveries,
+  // /payments and /invoices with no dedicated permission of its own (the
+  // catalogue's own header names why: a permission guarding nothing is
+  // worse than a missing one), and is gated on this one as representative
+  // -- ops_manager holds it and must see the page. The ledger reads the
+  // journal itself, which only finance_officer and tenant_admin hold.
   INVOICES_VIEW: "finance.read.invoices",
   INVOICES_EXPORT: "finance.export.invoices",
   JOURNALS_VIEW: "finance.read.journals",
+
+  // The reconciliation ledger (Rekap Transaksi) is its own real resource,
+  // backed by GET /transactions -- unlike Reports, this one has a single
+  // endpoint and so a single, dedicated permission to gate on.
+  TRANSACTIONS_VIEW: "finance.read.transactions",
+  TRANSACTIONS_EXPORT: "finance.export.transactions",
   /**
    * The chart of accounts itself, distinct from reading the journals posted
    * against it. Confirmed live: finance_officer holds finance.read.journals

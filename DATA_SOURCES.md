@@ -74,10 +74,10 @@ unbuilt work.
 | sopir | mock + http | — |
 | system | mock + http | suppliers are not a master table (per D3 plan's decision 5): the list is derived from `/schedule-agreements`' own `supplier_name`, with no code/address/contact fields and no create/edit/delete (the console hides those actions rather than offering ones that would fail). Numbering prefixes (`penomoran`) have no backend column at all — `core.document_sequences` fixes them at branch-creation time — so the panel shows the real, hard-coded prefixes as disabled fields rather than an editable form that saves nowhere. |
 | tenancy | mock + http | — |
+| transactions | mock + http | required a new backend endpoint (`GET /transactions`, joining a delivery to its plan, schedule agreement, invoice and funding payment in one query — `core.deliveries` had no such pre-joined read before D3 B-Step 6) alongside the adapter split; see `transactionApi.http.ts`'s own header. `statusKirim` and `statusBayar` (and `kecamatan` and free-text search) have no `eq`-only server-side filter that expresses the console's coarser buckets, so all four are applied client-side over one fetched page of up to 100 rows — same trade `getInvoices` already makes for its own status/bucket filters. `jamRencana` is always empty (no planned-time-of-day field exists anywhere in the schema, the same gap `monitoringApi.http.ts` already carries); an unbilled delivery's `nominal` reads 0 rather than the mock's catalogue-price estimate. |
 | users | mock + http | export and audit trail (no backend endpoint yet) |
 | vehicles | mock + http | — |
 | dashboard, ocr | mock only | no backend endpoint yet — no contract/mock/http split |
-| transactions | mock only | no single backend resource behind it — every row joins a delivery, its invoice, its driver and its schedule agreement, none of which the service returns pre-joined. Building this against the API is a real design task (which entity to page by, how the other three get resolved without an N+1 request per row), not a copy of the vehicles pattern, and is deliberately left for a dedicated pass rather than a shaky partial join done in passing here. |
 
 **A bug found live against the API build, fixed 2026-09-10:** `SettingsPage`
 could hang on its loading skeleton forever with no visible error. Root

@@ -14,6 +14,8 @@ import {
   type TransactionRow,
 } from "@/features/transactions/api/transactionApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
+import { CanAccess } from "@/features/rbac/components/CanAccess";
+import { PERMISSIONS } from "@/features/rbac/permissions";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelHeader } from "@/components/common/Panel";
 import { DataTable, type Column } from "@/components/common/DataTable";
@@ -252,7 +254,7 @@ export function TransactionListPage() {
         title="Rekap Transaksi"
         description="Seluruh baris transaksi — surat jalan beserta tagihannya, ditambah kwitansi yang masuk lewat pindaian. Saring, lalu unduh untuk diolah di Excel."
         actions={
-          <>
+          <CanAccess permission={PERMISSIONS.TRANSACTIONS_EXPORT}>
             <Button
               variant="outline"
               onClick={() => csvMutation.mutate(undefined as never)}
@@ -268,7 +270,7 @@ export function TransactionListPage() {
               <FileSpreadsheet className="h-3.5 w-3.5" />
               Unduh Excel
             </Button>
-          </>
+          </CanAccess>
         }
       />
 

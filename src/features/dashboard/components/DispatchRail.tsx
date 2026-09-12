@@ -16,6 +16,14 @@ import { outletLabelTitle } from "@/lib/lexicon";
  * vehicles, so the dashboard leads with the timeline rather than a row of
  * totals. A stop's position is its planned window; the "now" marker makes late
  * work obvious without anyone reading a status column.
+ *
+ * `data.hasSchedule` is false against the real API: no field for a stop's
+ * planned time of day exists anywhere in the schema (`jamRencana` reads
+ * empty everywhere else on this build for the same reason). The rail still
+ * positions stops left-to-right by their real visiting order in that case
+ * -- it just stops drawing a clock ruler, a "now" line and a late verdict
+ * over a position that isn't a real time, rather than presenting an
+ * invented one as real.
  */
 export function DispatchRail({
   data,
@@ -66,15 +74,19 @@ export function DispatchRail({
     );
   }
 
-  const { dayStart, dayEnd, lanes } = data;
+  const { dayStart, dayEnd, lanes, hasSchedule } = data;
   const span = Math.max(60, dayEnd - dayStart);
   const pct = (minute: number) =>
     ((Math.min(dayEnd, Math.max(dayStart, minute)) - dayStart) / span) * 100;
 
   const hours: number[] = [];
-  for (let h = Math.ceil(dayStart / 60) * 60; h <= dayEnd; h += 120) hours.push(h);
+  if (hasSchedule) {
+    for (let h = Math.ceil(dayStart / 60) * 60; h <= dayEnd; h += 120) hours.push(h);
+  }
 
-  const nowVisible = nowMinute >= dayStart && nowMinute <= dayEnd;
+  // The "now" marker and the late-detection it feeds both mean nothing
+  // against a layout position that isn't a real clock time.
+  const nowVisible = hasSchedule && nowMinute >= dayStart && nowMinute <= dayEnd;
 
   return (
     <div className="overflow-x-auto">
@@ -88,6 +100,9 @@ export function DispatchRail({
             <span className="label text-2xs text-ink-muted">Armada</span>
           </div>
           <div className="relative flex-1 py-2 pr-5">
+            {!hasSchedule && (
+              <span className="text-2xs text-ink-muted">Urutan kunjungan →</span>
+            )}
             {hours.map((h) => {
               const at = pct(h);
               return (
@@ -156,6 +171,7 @@ export function DispatchRail({
                       left={pct(stop.startMinute)}
                       width={Math.max(4, pct(stop.endMinute) - pct(stop.startMinute))}
                       nowMinute={nowMinute}
+                      hasSchedule={hasSchedule}
                       isHovered={hovered === stop.id}
                       onHover={setHovered}
                     />
@@ -187,6 +203,7 @@ function StopBlock({
   left,
   width,
   nowMinute,
+  hasSchedule,
   isHovered,
   onHover,
 }: {
@@ -194,12 +211,14 @@ function StopBlock({
   left: number;
   width: number;
   nowMinute: number;
+  hasSchedule: boolean;
   isHovered: boolean;
   onHover: (id: string | null) => void;
 }) {
   // A queued stop whose window has already passed is running late — the one
-  // thing on this screen worth interrupting someone for.
-  const late = stop.stage === "Antrian" && nowMinute > stop.endMinute;
+  // thing on this screen worth interrupting someone for. Meaningless without
+  // a real window to have passed.
+  const late = hasSchedule && stop.stage === "Antrian" && nowMinute > stop.endMinute;
 
   const tone = late
     ? "bg-rust-soft text-rust-ink ring-1 ring-inset ring-rust"
@@ -249,12 +268,14 @@ function StopBlock({
           </p>
           <p className="text-xs text-ink-muted">Kec. {stop.kecamatan}</p>
           <dl className="mt-2 space-y-1 border-t border-line pt-2 text-xs">
-            <div className="flex justify-between gap-3">
-              <dt className="text-ink-muted">Jadwal</dt>
-              <dd className="data text-ink">
-                {minutesToClock(stop.startMinute)}–{minutesToClock(stop.endMinute)}
-              </dd>
-            </div>
+            {hasSchedule && (
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink-muted">Jadwal</dt>
+                <dd className="data text-ink">
+                  {minutesToClock(stop.startMinute)}–{minutesToClock(stop.endMinute)}
+                </dd>
+              </div>
+            )}
             <div className="flex justify-between gap-3">
               <dt className="text-ink-muted">Muatan</dt>
               <dd className="data text-ink">

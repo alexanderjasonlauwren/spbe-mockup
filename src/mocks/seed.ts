@@ -35,6 +35,7 @@ import type {
   SupplierEntity,
   ReceiptEntity,
   SAEntity,
+  OutletWarningEntity,
   SADailyTargetEntity,
   SettingsEntity,
   TenantSettingsEntity,
@@ -432,6 +433,44 @@ function seedTransportationClaims(deliveries: DeliveryEntity[]): TransportationC
       createdAt: handoverDate.toISOString(),
       updatedAt: (row.statusNote ? addDays(handoverDate, 2) : handoverDate).toISOString(),
     } satisfies TransportationClaimEntity;
+  });
+}
+
+/**
+ * A handful of Surat Peringatan (SP) rows — D3 A-Step 3. Rarely-used by
+ * design (the client's own flow document names this a manual, occasional
+ * entry, §9.1), so a couple of examples against real seeded outlets is
+ * enough; most outlets carry none.
+ */
+function seedOutletWarnings(outlets: OutletEntity[]): OutletWarningEntity[] {
+  const today = startOfToday();
+  if (outlets.length === 0) return [];
+
+  const rows: Array<{ outletIndex: number; offsetDays: number; reason: string; notes?: string }> = [
+    {
+      outletIndex: 0,
+      offsetDays: -40,
+      reason: "Keterlambatan pembayaran berulang",
+      notes: "Tunggakan lebih dari 30 hari, telah dikonfirmasi via telepon.",
+    },
+    {
+      outletIndex: Math.min(1, outlets.length - 1),
+      offsetDays: -15,
+      reason: "Volume penjualan di bawah target tiga bulan berturut-turut",
+    },
+  ];
+
+  return rows.map((row, i) => {
+    const issuedOn = addDays(today, row.offsetDays);
+    return {
+      ...branchFor(),
+      id: `spr-${String(i + 1).padStart(3, "0")}`,
+      outletId: outlets[row.outletIndex].id,
+      issuedOn: isoDate(issuedOn),
+      reason: row.reason,
+      notes: row.notes,
+      createdAt: issuedOn.toISOString(),
+    } satisfies OutletWarningEntity;
   });
 }
 
@@ -1514,6 +1553,7 @@ export function createSeedDatabase(): Database {
     // Filed by drivers in the browser, so the seeded day starts with none.
     deliveryEvents: [],
     transportationClaims: seedTransportationClaims(deliveries),
+    outletWarnings: seedOutletWarnings(outlets),
     payments,
     receipts,
     notifications,

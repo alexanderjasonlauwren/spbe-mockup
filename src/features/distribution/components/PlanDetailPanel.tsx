@@ -51,6 +51,14 @@ interface PlanDetailPanelProps {
   onPrint: () => void;
   isSaving: boolean;
   isConfirming: boolean;
+  /**
+   * Sends one confirmed trip out (D3 A-Step 2/3). Absent on a plan still
+   * being drafted — there is nothing to dispatch until the board is
+   * confirmed and a real trip exists to name.
+   */
+  onDispatchTrip?: (tripId: string, rows: PlanRow[]) => void;
+  /** The trip currently mid-dispatch, so only its own button shows pending. */
+  dispatchingTripId?: string | null;
 }
 
 /** A stop that has not been persisted yet gets a temporary id. */
@@ -76,6 +84,13 @@ interface TripGroup {
   /** Cylinders on this trip that no payment has arrived for. */
   berisiko: number;
   rows: PlanRow[];
+  /**
+   * The id `dispatchTrip` needs to send this run out — see `PlanRow.tripId`'s
+   * own doc comment. Every row on one trip carries the same value, so the
+   * first one answers for the group.
+   */
+  tripId: string | null;
+  tripStatus?: string;
 }
 
 /**
@@ -117,6 +132,8 @@ function groupIntoTrips(
         muatan: 0,
         berisiko: 0,
         rows: [],
+        tripId: row.tripId ?? null,
+        tripStatus: row.tripStatus,
       };
       byKey.set(key, group);
     }
@@ -152,6 +169,8 @@ export function PlanDetailPanel({
   onPrint,
   isSaving,
   isConfirming,
+  onDispatchTrip,
+  dispatchingTripId,
 }: PlanDetailPanelProps) {
   // Server state wins whenever the selected plan or its saved rows change.
   const [draft, setDraft] = useResettableState<PlanRow[]>([rows, plan?.id], () => rows);
@@ -593,6 +612,10 @@ export function PlanDetailPanel({
                     editable={editable}
                     vehicleOptions={vehicleOptions}
                     onVehicleChange={setTripVehicle}
+                    onDispatchTrip={onDispatchTrip}
+                    isDispatching={
+                      !!trip.tripId && trip.tripId === dispatchingTripId
+                    }
                   />
                   {trip.rows.map((row) => (
                     <StopRow
@@ -993,14 +1016,24 @@ function TripHeader({
   editable,
   vehicleOptions,
   onVehicleChange,
+  onDispatchTrip,
+  isDispatching,
 }: {
   trip: TripGroup;
   colSpan: number;
   editable: boolean;
   vehicleOptions: VehicleOption[];
   onVehicleChange: (tripKey: string, vehicleId: string) => void;
+  onDispatchTrip?: (tripId: string, rows: PlanRow[]) => void;
+  isDispatching?: boolean;
 }) {
   const over = trip.muatan > trip.kapasitas;
+  // Only a confirmed plan has a real trip to dispatch, and only once, not
+  // twice — "dispatched" is the one status this button hides itself for; any
+  // other value (or none, on a build that cannot yet say) still offers it,
+  // since the service's own guard is what actually refuses a second attempt.
+  const canDispatch =
+    !editable && !!trip.tripId && trip.tripStatus !== "dispatched" && onDispatchTrip;
 
   return (
     <tr className="border-b border-line bg-panel-sunk">
@@ -1044,6 +1077,21 @@ function TripHeader({
             <span className="data text-2xs text-ink-muted">
               {trip.vehicle?.label ?? "Armada tidak ditetapkan"}
             </span>
+          )}
+
+          {canDispatch && (
+            <CanAccess permission={PERMISSIONS.DELIVERIES_CREATE}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2.5 text-2xs"
+                disabled={isDispatching}
+                onClick={() => onDispatchTrip(trip.tripId!, trip.rows)}
+              >
+                <Truck className="h-3.5 w-3.5" />
+                Berangkatkan
+              </Button>
+            </CanAccess>
           )}
 
           <span className="ml-auto flex items-center gap-2">

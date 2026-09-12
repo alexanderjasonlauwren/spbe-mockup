@@ -185,6 +185,25 @@ export function currentActor(): string {
   return "Sistem";
 }
 
+/**
+ * The signed-in user's own id, for the one place a rule needs to compare an
+ * identity rather than display one — a dual-control override naming the
+ * acting session as its own second approver (D3 A-Step 2/3), the mock's own
+ * parity check for `ck_deliveries_credit_override` on the real API.
+ */
+export function currentActorId(): string | undefined {
+  try {
+    const raw = localStorage.getItem("auth-storage");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return parsed?.state?.user?.id;
+    }
+  } catch {
+    /* fall through */
+  }
+  return undefined;
+}
+
 /** Appends to the audit trail. Every write in `rules.ts` goes through here. */
 export function recordAudit(
   database: Database,

@@ -44,7 +44,13 @@ import type {
   SuggestedTrip,
   UnroutableStop,
 } from "../types";
-import type { DistributionApi, ProductOption, TripAssignment } from "./contract";
+import type {
+  CreditOverrideInput,
+  DispatchResult,
+  DistributionApi,
+  ProductOption,
+  TripAssignment,
+} from "./contract";
 
 /* ── wire shapes, mirroring the backend exactly ────────────────────────── */
 
@@ -92,6 +98,9 @@ interface OrderResponse {
 }
 
 interface TripResponse {
+  /** The real `dispatch_trips.id` — present on a saved board, needed to dispatch it. */
+  id?: string;
+  trip_status?: string;
   trip_no: number;
   driver_id: string;
   driver_code: string;
@@ -254,7 +263,15 @@ function toPlanView(order: OrderResponse): DistributionPlan {
 function toPlanRows(items: OrderItemResponse[], board?: BoardResponse): PlanRow[] {
   const crewByOutlet = new Map<
     string,
-    { driverId: string; driver: string; vehicleId: string; vehicle: string; tripNo: number }
+    {
+      driverId: string;
+      driver: string;
+      vehicleId: string;
+      vehicle: string;
+      tripNo: number;
+      tripId: string | null;
+      tripStatus?: string;
+    }
   >();
   for (const trip of board?.trips ?? []) {
     for (const stop of trip.stops) {
@@ -264,6 +281,8 @@ function toPlanRows(items: OrderItemResponse[], board?: BoardResponse): PlanRow[
         vehicleId: trip.vehicle_id,
         vehicle: trip.plate,
         tripNo: trip.trip_no,
+        tripId: trip.id ?? null,
+        tripStatus: trip.trip_status,
       });
     }
   }
@@ -292,6 +311,8 @@ function toPlanRows(items: OrderItemResponse[], board?: BoardResponse): PlanRow[
       // would be a field only the demo fills.
       jamPengiriman: "—",
       tripNo: crew?.tripNo ?? item.sequence_no ?? null,
+      tripId: crew?.tripId ?? null,
+      tripStatus: crew?.tripStatus,
       statusBayar: item.payment_state === "paid" ? "Lunas" : "Belum Lunas",
       sisaKuotaOutlet: 0,
       piutang: 0,
@@ -548,6 +569,38 @@ async function applyAssignment(planId: string, trips: TripAssignment[]): Promise
   });
 }
 
+interface DispatchResponse {
+  trip_id: string;
+  issued: unknown[];
+}
+
+/**
+ * Sends one run out — D3 A-Step 2/3.
+ *
+ * `credit_overrides` is sent even when empty (`[]`), matching how the
+ * backend's own optional-body handling was built: an omitted body and one
+ * naming zero overrides are the same request either way, and sending the
+ * array explicitly means this call never depends on that equivalence
+ * holding.
+ */
+async function dispatchTrip(
+  tripId: string,
+  overrides: CreditOverrideInput[] = [],
+): Promise<DispatchResult> {
+  const response = await send<DispatchResponse>(
+    "post",
+    `/distribution/trips/${tripId}/dispatch`,
+    {
+      credit_overrides: overrides.map((o) => ({
+        outlet_id: o.outletId,
+        second_approver_id: o.secondApproverId,
+        reason: o.reason,
+      })),
+    },
+  );
+  return { issued: response.issued.length };
+}
+
 async function getActiveSaOptions(): Promise<PlanOption[]> {
   const page = await getList<AgreementListResponse>("/schedule-agreements", {
     pageSize: OPTION_PAGE_SIZE,
@@ -633,4 +686,5 @@ export const distributionApiHttp: DistributionApi = {
   getActiveSaOptions,
   suggestAssignment,
   applyAssignment,
+  dispatchTrip,
 };

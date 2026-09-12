@@ -61,6 +61,21 @@ export interface PlanRow {
   tripNo: number | null;
   /** Set when this stop would be refused on confirmation. */
   alasanBlokir?: string;
+  /**
+   * The run this stop's trip actually posts against once assigned — an
+   * opaque id, not a display value. On the API build this is the real
+   * `dispatch_trips.id` a saved board carries; the mock has no trips table
+   * at all, so it synthesises the same `driverId#tripNo` key the planner
+   * already groups rows by. Null until a driver and trip number are both
+   * set, since neither build can name a run before then.
+   */
+  tripId?: string | null;
+  /**
+   * The trip's own status, when known (`"planned"`, `"dispatched"`, …).
+   * Absent on the mock build, which does not persist per-trip dispatch
+   * state — see `dispatchTrip`'s own header comment.
+   */
+  tripStatus?: string;
 }
 
 export interface PlanOption {

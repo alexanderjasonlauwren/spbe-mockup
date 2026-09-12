@@ -46,6 +46,7 @@ import type {
   PlanEntity,
   PlanRowEntity,
   InvoiceEntity,
+  OutletWarningEntity,
   ProductEntity,
   ReceiptEntity,
   SAEntity,
@@ -1363,6 +1364,43 @@ export function deleteTransportationClaim(id: ID) {
       entityId: claim.id,
       summary: `Menghapus klaim BAST ${claim.claimNumber}.`,
     });
+  });
+}
+
+/**
+ * Records one Surat Peringatan against an outlet — D3 A-Step 3. Read+create
+ * only: no update or delete pairs with this, the same as the transportation
+ * claim's own delete guard has no counterpart for a status the schema calls
+ * final. A warning is corrected by issuing a new entry.
+ */
+export function createOutletWarning(
+  input: Partial<OutletWarningEntity> & { outletId: ID },
+): OutletWarningEntity {
+  return mutate((db) => {
+    const pkl = db.outlets.find((p) => p.id === input.outletId);
+    if (!pkl) throw new ApiError("Outlet tidak ditemukan.", 404);
+    if (!input.reason?.trim()) {
+      throw new ApiError("Alasan SP wajib diisi.");
+    }
+
+    const now = new Date();
+    const created: OutletWarningEntity = {
+      ...stampScope({}),
+      id: nextId("spr"),
+      outletId: input.outletId,
+      issuedOn: input.issuedOn ?? isoDate(now),
+      reason: input.reason.trim(),
+      notes: input.notes?.trim() || undefined,
+      createdAt: now.toISOString(),
+    };
+    db.outletWarnings.unshift(created);
+    recordAudit(db, {
+      action: "outlet_warning.create",
+      entity: "OutletWarning",
+      entityId: created.id,
+      summary: `Mencatat SP untuk ${pkl.nama}.`,
+    });
+    return created;
   });
 }
 

@@ -489,6 +489,59 @@ describe("committing the board", () => {
       field: "operational_status", operator: "eq", value: "available",
     });
   });
+
+  /**
+   * D3 A-Step 2/3: a saved board carries the real dispatch_trips.id and its
+   * status, needed to dispatch it -- neither existed on this response until
+   * this step, and both are read here rather than assumed present.
+   */
+  it("reads the trip id and status back from the board", async () => {
+    getOne.mockResolvedValueOnce(order()).mockResolvedValueOnce({
+      trips: [
+        {
+          id: "trip-1", trip_status: "dispatched",
+          trip_no: 1, driver_id: "d1", driver_code: "DRV-001", driver_name: "Slamet",
+          vehicle_id: "v1", plate: "H 1234 AB",
+          stops: [{ sequence_no: 1, outlet_id: OUTLET_A, outlet_code: "PKL-001", outlet_name: "Ahmad", qty: 30, funded: true }],
+          load_qty: 30, capacity_qty: 240, at_risk_qty: 0, distance_m: 0,
+        },
+      ],
+      unroutable: [],
+      summary: { distance_m: 0, trips: 1, outlets: 1 },
+    });
+
+    const rows = await distributionApiHttp.getPlanDetail(PLAN_ID);
+
+    expect(rows[0].tripId).toBe("trip-1");
+    expect(rows[0].tripStatus).toBe("dispatched");
+  });
+});
+
+describe("dispatching a trip", () => {
+  it("sends the credit overrides, wire-shaped, and counts what was issued", async () => {
+    send.mockResolvedValue({ trip_id: "trip-1", issued: [{}, {}] });
+
+    const result = await distributionApiHttp.dispatchTrip("trip-1", [
+      { outletId: OUTLET_A, secondApproverId: "user-2", reason: "Pelunasan sudah dijadwalkan" },
+    ]);
+
+    expect(send).toHaveBeenCalledWith("post", "/distribution/trips/trip-1/dispatch", {
+      credit_overrides: [
+        { outlet_id: OUTLET_A, second_approver_id: "user-2", reason: "Pelunasan sudah dijadwalkan" },
+      ],
+    });
+    expect(result.issued).toBe(2);
+  });
+
+  it("sends an empty array rather than omitting the field when there is no override", async () => {
+    send.mockResolvedValue({ trip_id: "trip-1", issued: [{}] });
+
+    await distributionApiHttp.dispatchTrip("trip-1");
+
+    expect(send).toHaveBeenCalledWith("post", "/distribution/trips/trip-1/dispatch", {
+      credit_overrides: [],
+    });
+  });
 });
 
 describe("the suggestion", () => {

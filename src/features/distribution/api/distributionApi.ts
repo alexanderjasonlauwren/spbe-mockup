@@ -33,6 +33,7 @@ export const getVehicleOptions = api.getVehicleOptions.bind(api);
 export const getActiveSaOptions = api.getActiveSaOptions.bind(api);
 export const suggestAssignment = api.suggestAssignment.bind(api);
 export const applyAssignment = api.applyAssignment.bind(api);
+export const dispatchTrip = api.dispatchTrip.bind(api);
 
 /**
  * Scheduling approved orders onto a plan, real now that `core.orders` has a

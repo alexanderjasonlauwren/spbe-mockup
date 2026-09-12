@@ -502,6 +502,21 @@ export interface TransportationClaimEntity extends Scoped {
   updatedAt: string;
 }
 
+/**
+ * One Surat Peringatan (SP) issued to an outlet — D3 A-Step 3. A plain,
+ * append-only log: no status, no version, no update or delete. A warning is
+ * corrected by issuing a new entry, not editing one already handed to the
+ * outlet.
+ */
+export interface OutletWarningEntity extends Scoped {
+  id: ID;
+  outletId: ID;
+  issuedOn: string; // ISO date
+  reason: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export type BankNameEntity = "BCA" | "BNI" | "Mandiri" | "BRI" | "BSI";
 
 /* ── accounts receivable ───────────────────────────────────────────────── */
@@ -1040,6 +1055,7 @@ export interface Database {
   deliveries: DeliveryEntity[];
   deliveryEvents: DeliveryEventEntity[];
   transportationClaims: TransportationClaimEntity[];
+  outletWarnings: OutletWarningEntity[];
   payments: PaymentEntity[];
   receipts: ReceiptEntity[];
   notifications: NotificationEntity[];

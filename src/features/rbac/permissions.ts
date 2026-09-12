@@ -97,6 +97,20 @@ export const PERMISSIONS = {
   // there. Executing is an update to the delivery row, not a verb of its own.
   DELIVERIES_VIEW: "distribution.read.deliveries",
   DELIVERIES_EXECUTE: "distribution.update.deliveries",
+  // Dispatching a run is a create — one surat jalan per stop it carries.
+  // Distinct from EXECUTE, which is the driver's own filing against a
+  // delivery already issued.
+  DELIVERIES_CREATE: "distribution.create.deliveries",
+  /**
+   * The second, distinct approver on a credit-limit dispatch override
+   * (D3 A-Step 2/3). Not a gate on any button here — the acting dispatcher
+   * only needs DELIVERIES_CREATE; this authority belongs to whoever is
+   * NAMED as the second approver, and the backend is what checks they hold
+   * it. Kept as a real constant anyway, matching the backend catalogue
+   * 1:1, so a future screen filtering the approver picker has the right
+   * code to check rather than inventing one.
+   */
+  DELIVERIES_OVERRIDE: "distribution.override.deliveries",
 
   // Drivers. Assigning one to a run edits the plan, not the driver, which is
   // why ASSIGN and MANAGE point at different resources.
@@ -124,6 +138,12 @@ export const PERMISSIONS = {
   // dead ends for the board's primary user.
   OUTLETS_VIEW: "masterdata.read.outlets",
   OUTLETS_EDIT: "masterdata.update.outlets",
+
+  // Surat Peringatan history (D3 A-Step 3) -- an append-only log, so there is
+  // no EDIT/DELETE to pair with these: a warning is corrected by issuing a
+  // new entry, not editing one already handed to the outlet.
+  OUTLET_WARNINGS_VIEW: "masterdata.read.outlet_warnings",
+  OUTLET_WARNINGS_CREATE: "masterdata.create.outlet_warnings",
 
   // Live telemetry. Read is operations watching the map; there is no console
   // constant for create, because writing a position belongs to the driver's

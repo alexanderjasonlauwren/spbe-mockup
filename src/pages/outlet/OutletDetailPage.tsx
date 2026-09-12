@@ -1,4 +1,5 @@
 import { scopeKey } from "@/mocks/scope";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -6,7 +7,9 @@ import {
   MapPin,
   Pencil,
   Phone,
+  Plus,
   Printer,
+  ShieldAlert,
   Truck,
   UserRound,
 } from "lucide-react";
@@ -14,14 +17,30 @@ import {
   getOutletDetail,
   getOutletHistory,
 } from "@/features/outlet/api/outletApi";
+import {
+  createOutletWarning,
+  getOutletWarnings,
+  type OutletWarningView,
+} from "@/features/outletwarnings/api/outletWarningApi";
 import { printSuratJalan } from "@/features/monitoring/api/monitoringApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
+import { CanAccess } from "@/features/rbac/components/CanAccess";
+import { PERMISSIONS } from "@/features/rbac/permissions";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelBody, PanelHeader, Meter, Skeleton } from "@/components/common/Panel";
 import { DataTable, type Column } from "@/components/common/DataTable";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { getStatusVariant, spineFor } from "@/lib/status";
 import { EmptyState } from "@/components/common/EmptyState";
+import { Field, TextInput, TextareaInput } from "@/components/common/Field";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
   formatDateId,
@@ -51,6 +70,53 @@ export function OutletDetailPage() {
     mutationFn: (deliveryId: string) => printSuratJalan(deliveryId),
     errorTitle: "Cetak surat jalan gagal",
   });
+
+  const warnings = useQuery({
+    queryKey: [...scopeKey(), "outlet-warnings", id],
+    queryFn: () => getOutletWarnings(id),
+  });
+
+  const [recordingWarning, setRecordingWarning] = useState(false);
+  const [warningReason, setWarningReason] = useState("");
+  const [warningNotes, setWarningNotes] = useState("");
+  const [warningDate, setWarningDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const createWarningMutation = useDeskMutation({
+    mutationFn: () =>
+      createOutletWarning({
+        outletId: id,
+        issuedOn: warningDate,
+        reason: warningReason,
+        notes: warningNotes || undefined,
+      }),
+    errorTitle: "SP tidak tercatat",
+    success: "SP tercatat",
+    onDone: () => {
+      setRecordingWarning(false);
+      setWarningReason("");
+      setWarningNotes("");
+      setWarningDate(new Date().toISOString().slice(0, 10));
+    },
+  });
+
+  const warningColumns: Column<OutletWarningView>[] = [
+    {
+      key: "issuedOn",
+      header: "Tanggal",
+      render: (row) => <span className="data text-ink">{formatDateId(row.issuedOn)}</span>,
+      sortValue: (row) => row.issuedOn,
+    },
+    {
+      key: "reason",
+      header: "Alasan",
+      render: (row) => <span className="text-ink">{row.reason}</span>,
+    },
+    {
+      key: "notes",
+      header: "Catatan",
+      render: (row) => <span className="text-ink-muted">{row.notes || "—"}</span>,
+    },
+  ];
 
   const columns: Column<HistoryRow>[] = [
     {
@@ -317,6 +383,108 @@ export function OutletDetailPage() {
           />
         </Panel>
       </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Panel>
+          <PanelHeader title="Kontrol kredit" />
+          <PanelBody className="space-y-3 text-sm">
+            <p className="flex items-center justify-between text-ink">
+              <span className="text-ink-muted">Plafon kredit</span>
+              <span className="data">
+                {p.batasKredit > 0 ? formatRupiah(p.batasKredit) : "Tidak dibatasi"}
+              </span>
+            </p>
+            <p className="flex items-center justify-between text-ink">
+              <span className="text-ink-muted">Termin pembayaran</span>
+              <span className="data">
+                {p.termin > 0 ? `${p.termin} hari` : "Tunai"}
+              </span>
+            </p>
+            <p className="flex items-center justify-between border-t border-line pt-3 text-ink">
+              <span className="text-ink-muted">Blokir otomatis saat jatuh tempo</span>
+              <StatusBadge
+                variant={p.blokirOtomatis ? "warning" : "draft"}
+                label={p.blokirOtomatis ? "Aktif" : "Nonaktif"}
+              />
+            </p>
+            <p className="text-xs text-ink-muted">
+              Diubah dari halaman ubah data. Nilai ini menentukan apakah
+              keberangkatan ke {outletLabel()} ini ditahan saat melebihi
+              plafon atau menunggak.
+            </p>
+          </PanelBody>
+        </Panel>
+
+        <Panel className="lg:col-span-2">
+          <PanelHeader
+            title="Riwayat Surat Peringatan"
+            hint="Dicatat manual -- lihat catatan performa pangkalan"
+            actions={
+              <CanAccess permission={PERMISSIONS.OUTLET_WARNINGS_CREATE}>
+                <Button size="sm" variant="outline" onClick={() => setRecordingWarning(true)}>
+                  <Plus className="h-3.5 w-3.5" />
+                  Catat SP baru
+                </Button>
+              </CanAccess>
+            }
+          />
+          <DataTable
+            columns={warningColumns}
+            data={warnings.data ?? []}
+            isLoading={warnings.isLoading}
+            rowKey={(row) => row.id}
+            emptyIcon={ShieldAlert}
+            emptyMessage="Belum ada SP"
+            emptyDescription={`${outletLabel()} ini belum pernah menerima Surat Peringatan.`}
+            dense
+          />
+        </Panel>
+      </div>
+
+      <Dialog open={recordingWarning} onOpenChange={setRecordingWarning}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Catat SP baru</DialogTitle>
+            <DialogDescription>
+              Surat Peringatan untuk {p.nama}. Ini adalah catatan, bukan alur
+              persetujuan -- tidak dapat diubah setelah disimpan.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Field label="Tanggal diterbitkan" required>
+              <TextInput
+                type="date"
+                value={warningDate}
+                onChange={(e) => setWarningDate(e.target.value)}
+              />
+            </Field>
+            <Field label="Alasan" required>
+              <TextInput
+                value={warningReason}
+                onChange={(e) => setWarningReason(e.target.value)}
+                placeholder="Mis. Keterlambatan pembayaran berulang"
+              />
+            </Field>
+            <Field label="Catatan" hint="Opsional">
+              <TextareaInput
+                value={warningNotes}
+                onChange={(e) => setWarningNotes(e.target.value)}
+              />
+            </Field>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRecordingWarning(false)}>
+              Batal
+            </Button>
+            <Button
+              onClick={() => createWarningMutation.mutate(undefined)}
+              disabled={!warningReason.trim() || !warningDate || createWarningMutation.isPending}
+            >
+              Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

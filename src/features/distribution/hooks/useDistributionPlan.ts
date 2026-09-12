@@ -6,6 +6,7 @@ import {
   cancelDistributionPlan,
   confirmPlan,
   createPlan,
+  dispatchTrip,
   getActiveSaOptions,
   getDriverOptions,
   getOutletOptions,
@@ -18,6 +19,7 @@ import {
   printRouteSheet,
   saveDraft,
 } from "../api/distributionApi";
+import type { CreditOverrideInput } from "../api/contract";
 import type { PlanRow } from "../types";
 import { outletLabel, unitLabel } from "@/lib/lexicon";
 import { useResettableState } from "@/hooks/useResettableState";
@@ -138,6 +140,25 @@ export function useDistributionPlan() {
     }),
   });
 
+  /**
+   * Sends one already-assigned run out — D3 A-Step 2/3.
+   *
+   * Refused for a credit-limit breach is a real, expected outcome, not a
+   * failure the toast alone should carry: the page passes its own
+   * `onError` at the call site (React Query runs it alongside this one) to
+   * open the override dialog when the refusal is breach-shaped, so this
+   * mutation itself stays generic — it does not know a dialog exists.
+   */
+  const dispatchTripMutation = useDeskMutation({
+    mutationFn: ({ tripId, overrides }: { tripId: string; overrides?: CreditOverrideInput[] }) =>
+      dispatchTrip(tripId, overrides),
+    errorTitle: "Keberangkatan gagal",
+    success: (result) => ({
+      title: "Trip diberangkatkan",
+      description: `${result.issued} surat jalan diterbitkan.`,
+    }),
+  });
+
   const createPlanMutation = useDeskMutation({
     mutationFn: createPlan,
     errorTitle: "Rencana tidak dibuat",
@@ -188,6 +209,7 @@ export function useDistributionPlan() {
     saOptions: saOptions.data ?? [],
     saveDraftMutation,
     confirmPlanMutation,
+    dispatchTripMutation,
     createPlanMutation,
     cancelPlanMutation,
     addOrdersMutation,

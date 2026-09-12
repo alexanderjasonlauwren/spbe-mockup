@@ -8,7 +8,7 @@
  */
 import { crewedArmada, crewedVehicle } from "@/mocks/fleet";
 import { scopedDb } from "@/mocks/scope";
-import { latency } from "@/mocks/db";
+import { ApiError, currentActorId, latency } from "@/mocks/db";
 import {
   cancelPlan,
   confirmPlan as confirmPlanRule,
@@ -29,7 +29,12 @@ import type {
   PlanRow,
   VehicleOption,
 } from "../types";
-import type { DistributionApi, TripAssignment } from "./contract";
+import type {
+  CreditOverrideInput,
+  DispatchResult,
+  DistributionApi,
+  TripAssignment,
+} from "./contract";
 import { suggestAssignment as suggestAssignmentLocal } from "./suggestAssignment";
 import { outletLabelTitle, unitLabel, unitLabelTitle } from "@/lib/lexicon";
 
@@ -115,6 +120,10 @@ async function getPlanDetail(planId: string): Promise<PlanRow[]> {
           )?.plat ?? "Belum ditetapkan",
         jamPengiriman: r.jamPengiriman,
         tripNo: r.tripNo ?? null,
+        // The mock has no trips table, so a run has no id of its own — the
+        // same `driverId#tripNo` key the planner already groups rows by
+        // stands in for one. See `dispatchTrip`'s own header comment.
+        tripId: r.driverId && r.tripNo ? `${r.driverId}#${r.tripNo}` : null,
         statusBayar: exp.terblokir ? "Belum Lunas" : "Lunas",
         sisaKuotaOutlet: Math.max(0, (pkl?.kuotaBulanan ?? 0) - takenThisMonth),
         piutang: exp.outstanding,
@@ -278,6 +287,69 @@ async function applyAssignment(planId: string, trips: TripAssignment[]): Promise
   savePlanRows(planId, rows);
 }
 
+/**
+ * Sends one run's stops out — D3 A-Step 2/3's parity implementation.
+ *
+ * `tripId` is the synthetic `driverId#tripNo` key `getPlanDetail` already
+ * hands back, since the mock has no trips table of its own to name a real
+ * one from.
+ *
+ * `outletExposure` (`mocks/ar.ts`) is the mock's own, pre-existing model of
+ * a breach — over the credit limit, or overdue while flagged to hold — and
+ * is reused as-is rather than re-derived here. Two known, deliberate gaps
+ * against the real service, left as found rather than silently
+ * reconciled:
+ * - `outletExposure` only evaluates either condition when `blokirOtomatis`
+ *   is set; the real API's credit-limit-exceeded check applies regardless
+ *   of that flag, and only the overdue-invoice check is conditional on it.
+ * - Nothing here checks that a named second approver actually holds
+ *   `distribution.override.deliveries` — the mock has no per-user
+ *   permission resolution to check it against. Only self-approval (naming
+ *   the acting session as its own second approver) is refused, mirroring
+ *   `ck_deliveries_credit_override`'s own distinctness rule; an
+ *   unauthorised-but-different approver is accepted here where the real
+ *   API would refuse it.
+ *
+ * Nor does the mock persist that a trip has already left: calling this
+ * twice for the same run succeeds twice, since there is no `dispatch_trips`
+ * row here to guard on — see `PlanRow.tripStatus`'s own doc comment.
+ */
+async function dispatchTrip(
+  tripId: string,
+  overrides: CreditOverrideInput[] = [],
+): Promise<DispatchResult> {
+  await latency("write");
+  const db = scopedDb();
+  const rows = db.planRows.filter((r) => r.driverId && `${r.driverId}#${r.tripNo}` === tripId);
+  if (rows.length === 0) throw new ApiError("Trip tidak ditemukan.", 404);
+
+  const overrideByOutlet = new Map(overrides.map((o) => [o.outletId, o]));
+  const actorId = currentActorId();
+
+  for (const row of rows) {
+    const exp = outletExposure(db, row.outletId);
+    if (!exp.terblokir) continue;
+
+    const override = overrideByOutlet.get(row.outletId);
+    const pkl = db.outlets.find((p) => p.id === row.outletId);
+    if (!override) {
+      throw new ApiError(
+        `${pkl?.nama ?? "Outlet ini"} ${exp.alasan ?? "melebihi plafon kreditnya"} -- ` +
+          "keberangkatan ditolak tanpa persetujuan kedua yang menyebutkan penyetuju lain.",
+        409,
+      );
+    }
+    if (actorId && override.secondApproverId === actorId) {
+      throw new ApiError(
+        "Penyetuju kedua pada persetujuan kredit harus orang lain, bukan yang sedang mengirim.",
+        400,
+      );
+    }
+  }
+
+  return { issued: rows.length };
+}
+
 async function getActiveSaOptions(): Promise<PlanOption[]> {
   await latency("read");
   const today = isoDate(startOfToday());
@@ -382,4 +454,5 @@ export const distributionApiMock: DistributionApi = {
   getActiveSaOptions,
   suggestAssignment: suggestAssignmentMock,
   applyAssignment,
+  dispatchTrip,
 };

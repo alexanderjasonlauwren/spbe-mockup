@@ -41,6 +41,26 @@ export interface ProductOption {
   satuan: string;
 }
 
+/**
+ * Names a second, distinct approver for one outlet a trip cannot otherwise
+ * dispatch to — D3 A-Step 2/3's dual-control credit-limit override.
+ *
+ * One entry per breached outlet. In practice a dispatch attempt only ever
+ * names the first unresolved breach it finds, so a caller supplies exactly
+ * one and retries as many times as a trip carries breached stops.
+ */
+export interface CreditOverrideInput {
+  outletId: string;
+  secondApproverId: string;
+  reason: string;
+}
+
+/** What a dispatch attempt actually issued. */
+export interface DispatchResult {
+  /** How many surat jalan this run produced — one per stop. */
+  issued: number;
+}
+
 export interface DistributionApi {
   getPlanList(): Promise<DistributionPlan[]>;
   getPlan(planId: string): Promise<DistributionPlan>;
@@ -104,4 +124,18 @@ export interface DistributionApi {
    * console able to plan a day and unable to dispatch it.
    */
   applyAssignment(planId: string, trips: TripAssignment[]): Promise<void>;
+
+  /**
+   * Sends one already-assigned run out — D3 A-Step 2/3. The moment a plan's
+   * stops stop being a proposal and become surat jalan.
+   *
+   * A trip carrying a stop whose outlet is over its credit limit (or flagged
+   * to hold on an overdue account) is refused unless `overrides` names a
+   * second, distinct, authorised approver for that outlet — the service
+   * checks the name, not this call; a picker that let through an
+   * unauthorised choice would only move the refusal one screen later.
+   * Refused for any other reason (the run already left, or carries no
+   * stops) with no override path at all — those are not credit questions.
+   */
+  dispatchTrip(tripId: string, overrides?: CreditOverrideInput[]): Promise<DispatchResult>;
 }

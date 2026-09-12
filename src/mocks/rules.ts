@@ -50,6 +50,7 @@ import type {
   ReceiptEntity,
   SAEntity,
   SAImportBatchEntity,
+  TransportationClaimEntity,
   UserEntity,
 } from "./types";
 import { outletLabel, outletLabelTitle, unitLabel } from "@/lib/lexicon";
@@ -1252,6 +1253,115 @@ export function deleteVehicle(id: ID) {
       entity: "Vehicle",
       entityId: removed.id,
       summary: `Menghapus armada ${removed.plat}.`,
+    });
+  });
+}
+
+/**
+ * Records or edits a BAST claim's own paperwork fields. Mirrors
+ * transportationApi.http.ts's own CreateClaimRequest/UpdateClaimRequest so
+ * the two builds accept the same shape.
+ */
+export function saveTransportationClaim(
+  input: Partial<TransportationClaimEntity> & { id?: ID },
+): TransportationClaimEntity {
+  return mutate((db) => {
+    if (!input.handoverReference?.trim()) {
+      throw new ApiError("Nomor referensi BAST wajib diisi.");
+    }
+    if (!input.handoverDate) {
+      throw new ApiError("Tanggal serah terima wajib diisi.");
+    }
+    if (!input.claimedAmount || input.claimedAmount <= 0) {
+      throw new ApiError("Nilai klaim harus lebih dari nol.");
+    }
+
+    if (input.id) {
+      const existing = db.transportationClaims.find((c) => c.id === input.id);
+      if (!existing) throw new ApiError("Klaim BAST tidak ditemukan.", 404);
+      existing.handoverReference = input.handoverReference.trim();
+      existing.handoverDate = input.handoverDate;
+      existing.claimedAmount = input.claimedAmount;
+      existing.version += 1;
+      existing.updatedAt = new Date().toISOString();
+      recordAudit(db, {
+        action: "transportation_claim.update",
+        entity: "TransportationClaim",
+        entityId: existing.id,
+        summary: `Memperbarui klaim BAST ${existing.claimNumber}.`,
+      });
+      return existing;
+    }
+
+    const now = new Date();
+    const created: TransportationClaimEntity = {
+      ...stampScope({}),
+      id: nextId("bast"),
+      claimNumber: `BAST-${isoDate(now).replace(/-/g, "").slice(0, 6)}-${String(db.transportationClaims.length + 1).padStart(4, "0")}`,
+      handoverReference: input.handoverReference.trim(),
+      handoverDate: input.handoverDate,
+      claimedAmount: input.claimedAmount,
+      claimStatus: "draft",
+      deliveryIds: input.deliveryIds ?? [],
+      version: 1,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    };
+    db.transportationClaims.unshift(created);
+    recordAudit(db, {
+      action: "transportation_claim.create",
+      entity: "TransportationClaim",
+      entityId: created.id,
+      summary: `Mencatat BAST ${created.handoverReference}.`,
+    });
+    return created;
+  });
+}
+
+/** Records what the agent read off iVendor -- any of the six statuses, in any order. */
+export function updateTransportationClaimStatus(
+  id: ID,
+  claimStatus: TransportationClaimEntity["claimStatus"],
+  principalInvoiceNumber?: string,
+  statusNote?: string,
+): TransportationClaimEntity {
+  return mutate((db) => {
+    const claim = db.transportationClaims.find((c) => c.id === id);
+    if (!claim) throw new ApiError("Klaim BAST tidak ditemukan.", 404);
+    claim.claimStatus = claimStatus;
+    if (principalInvoiceNumber !== undefined) claim.principalInvoiceNumber = principalInvoiceNumber;
+    if (statusNote !== undefined) claim.statusNote = statusNote;
+    claim.statusUpdatedAt = new Date().toISOString();
+    claim.version += 1;
+    claim.updatedAt = claim.statusUpdatedAt;
+    recordAudit(db, {
+      action: "transportation_claim.status",
+      entity: "TransportationClaim",
+      entityId: claim.id,
+      summary: `Status BAST ${claim.claimNumber} diubah menjadi ${claimStatus}.`,
+    });
+    return claim;
+  });
+}
+
+/** Refused once the claim has left 'draft' -- mirrors the real service's own rule. */
+export function deleteTransportationClaim(id: ID) {
+  return mutate((db) => {
+    const claim = db.transportationClaims.find((c) => c.id === id);
+    if (!claim) throw new ApiError("Klaim BAST tidak ditemukan.", 404);
+    if (claim.claimStatus !== "draft") {
+      throw new ApiError(
+        "Hanya klaim berstatus draft yang dapat dihapus -- klaim yang sudah diserahkan adalah " +
+          "catatan yang sudah dikirim ke prinsipal. Ubah statusnya sebagai gantinya.",
+        409,
+      );
+    }
+    db.transportationClaims = db.transportationClaims.filter((c) => c.id !== id);
+    recordAudit(db, {
+      action: "transportation_claim.delete",
+      entity: "TransportationClaim",
+      entityId: claim.id,
+      summary: `Menghapus klaim BAST ${claim.claimNumber}.`,
     });
   });
 }

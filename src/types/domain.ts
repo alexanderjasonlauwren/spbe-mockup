@@ -470,6 +470,38 @@ export interface DeliveryEventEntity extends Scoped {
   catatan?: string;
 }
 
+/**
+ * A claim for the transportation fee -- the smallest useful version of
+ * tracking a BAST: record it, record what iVendor said, done. See D3's own
+ * plan, A-Step 1, for why the schema underneath calls this a "transportation
+ * claim" and a "handover reference" while every screen reading this type
+ * says "BAST".
+ */
+export type ClaimStatus =
+  | "draft"
+  | "submitted"
+  | "under_review"
+  | "approved"
+  | "rejected"
+  | "paid";
+
+export interface TransportationClaimEntity extends Scoped {
+  id: ID;
+  claimNumber: string;
+  handoverReference: string;
+  handoverDate: string; // ISO date
+  claimedAmount: number;
+  principalInvoiceNumber?: string;
+  claimStatus: ClaimStatus;
+  statusNote?: string;
+  statusUpdatedAt?: string;
+  /** Deliveries this BAST was raised for -- optional, see this feature's own contract. */
+  deliveryIds: ID[];
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type BankNameEntity = "BCA" | "BNI" | "Mandiri" | "BRI" | "BSI";
 
 /* ── accounts receivable ───────────────────────────────────────────────── */
@@ -1007,6 +1039,7 @@ export interface Database {
   planRows: PlanRowEntity[];
   deliveries: DeliveryEntity[];
   deliveryEvents: DeliveryEventEntity[];
+  transportationClaims: TransportationClaimEntity[];
   payments: PaymentEntity[];
   receipts: ReceiptEntity[];
   notifications: NotificationEntity[];

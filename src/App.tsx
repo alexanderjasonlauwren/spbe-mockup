@@ -10,6 +10,7 @@ import { OrderListPage } from "./pages/orders/OrderListPage";
 import { SAManagementPage } from "./pages/sa/SAManagementPage";
 import { DistributionPage } from "./pages/distribution/DistributionPage";
 import { MonitoringPage } from "./pages/monitoring/MonitoringPage";
+import { TransportationClaimListPage } from "./pages/transportation/TransportationClaimListPage";
 import { SopirPage } from "./pages/sopir/SopirPage";
 import { OcrPage } from "./pages/ocr/OcrPage";
 import { PaymentPage } from "./pages/payments/PaymentPage";
@@ -89,6 +90,11 @@ const router = createBrowserRouter([
           permissions={[PERMISSIONS.DELIVERIES_VIEW, PERMISSIONS.GPS_TRACKS_VIEW]}
         >
           <MonitoringPage />
+        </RequirePermission>
+      ) },
+      { path: "transportation-claims", element: (
+        <RequirePermission permission={PERMISSIONS.TRANSPORTATION_CLAIMS_VIEW}>
+          <TransportationClaimListPage />
         </RequirePermission>
       ) },
 

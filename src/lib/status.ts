@@ -64,6 +64,8 @@ const STATUS_MAP: Record<string, StatusVariant> = {
   Baru: "warning",
   Disetujui: "process",
   Dijadwalkan: "process",
+  Diserahkan: "process",
+  "Sedang Ditinjau": "process",
 
   // blocked
   Tertunda: "danger",

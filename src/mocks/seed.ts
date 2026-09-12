@@ -38,6 +38,7 @@ import type {
   SADailyTargetEntity,
   SettingsEntity,
   TenantSettingsEntity,
+  TransportationClaimEntity,
   UserEntity,
 } from "./types";
 
@@ -368,6 +369,69 @@ function seedVehicles(): VehicleEntity[] {
       status: i === 7 ? "Perawatan" : "Aktif",
       terdaftarPada: isoDate(addDays(startOfToday(), -randInt(200, 1400))),
     } satisfies VehicleEntity;
+  });
+}
+
+/**
+ * BAST claims for the transportation fee -- D3's own A-Step 1, "the
+ * smallest useful version": record the handover, record what iVendor
+ * answered. A handful spanning every status, one referencing real
+ * deliveries so the link is not always empty.
+ */
+function seedTransportationClaims(deliveries: DeliveryEntity[]): TransportationClaimEntity[] {
+  const today = startOfToday();
+  const linkedDeliveryIds = deliveries.slice(0, 2).map((d) => d.id);
+
+  const rows: Array<{
+    offsetDays: number;
+    claimStatus: TransportationClaimEntity["claimStatus"];
+    principalInvoiceNumber?: string;
+    statusNote?: string;
+    deliveryIds?: string[];
+  }> = [
+    { offsetDays: -2, claimStatus: "draft" },
+    {
+      offsetDays: -10,
+      claimStatus: "submitted",
+      deliveryIds: linkedDeliveryIds,
+    },
+    {
+      offsetDays: -18,
+      claimStatus: "under_review",
+      principalInvoiceNumber: `INV/${randInt(1000, 9999)}/IV/${today.getFullYear()}`,
+      statusNote: "iVendor tidak memberikan notifikasi yang jelas -- masih menunggu kabar.",
+    },
+    {
+      offsetDays: -32,
+      claimStatus: "approved",
+      principalInvoiceNumber: `INV/${randInt(1000, 9999)}/IV/${today.getFullYear()}`,
+    },
+    {
+      offsetDays: -46,
+      claimStatus: "paid",
+      principalInvoiceNumber: `INV/${randInt(1000, 9999)}/IV/${today.getFullYear()}`,
+    },
+  ];
+
+  return rows.map((row, i) => {
+    const handoverDate = addDays(today, row.offsetDays);
+    return {
+      ...branchFor(),
+      id: `bast-${String(i + 1).padStart(3, "0")}`,
+      claimNumber: `BAST-${isoDate(handoverDate).replace(/-/g, "").slice(0, 6)}-${String(i + 1).padStart(4, "0")}`,
+      handoverReference: `BAST/${randInt(100, 999)}/${handoverDate.getFullYear()}`,
+      handoverDate: isoDate(handoverDate),
+      claimedAmount: randInt(8, 40) * 100_000,
+      principalInvoiceNumber: row.principalInvoiceNumber,
+      claimStatus: row.claimStatus,
+      statusNote: row.statusNote,
+      statusUpdatedAt:
+        row.claimStatus === "draft" ? undefined : addDays(handoverDate, 2).toISOString(),
+      deliveryIds: row.deliveryIds ?? [],
+      version: 1,
+      createdAt: handoverDate.toISOString(),
+      updatedAt: (row.statusNote ? addDays(handoverDate, 2) : handoverDate).toISOString(),
+    } satisfies TransportationClaimEntity;
   });
 }
 
@@ -1449,6 +1513,7 @@ export function createSeedDatabase(): Database {
     deliveries,
     // Filed by drivers in the browser, so the seeded day starts with none.
     deliveryEvents: [],
+    transportationClaims: seedTransportationClaims(deliveries),
     payments,
     receipts,
     notifications,

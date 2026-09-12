@@ -76,6 +76,15 @@ export const PERMISSIONS = {
   // endpoint and so a single, dedicated permission to gate on.
   TRANSACTIONS_VIEW: "finance.read.transactions",
   TRANSACTIONS_EXPORT: "finance.export.transactions",
+
+  // BAST / transportation-fee claims (D3 A-Step 1). Plain CRUD -- the
+  // status-transition action rides on the update permission, since it
+  // records what the agent read off an external portal rather than an
+  // internal approval a distinct authority level should gate.
+  TRANSPORTATION_CLAIMS_VIEW: "distribution.read.transportation_claims",
+  TRANSPORTATION_CLAIMS_CREATE: "distribution.create.transportation_claims",
+  TRANSPORTATION_CLAIMS_EDIT: "distribution.update.transportation_claims",
+  TRANSPORTATION_CLAIMS_DELETE: "distribution.delete.transportation_claims",
   /**
    * The chart of accounts itself, distinct from reading the journals posted
    * against it. Confirmed live: finance_officer holds finance.read.journals

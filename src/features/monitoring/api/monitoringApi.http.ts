@@ -151,7 +151,7 @@ interface BoardResponseWire {
  * a drawing fallback so the map has somewhere to put a pin.
  */
 const FALLBACK_RADIUS_M = 150;
-const FALLBACK_COORD = { lat: -6.24, lng: 107.0 };
+const FALLBACK_COORD = { lat: -7.3305, lng: 110.5084 };
 
 /**
  * What each stop was built from, keyed by the stop id the screen holds.

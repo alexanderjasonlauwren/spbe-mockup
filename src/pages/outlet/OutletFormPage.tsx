@@ -53,8 +53,8 @@ const EMPTY: FormState = {
   termin: 7,
   batasKredit: 0,
   blokirOtomatis: true,
-  lat: -6.24,
-  lng: 107.0,
+  lat: -7.3305,
+  lng: 110.5084,
 };
 
 export function OutletFormPage() {

@@ -423,7 +423,7 @@ export function DistribusiMap({
       )}
     >
       <MapContainer
-        center={[-6.236, 107.006]}
+        center={[-7.3305, 110.5084]}
         zoom={13}
         style={{ height: "100%", width: "100%" }}
         zoomControl

@@ -63,7 +63,7 @@ async function getMonitoringSnapshot(dateRange: DateRange): Promise<MonitoringSn
       realisasi: d.realisasi,
       pencapaianPersen: d.target === 0 ? 0 : (d.realisasi / d.target) * 100,
       status: d.status,
-      coord: { lat: pkl?.lat ?? -6.24, lng: pkl?.lng ?? 107.0 },
+      coord: { lat: pkl?.lat ?? -7.3305, lng: pkl?.lng ?? 110.5084 },
       catatan: d.catatan,
       // The mock has no optimistic-locking counter on a delivery row; only
       // the HTTP adapter's writes ever read this.

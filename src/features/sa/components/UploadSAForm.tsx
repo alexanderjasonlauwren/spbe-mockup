@@ -53,16 +53,18 @@ export function UploadSAForm({ onSubmit, isPending, supplierOptions }: UploadSAF
       </Field>
 
       <Field label={`${supplierLabel()} penerbit`} htmlFor="supplier" error={errors.supplier?.message} required>
-        <SelectInput id="supplier" invalid={!!errors.supplier} {...register("supplier")}>
-          <option value="">
-            {options.length === 0 ? `Belum ada mitra ${supplierLabel()} terdaftar` : `Pilih ${supplierLabel()}`}
-          </option>
+        <TextInput
+          id="supplier"
+          list="supplier-options"
+          placeholder={`Pilih atau ketik nama ${supplierLabel()} (contoh: PT Pertamina Patra Niaga)`}
+          invalid={!!errors.supplier}
+          {...register("supplier")}
+        />
+        <datalist id="supplier-options">
           {options.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
+            <option key={s} value={s} />
           ))}
-        </SelectInput>
+        </datalist>
       </Field>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

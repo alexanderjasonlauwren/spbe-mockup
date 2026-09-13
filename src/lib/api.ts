@@ -286,9 +286,13 @@ export async function upload<T>(
   file: File,
   field = "file",
   timeout = 60_000,
+  fields?: Record<string, string>,
 ): Promise<T> {
   const form = new FormData();
   form.append(field, file);
+  for (const [name, value] of Object.entries(fields ?? {})) {
+    form.append(name, value);
+  }
   try {
     const response = await apiClient.request<Envelope<T>>({
       method: "post",

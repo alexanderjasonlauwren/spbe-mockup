@@ -100,3 +100,46 @@ export interface SAImportApplied {
   id: string;
   barisDitulis: number;
 }
+
+export interface SIM3LONTotals {
+  allocationQty: number;
+  normalQty: number;
+  fakultatifQty: number;
+  remainingQty: number;
+  grandTotalQty: number;
+}
+
+export interface SIM3LONMissingOutlet {
+  registrationCode: string;
+  name: string;
+  reason: string;
+}
+
+export interface SIM3LONPreview {
+  id: string;
+  status: string;
+  duplicate: boolean;
+  canApply: boolean;
+  month: string;
+  fileName: string;
+  checksum: string;
+  outletCount: number;
+  matchedCount: number;
+  missingOutlets: SIM3LONMissingOutlet[];
+  issues: Array<{ line: number; column?: string; value?: string; reason: string }>;
+  totals: SIM3LONTotals;
+  changes: {
+    allocationChanged: number;
+    dailyChanged: number;
+    newOutlets: number;
+    removedOutlets: number;
+  };
+}
+
+export interface SIM3LONApplied {
+  id: string;
+  baseAgreementId: string;
+  fakultatifAgreementId?: string;
+  outletTargetsWritten: number;
+  dailyTargetsWritten: number;
+}

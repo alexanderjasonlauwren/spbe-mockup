@@ -21,6 +21,8 @@ export const deleteSA = api.deleteSA.bind(api);
 export const getSupplierOptions = api.getSupplierOptions.bind(api);
 export const parseImport = api.parseImport.bind(api);
 export const applyImport = api.applyImport.bind(api);
+export const previewSIM3LON = api.previewSIM3LON.bind(api);
+export const applySIM3LON = api.applySIM3LON.bind(api);
 
 /**
  * Printing is a browser concern, not a data source.

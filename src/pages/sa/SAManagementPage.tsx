@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertCircle, ArrowRight, Upload } from "lucide-react";
+import { AlertCircle, ArrowRight, FileSpreadsheet, Upload } from "lucide-react";
 import { useScheduleAgreement } from "@/features/sa/hooks/useScheduleAgreement";
 import { SAFilterBar } from "@/features/sa/components/SAFilterBar";
 import { SATable } from "@/features/sa/components/SATable";
 import { UploadSAForm } from "@/features/sa/components/UploadSAForm";
 import { ImportTargetsDialog } from "@/features/sa/components/ImportTargetsDialog";
+import { SIM3LONImportDialog } from "@/features/sa/components/SIM3LONImportDialog";
 import { useAuthStore } from "@/features/auth/store/authStore";
 import { PERMISSIONS } from "@/features/rbac/permissions";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -43,6 +44,7 @@ export function SAManagementPage() {
   const [pendingDelete, setPendingDelete] = useState<ScheduleAgreement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [importing, setImporting] = useState<ScheduleAgreement | null>(null);
+  const [importingSIM3LON, setImportingSIM3LON] = useState(false);
 
   // Importing replaces a month of contractual obligations from a spreadsheet,
   // which is not the same authority as recording an agreement — so it has its
@@ -68,12 +70,18 @@ export function SAManagementPage() {
         eyebrow="Operasi harian"
         title="Schedule Agreement"
         description={`Kuota yang diterbitkan ${supplierLabel()} mitra. Setiap rencana distribusi menarik dari agreement yang aktif, jadi angka di sini adalah batas atas operasi bulan ini.`}
-        actions={
-          <Button onClick={() => setUploading(true)}>
+        actions={<div className="flex gap-2">
+          <Button variant="outline" onClick={() => setUploading(true)}>
             <Upload className="h-3.5 w-3.5" />
-            Unggah agreement
+            Catat manual
           </Button>
-        }
+          {canImport && (
+            <Button onClick={() => setImportingSIM3LON(true)}>
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              Impor SIM3LON
+            </Button>
+          )}
+        </div>}
       />
 
       {isError && (
@@ -193,6 +201,11 @@ export function SAManagementPage() {
       </Dialog>
 
       <ImportTargetsDialog sa={importing} onClose={() => setImporting(null)} />
+      <SIM3LONImportDialog
+        open={importingSIM3LON}
+        onClose={() => setImportingSIM3LON(false)}
+        supplierOptions={supplierOptions}
+      />
 
       <ConfirmDialog
         isOpen={!!pendingDelete}

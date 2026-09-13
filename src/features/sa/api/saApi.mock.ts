@@ -19,6 +19,8 @@ import type { SAEntity } from "@/mocks/types";
 import type {
   SAImportApplied,
   SAImportBatch,
+  SIM3LONApplied,
+  SIM3LONPreview,
   ScheduleAgreement,
   SAFilterParams,
   UploadSAPayload,
@@ -185,6 +187,18 @@ async function applyImport(batchId: string): Promise<SAImportApplied> {
   return { id: batch.id, barisDitulis: batch.barisDitulis };
 }
 
+async function previewSIM3LON(file: File, supplierName: string, productId: string): Promise<SIM3LONPreview> {
+  void file;
+  void supplierName;
+  void productId;
+  throw new Error("Impor XLSX SIM3LON hanya tersedia saat dashboard terhubung ke API.");
+}
+
+async function applySIM3LON(batchId: string): Promise<SIM3LONApplied> {
+  void batchId;
+  throw new Error("Impor XLSX SIM3LON hanya tersedia saat dashboard terhubung ke API.");
+}
+
 /**
  * SHA-256 of the uploaded bytes.
  *
@@ -214,4 +228,6 @@ export const saApiMock: ScheduleAgreementApi = {
   getSupplierOptions,
   parseImport,
   applyImport,
+  previewSIM3LON,
+  applySIM3LON,
 };

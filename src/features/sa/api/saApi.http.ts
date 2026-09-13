@@ -14,6 +14,8 @@ import type {
   SAImportBatch,
   SAImportChangeKind,
   SAImportDiff,
+  SIM3LONApplied,
+  SIM3LONPreview,
   ScheduleAgreement,
   SAFilterParams,
   SAStatus,
@@ -176,6 +178,74 @@ interface ApplyResponse {
   rows_written: number;
 }
 
+interface SIM3LONPreviewResponse {
+  id: string;
+  status: string;
+  duplicate: boolean;
+  can_apply: boolean;
+  period_month: string;
+  file_name: string;
+  checksum_sha256: string;
+  outlet_count: number;
+  matched_count: number;
+  missing_outlets: Array<{ registration_code: string; name: string; reason: string }>;
+  issues: Array<{ line: number; column?: string; value?: string; reason: string }>;
+  totals: {
+    allocation_qty: number;
+    normal_qty: number;
+    fakultatif_qty: number;
+    remaining_qty: number;
+    grand_total_qty: number;
+  };
+  changes: {
+    allocation_changed: number;
+    daily_changed: number;
+    new_outlets: number;
+    removed_outlets: number;
+  };
+}
+
+interface SIM3LONApplyResponse {
+  id: string;
+  base_schedule_agreement_id: string;
+  fakultatif_schedule_agreement_id?: string;
+  outlet_targets_written: number;
+  daily_targets_written: number;
+}
+
+function toSIM3LONPreview(row: SIM3LONPreviewResponse): SIM3LONPreview {
+  return {
+    id: row.id,
+    status: row.status,
+    duplicate: row.duplicate,
+    canApply: row.can_apply,
+    month: row.period_month,
+    fileName: row.file_name,
+    checksum: row.checksum_sha256,
+    outletCount: row.outlet_count,
+    matchedCount: row.matched_count,
+    missingOutlets: (row.missing_outlets ?? []).map((outlet) => ({
+      registrationCode: outlet.registration_code,
+      name: outlet.name,
+      reason: outlet.reason,
+    })),
+    issues: row.issues ?? [],
+    totals: {
+      allocationQty: row.totals.allocation_qty,
+      normalQty: row.totals.normal_qty,
+      fakultatifQty: row.totals.fakultatif_qty,
+      remainingQty: row.totals.remaining_qty,
+      grandTotalQty: row.totals.grand_total_qty,
+    },
+    changes: {
+      allocationChanged: row.changes.allocation_changed,
+      dailyChanged: row.changes.daily_changed,
+      newOutlets: row.changes.new_outlets,
+      removedOutlets: row.changes.removed_outlets,
+    },
+  };
+}
+
 /**
  * The service's three change words, in the console's.
  *
@@ -303,6 +373,29 @@ export const saApiHttp: ScheduleAgreementApi = {
   async applyImport(batchId: string): Promise<SAImportApplied> {
     const applied = await send<ApplyResponse>("post", `/imports/${batchId}/apply`);
     return { id: applied.id, barisDitulis: applied.rows_written };
+  },
+
+  async previewSIM3LON(file: File, supplierName: string, productId: string): Promise<SIM3LONPreview> {
+    const branchId = await defaultBranchID();
+    const preview = await upload<SIM3LONPreviewResponse>(
+      "/sim3lon-imports/preview",
+      file,
+      "file",
+      60_000,
+      { branch_id: branchId, product_id: productId, supplier_name: supplierName },
+    );
+    return toSIM3LONPreview(preview);
+  },
+
+  async applySIM3LON(batchId: string): Promise<SIM3LONApplied> {
+    const applied = await send<SIM3LONApplyResponse>("post", `/sim3lon-imports/${batchId}/apply`);
+    return {
+      id: applied.id,
+      baseAgreementId: applied.base_schedule_agreement_id,
+      fakultatifAgreementId: applied.fakultatif_schedule_agreement_id,
+      outletTargetsWritten: applied.outlet_targets_written,
+      dailyTargetsWritten: applied.daily_targets_written,
+    };
   },
 
   async getSupplierOptions(): Promise<string[]> {

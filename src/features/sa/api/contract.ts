@@ -12,6 +12,8 @@
 import type {
   SAImportApplied,
   SAImportBatch,
+  SIM3LONApplied,
+  SIM3LONPreview,
   ScheduleAgreement,
   SAFilterParams,
   UploadSAPayload,
@@ -42,4 +44,6 @@ export interface ScheduleAgreementApi {
   parseImport(saId: string, file: File): Promise<SAImportBatch>;
   /** Writes the targets a reviewed batch describes. */
   applyImport(batchId: string): Promise<SAImportApplied>;
+  previewSIM3LON(file: File, supplierName: string, productId: string): Promise<SIM3LONPreview>;
+  applySIM3LON(batchId: string): Promise<SIM3LONApplied>;
 }

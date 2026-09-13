@@ -32,6 +32,11 @@ export function ScopeSwitcher() {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
+  // The API may return the acting tenant before its ancestors. The level
+  // number is meaningful only when the list follows the same top-down order,
+  // so keep the source immutable and preserve its order within each level.
+  const orderedTenants = [...tenants].sort((a, b) => a.level - b.level);
+
   // Nothing to switch between at either level: state the scope without
   // offering a choice.
   if (branches.length <= 1 && !canSeeAll && !canSwitchTenant) {
@@ -86,7 +91,7 @@ export function ScopeSwitcher() {
                 <p className="data text-[0.625rem] text-ink-muted">01 = tertinggi</p>
               </div>
               <ul className="max-h-56 overflow-y-auto border-b border-line">
-                {tenants.map((t) => {
+                {orderedTenants.map((t) => {
                   const active = t.id === tenant?.id;
                   const displayLevel = t.level + 1;
                   return (

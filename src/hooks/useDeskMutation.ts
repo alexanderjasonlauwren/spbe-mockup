@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "@/lib/api";
 import { useToast } from "@/hooks/useToast";
 import type { ToastOptions } from "@/components/ui/toast-context";
 
@@ -9,6 +10,20 @@ import type { ToastOptions } from "@/components/ui/toast-context";
  * invalidate everything: verifying a payment changes the finance page, the
  * dashboard's pending count, and the notification bell at once. It also gives
  * every action the same confirmation and failure voice.
+ *
+ * # Why invalidating everything is still the default
+ *
+ * It is correct and it is nearly free against the mock, where a refetch is a
+ * read of an in-memory store. Narrowing it globally would be a silent
+ * regression across twenty screens that rely on the broad sweep -- a payment
+ * verified on one page would stop updating the bell on another, and nobody
+ * would notice until someone complained about a stale number.
+ *
+ * `invalidate` is the opt-out, for the one screen where the sweep is
+ * genuinely expensive: the monitoring board polls every thirty seconds and
+ * draws a Leaflet map whose rounds are road-snapped through a router, so one
+ * "Berangkat" press re-runs every one of those requests. Pass the keys that
+ * actually changed there, and leave the default everywhere else.
  */
 export function useDeskMutation<TArgs, TResult>({
   mutationFn,
@@ -16,6 +31,7 @@ export function useDeskMutation<TArgs, TResult>({
   errorTitle = "Tindakan gagal",
   onDone,
   onFail,
+  invalidate,
 }: {
   mutationFn: (args: TArgs) => Promise<TResult>;
   /** Confirmation copy. Use the past tense of the button that triggered it. */
@@ -23,6 +39,11 @@ export function useDeskMutation<TArgs, TResult>({
   errorTitle?: string;
   onDone?: (result: TResult, args: TArgs) => void;
   onFail?: (error: Error, args: TArgs) => void;
+  /**
+   * The query keys this write actually affects. Omitted, everything is
+   * invalidated -- see the note above before narrowing anything.
+   */
+  invalidate?: readonly unknown[][];
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -30,7 +51,13 @@ export function useDeskMutation<TArgs, TResult>({
   return useMutation<TResult, Error, TArgs>({
     mutationFn,
     onSuccess: (result, args) => {
-      queryClient.invalidateQueries();
+      if (invalidate) {
+        for (const queryKey of invalidate) {
+          void queryClient.invalidateQueries({ queryKey });
+        }
+      } else {
+        void queryClient.invalidateQueries();
+      }
       if (typeof success === "string") {
         toast({ title: success, tone: "success" });
       } else if (success) {
@@ -41,10 +68,33 @@ export function useDeskMutation<TArgs, TResult>({
     onError: (error, args) => {
       toast({
         title: errorTitle,
-        description: error.message,
+        description: describeFailure(error),
         tone: "error",
       });
       onFail?.(error, args);
     },
   });
+}
+
+/**
+ * What to put under the error title.
+ *
+ * A 422 from the service says "The request failed validation" and carries the
+ * fields that failed in `details` — which `ApiError` already parses and nothing
+ * was reading. So the console showed a sentence the operator could not act on:
+ * a missing outlet code and a malformed phone number were the same message,
+ * with nothing to say which field to look at.
+ *
+ * The field names are the wire's (`code`, `phone`), not the form's. Translating
+ * them here would need a map per form that drifts the first time a field is
+ * renamed; naming the field the server named is worse copy and better help.
+ */
+function describeFailure(error: Error): string {
+  if (!(error instanceof ApiError) || error.violations.length === 0) {
+    return error.message;
+  }
+  const fields = error.violations
+    .map((v) => (v.message ? `${v.field}: ${v.message}` : v.field))
+    .join(" · ");
+  return `${error.message} — ${fields}`;
 }

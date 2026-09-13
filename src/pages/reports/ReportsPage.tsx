@@ -19,20 +19,22 @@ import {
   getDailySeries,
   getDriverPerformance,
   getReportSummary,
-  getTopPangkalan,
+  getTopOutlet,
   printReport,
   RANGE_LABEL,
   type ReportRange,
 } from "@/features/reports/api/reportApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { useTheme } from "@/hooks/useTheme";
+import { CanAccess } from "@/features/rbac/components/CanAccess";
+import { PERMISSIONS } from "@/features/rbac/permissions";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelBody, PanelHeader, Meter, Skeleton } from "@/components/common/Panel";
 import { DataTable, type Column } from "@/components/common/DataTable";
 import { ChartTooltip } from "@/components/common/ChartTooltip";
 import { SegmentedControl } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
-import { axisProps, chartTheme, compactTabung, seriesColor } from "@/lib/chart";
+import { axisProps, chartTheme, compactUnit, seriesColor } from "@/lib/chart";
 import {
   formatDateId,
   formatNumber,
@@ -40,11 +42,12 @@ import {
   formatRupiah,
   formatRupiahShort,
 } from "@/lib/format";
+import { outletLabelTitle, unitLabel, unitLabelTitle } from "@/lib/lexicon";
 
 const RANGES: ReportRange[] = ["7h", "30h", "bulan-ini", "bulan-lalu"];
 
 type DriverRow = Awaited<ReturnType<typeof getDriverPerformance>>[number];
-type TopRow = Awaited<ReturnType<typeof getTopPangkalan>>[number];
+type TopRow = Awaited<ReturnType<typeof getTopOutlet>>[number];
 
 export function ReportsPage() {
   const [range, setRange] = useState<ReportRange>("30h");
@@ -61,7 +64,7 @@ export function ReportsPage() {
   });
   const top = useQuery({
     queryKey: [...scopeKey(), "report-top", range],
-    queryFn: () => getTopPangkalan(range, 8),
+    queryFn: () => getTopOutlet(range, 8),
   });
   const drivers = useQuery({
     queryKey: [...scopeKey(), "report-drivers", range],
@@ -91,7 +94,7 @@ export function ReportsPage() {
   const topColumns: Column<TopRow>[] = [
     {
       key: "nama",
-      header: "Pangkalan",
+      header: outletLabelTitle(),
       render: (row, i) => (
         <>
           <span className="flex items-baseline gap-2">
@@ -110,13 +113,13 @@ export function ReportsPage() {
       sortValue: (row) => row.suratJalan,
     },
     {
-      key: "tabung",
-      header: "Tabung",
+      key: "unit",
+      header: unitLabelTitle(),
       align: "right",
       render: (row) => (
-        <span className="data font-semibold text-ink">{formatNumber(row.tabung)}</span>
+        <span className="data font-semibold text-ink">{formatNumber(row.unit)}</span>
       ),
-      sortValue: (row) => row.tabung,
+      sortValue: (row) => row.unit,
     },
     {
       key: "nilai",
@@ -154,13 +157,13 @@ export function ReportsPage() {
       sortValue: (row) => row.suratJalan,
     },
     {
-      key: "tabung",
-      header: "Tabung",
+      key: "unit",
+      header: unitLabelTitle(),
       align: "right",
       render: (row) => (
-        <span className="data font-semibold text-ink">{formatNumber(row.tabung)}</span>
+        <span className="data font-semibold text-ink">{formatNumber(row.unit)}</span>
       ),
-      sortValue: (row) => row.tabung,
+      sortValue: (row) => row.unit,
     },
     {
       key: "ketepatan",
@@ -194,14 +197,16 @@ export function ReportsPage() {
         description="Rekapitulasi distribusi dan pendapatan untuk periode yang dipilih, siap diunduh atau dicetak untuk arsip."
         actions={
           <>
-            <Button
-              variant="outline"
-              onClick={() => exportMutation.mutate(undefined as never)}
-              disabled={exportMutation.isPending}
-            >
-              <Download className="h-3.5 w-3.5" />
-              Unduh CSV
-            </Button>
+            <CanAccess permission={PERMISSIONS.INVOICES_EXPORT}>
+              <Button
+                variant="outline"
+                onClick={() => exportMutation.mutate(undefined as never)}
+                disabled={exportMutation.isPending}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Unduh CSV
+              </Button>
+            </CanAccess>
             <Button
               onClick={() => printMutation.mutate(undefined as never)}
               disabled={printMutation.isPending}
@@ -225,20 +230,20 @@ export function ReportsPage() {
           Periode <span className="data">{formatDateId(s.range.from)}</span> –{" "}
           <span className="data">{formatDateId(s.range.to)}</span> ·{" "}
           <span className="data">{formatNumber(s.suratJalan)}</span> surat jalan ·{" "}
-          <span className="data">{formatNumber(s.pangkalanDilayani)}</span> pangkalan
+          <span className="data">{formatNumber(s.outletDilayani)}</span> outlet
           dilayani
         </p>
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
-          label="Tabung terkirim"
-          value={formatNumber(s?.tabungTerkirim ?? 0)}
-          unit="tabung"
-          meter={s ? { value: s.tabungTerkirim, max: s.tabungTarget } : undefined}
+          label={`${unitLabelTitle()} terkirim`}
+          value={formatNumber(s?.unitTerkirim ?? 0)}
+          unit={unitLabel()}
+          meter={s ? { value: s.unitTerkirim, max: s.unitTarget } : undefined}
           hint={
             s
-              ? `${formatPercentId(s.pencapaian, 1)} dari target ${formatNumber(s.tabungTarget)}`
+              ? `${formatPercentId(s.pencapaian, 1)} dari target ${formatNumber(s.unitTarget)}`
               : undefined
           }
           isLoading={summary.isLoading}
@@ -246,7 +251,7 @@ export function ReportsPage() {
         <Stat
           label="Pendapatan terverifikasi"
           value={formatRupiahShort(s?.pendapatan ?? 0)}
-          hint="Hanya pembayaran yang sudah diverifikasi keuangan"
+          hint="Kas yang sudah diverifikasi, bukan akrual — untuk laba rugi akrual lihat Buku Besar"
           isLoading={summary.isLoading}
           tone="pine"
         />
@@ -260,7 +265,7 @@ export function ReportsPage() {
         <Stat
           label="Rata-rata harian"
           value={formatNumber(s?.rerataPerHari ?? 0)}
-          unit="tabung"
+          unit={unitLabel()}
           hint={
             s
               ? `${formatNumber(s.suratJalanTertunda)} surat jalan tertunda pada periode ini`
@@ -274,7 +279,7 @@ export function ReportsPage() {
       {/* Two measures, two charts — never two y-axes on one plot. */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Panel>
-          <PanelHeader title="Volume harian" hint="Realisasi terhadap target, dalam tabung" />
+          <PanelHeader title="Volume harian" hint={`Realisasi terhadap target, dalam ${unitLabel()}`} />
           <PanelBody>
             {series.isLoading ? (
               <Skeleton className="h-[240px] w-full" />
@@ -283,10 +288,10 @@ export function ReportsPage() {
                 <BarChart data={chartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                   <CartesianGrid stroke={t.grid} vertical={false} />
                   <XAxis dataKey="label" {...axisProps(isDark)} interval="preserveStartEnd" />
-                  <YAxis {...axisProps(isDark)} tickFormatter={compactTabung} width={58} />
+                  <YAxis {...axisProps(isDark)} tickFormatter={compactUnit} width={58} />
                   <Tooltip
                     cursor={{ fill: t.grid, fillOpacity: 0.45 }}
-                    content={<ChartTooltip unit="tabung" />}
+                    content={<ChartTooltip unit={unitLabel()} />}
                   />
                   <Legend
                     iconType="square"
@@ -356,7 +361,7 @@ export function ReportsPage() {
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Panel>
-          <PanelHeader title="Pangkalan teratas" hint="Menurut tabung diterima" />
+          <PanelHeader title={`${outletLabelTitle()} teratas`} hint={`Menurut ${unitLabel()} diterima`} />
           <DataTable
             columns={topColumns}
             data={top.data ?? []}
@@ -376,7 +381,7 @@ export function ReportsPage() {
             data={drivers.data ?? []}
             isLoading={drivers.isLoading}
             rowKey={(row) => row.id}
-            defaultSortKey="tabung"
+            defaultSortKey={`${unitLabel()}`}
             defaultSortDir="desc"
             emptyIcon={TrendingUp}
             emptyMessage="Belum ada armada yang bertugas"

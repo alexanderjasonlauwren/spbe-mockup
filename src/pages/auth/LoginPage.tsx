@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2, TriangleAlert } from "lucide-react";
 import { useAuthStore } from "@/features/auth/store/authStore";
+import { landingPathFor } from "@/layouts/nav";
 import { Field, TextInput } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
-import { APP_NAME } from "@/utils/constants";
+import { APP_NAME, APP_SUBTITLE } from "@/utils/constants";
 import { cn } from "@/lib/utils";
 
 /**
@@ -72,7 +73,11 @@ export function LoginPage() {
     setIsLoading(true);
     try {
       await login(email, password);
-      navigate("/dashboard", { replace: true });
+      // Read after the store settles: a sopir belongs on their run, not on a
+      // dashboard of trucks that are not theirs.
+      navigate(landingPathFor(useAuthStore.getState().user?.permissions), {
+        replace: true,
+      });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -96,18 +101,27 @@ export function LoginPage() {
             <p className="text-lg font-bold leading-tight tracking-[-0.02em] text-[#F4F5F0]">
               {APP_NAME}
             </p>
-            <p className="label text-[0.625rem] text-[#9AA093]">Konsol Agen LPG</p>
+            <p className="label text-[0.625rem] text-[#9AA093]">{APP_SUBTITLE}</p>
           </div>
         </div>
 
         <div className="relative z-10">
+          {/*
+            "muatan", not "tabung". This is the one screen with no tenant, so
+            there is no lexicon to ask -- whoever is looking at it has not
+            signed in yet and the console does not know which business they
+            run. A vertical's noun here is the first thing a water depot sees,
+            and it cannot be swapped later the way every noun behind the login
+            can. "Muatan" is the console's own generic word for a load, already
+            on the planning screen.
+          */}
           <h2 className="max-w-md text-[2.5rem] font-bold leading-[1.08] tracking-[-0.035em] text-[#F4F5F0]">
-            Setiap tabung punya
+            Setiap muatan punya
             <br />
             jam berangkatnya.
           </h2>
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-[#9AA093]">
-            Konsol operasional untuk agen distribusi LPG: kuota SPBE, rencana rute,
+            Konsol operasional untuk agen distribusi: kuota pasokan, rencana rute,
             posisi armada, dan verifikasi pembayaran dalam satu papan.
           </p>
 
@@ -161,7 +175,7 @@ export function LoginPage() {
         <div className="w-full max-w-sm">
           <div className="mb-8 lg:hidden">
             <p className="text-xl font-bold tracking-[-0.02em] text-ink">{APP_NAME}</p>
-            <p className="label text-2xs text-ink-muted">Konsol Agen LPG</p>
+            <p className="label text-2xs text-ink-muted">{APP_SUBTITLE}</p>
           </div>
 
           <h1 className="text-2xl font-bold tracking-[-0.02em] text-ink">Masuk</h1>

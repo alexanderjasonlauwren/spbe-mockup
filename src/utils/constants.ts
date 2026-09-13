@@ -1,5 +1,5 @@
 export const APP_NAME = "SiDistrib";
-export const APP_SUBTITLE = "Konsol Agen LPG";
+export const APP_SUBTITLE = "Konsol Distribusi";
 
 export const MONTH_NAMES_ID = [
   "Januari",
@@ -16,10 +16,10 @@ export const MONTH_NAMES_ID = [
   "Desember",
 ];
 
-export const SPBE_LIST = [
-  "SPBE Jakarta Utara 01",
-  "SPBE Bekasi Utama",
-  "SPBE Tangerang Raya",
+export const SUPPLIER_LIST = [
+  "SPBE Salatiga Utama",
+  "SPBE Ungaran Mandiri",
+  "SPBE Boyolali Raya",
   "SPBE Maju Jaya",
   "SPBE Sumber Rejeki",
   "SPBE Berkah Gas",
@@ -27,20 +27,20 @@ export const SPBE_LIST = [
   "SPBE Sejahtera",
 ];
 
-export const PANGKALAN_LIST = [
-  "Pangkalan LPG Jaya Abadi",
+export const OUTLET_LIST = [
+  "Outlet LPG Jaya Abadi",
   "Mitra Sejahtera Gas",
-  "Pangkalan Berkah Rejeki",
+  "Outlet Berkah Rejeki",
   "Toko Gas Utama Mandiri",
-  "Pangkalan Sinar Baru",
+  "Outlet Sinar Baru",
   "UD Maju Terus",
-  "Pangkalan Berkah Jaya",
+  "Outlet Berkah Jaya",
   "Toko Gas Sejahtera",
-  "Pangkalan Ibu Ani",
+  "Outlet Ibu Ani",
   "Sumber Gas Rejeki",
-  "Pangkalan LPG Maju Jaya",
-  "Pangkalan Sumber Gas",
-  "Pangkalan Berkah Elpiji",
+  "Outlet LPG Maju Jaya",
+  "Outlet Sumber Gas",
+  "Outlet Berkah Elpiji",
 ];
 
 export const DRIVER_NAMES = [

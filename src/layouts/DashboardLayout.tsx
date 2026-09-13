@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { useOpsClock } from "@/hooks/useOpsClock";
 import { useSidebarShortcut, useSidebarStore } from "@/hooks/useSidebar";
 import { useScope } from "@/features/tenancy/useScope";
+import { getTenants } from "@/features/tenancy/api/tenancyApi";
+import { setTenantRegistry } from "@/features/tenancy/tenantRegistry";
+import { getSettings } from "@/features/settings/api/settingsApi";
+import { hydrateLexicon, setLexicon } from "@/lib/lexicon";
+import { scopeKey } from "@/mocks/scope";
 import { cn } from "@/lib/utils";
 
 export function DashboardLayout() {
@@ -12,7 +18,32 @@ export function DashboardLayout() {
   const collapsed = useSidebarStore((s) => s.collapsed);
 
   // Establishes the active branch before any child query runs.
-  const { branchId } = useScope();
+  // The tenant list, fetched through whichever adapter this build uses and
+  // handed to the registry that useScope reads synchronously. Done here because
+  // the layout owns the session and renders above every screen that needs a
+  // scope.
+  const tenantList = useQuery({
+    queryKey: ["tenants", "registry"],
+    queryFn: getTenants,
+    staleTime: 5 * 60_000,
+  });
+  if (tenantList.data) setTenantRegistry(tenantList.data);
+
+  const scope = useScope();
+  const { branchId } = scope;
+
+  // This tenant's vocabulary. Set during render rather than in an
+  // effect, the same way useScope sets the active scope: print templates and
+  // toast strings read it synchronously and cannot wait for a commit.
+  const settings = useQuery({
+    queryKey: [...scopeKey(), "settings"],
+    queryFn: getSettings,
+    staleTime: 5 * 60_000,
+  });
+  // Hydrate from this tenant's cache first, so the first paint after a switch
+  // shows neutral words rather than the tenant we just left.
+  hydrateLexicon(scope.tenant?.id ?? "");
+  if (settings.data) setLexicon(settings.data.istilah, scope.tenant?.id ?? "");
 
   // Keeps today's run moving while the console is open.
   useOpsClock();

@@ -1,6 +1,7 @@
 import { Skeleton } from "@/components/common/Panel";
 import { formatNumber } from "@/lib/format";
-import type { PangkalanShare } from "../types";
+import type { OutletShare } from "../types";
+import { unitLabel } from "@/lib/lexicon";
 
 /**
  * Share of the month's tonnage by kecamatan.
@@ -14,7 +15,7 @@ export function WilayahShareChart({
   data,
   isLoading,
 }: {
-  data: PangkalanShare[];
+  data: OutletShare[];
   isLoading?: boolean;
 }) {
   if (isLoading) {
@@ -49,7 +50,7 @@ export function WilayahShareChart({
         <span className="data text-lg font-semibold text-ink">
           {formatNumber(total)}
           <span className="ml-1 font-sans text-xs font-medium tracking-normal text-ink-muted">
-            tabung
+            {unitLabel()}
           </span>
         </span>
       </div>

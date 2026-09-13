@@ -35,8 +35,8 @@ export function RoundStopList({
   const assignment = assignments.find((a) => a.driverId === focusedDriverId);
 
   const sequence = useMemo(
-    () => buildRoundSequence(rows, focusedDriverId, assignment?.pangkalanId),
-    [rows, focusedDriverId, assignment?.pangkalanId],
+    () => buildRoundSequence(rows, focusedDriverId, assignment?.outletId),
+    [rows, focusedDriverId, assignment?.outletId],
   );
 
   if (!driver || sequence.stops.length === 0) {
@@ -117,10 +117,10 @@ export function RoundStopList({
 
             <span className="min-w-0 flex-1">
               <Link
-                to={`/pangkalan/${stop.pangkalanId}`}
+                to={`/outlet/${stop.outletId}`}
                 className="block truncate text-xs font-semibold text-ink hover:underline hover:decoration-signal hover:decoration-2 hover:underline-offset-4"
               >
-                {stop.row.pangkalan}
+                {stop.row.outlet}
               </Link>
               <span className="data mt-0.5 block text-2xs text-ink-muted">
                 {stop.row.jamRencana} · {formatNumber(stop.row.realisasi)}/

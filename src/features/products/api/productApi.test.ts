@@ -1,0 +1,178 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+
+/**
+ * The catalogue's mapping against the real API -- specifically the three
+ * compromises this adapter makes because the backend's product module is a
+ * catalogue, not a stock/pricing module (see contract.ts's own header):
+ * "ukuran" round-trips through weight_kg, every create defaults to the
+ * tenant's first category, and stock-dependent figures are flagged
+ * unavailable rather than reported as zero.
+ */
+
+const getList = vi.fn();
+const getOne = vi.fn();
+const send = vi.fn();
+
+vi.mock("@/lib/api", () => ({
+  getList: (...args: unknown[]) => getList(...args),
+  getOne: (...args: unknown[]) => getOne(...args),
+  send: (...args: unknown[]) => send(...args),
+  upload: vi.fn(),
+}));
+
+const { productApiHttp } = await import("./productApi.http");
+
+const ID = "11111111-1111-4111-8111-111111111111";
+
+function wire(overrides: Record<string, unknown> = {}) {
+  return {
+    id: ID,
+    code: "LPG-003",
+    name: "LPG 3 Kg Subsidi",
+    category: "subsidi",
+    category_name: "Subsidi",
+    weight_kg: 3,
+    min_stock: 20,
+    current_sell_price: 22000,
+    status: "atv",
+    version: 1,
+    created_at: "2026-01-05T02:00:00Z",
+    updated_at: "2026-08-30T02:00:00Z",
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  getList.mockReset();
+  getOne.mockReset();
+  send.mockReset();
+});
+
+describe("reading", () => {
+  it("flags stock and cost price unavailable rather than reporting zero as real", async () => {
+    getOne.mockResolvedValue(wire());
+    const p = await productApiHttp.getProductDetail(ID);
+    expect(p.stokTersedia).toBe(false);
+    expect(p.hargaJual).toBe(22000);
+  });
+
+  it("formats ukuran from weight_kg", async () => {
+    getOne.mockResolvedValue(wire({ weight_kg: 5.5 }));
+    expect((await productApiHttp.getProductDetail(ID)).ukuran).toBe("5.5 kg");
+  });
+
+  it("reads a product with no current price as zero, not undefined", async () => {
+    getOne.mockResolvedValue(wire({ current_sell_price: undefined }));
+    expect((await productApiHttp.getProductDetail(ID)).hargaJual).toBe(0);
+  });
+
+  /**
+   * total/aktif are real counts off the catalogue -- only stokRendah and
+   * nilaiStok are unavailable. A build once hardcoded the whole summary to
+   * zero, which made "3 produk terdaftar" read as "0" on a real catalogue.
+   */
+  it("counts real products even though stock figures are unavailable", async () => {
+    getList.mockResolvedValue({
+      items: [wire({ id: "1", status: "atv" }), wire({ id: "2", status: "ina" })],
+    });
+    const s = await productApiHttp.getStockSummary();
+    expect(s.total).toBe(2);
+    expect(s.aktif).toBe(1);
+    expect(s.stokTersedia).toBe(false);
+  });
+
+  it("maps status atv/ina to aktif", async () => {
+    getOne.mockResolvedValue(wire({ status: "ina" }));
+    expect((await productApiHttp.getProductDetail(ID)).aktif).toBe(false);
+  });
+});
+
+describe("writing", () => {
+  /**
+   * The form's own hint claims a blank code is "dibuat otomatis" (generated
+   * automatically) -- true for the mock, and a real 422 from the server
+   * without this fix, since `code` is required there. A build once sent an
+   * empty string and let the form's own promise turn into an error toast.
+   */
+  it("generates a code when the form leaves it blank, honouring its own hint", async () => {
+    getOne.mockResolvedValue([{ code: "subsidi", name: "Subsidi", sort_order: 0 }]);
+    send.mockResolvedValue(wire());
+
+    await productApiHttp.createOrUpdateProduct({
+      kode: "",
+      nama: "LPG Test 12 Kg",
+      ukuran: "12 kg",
+      stokMinimum: 0,
+    });
+
+    const code = send.mock.calls[0][2].code as string;
+    expect(code.length).toBeGreaterThan(0);
+    expect(code).not.toBe("");
+  });
+
+  it("parses the leading number out of a free-text ukuran back to weight_kg", async () => {
+    send.mockResolvedValue(wire());
+    getOne.mockResolvedValue([{ code: "subsidi", name: "Subsidi", sort_order: 0 }]);
+
+    await productApiHttp.createOrUpdateProduct({
+      kode: "LPG-005",
+      nama: "LPG 5.5 Kg",
+      ukuran: "5.5kg",
+      stokMinimum: 10,
+    });
+
+    expect(send.mock.calls[0][2].weight_kg).toBe(5.5);
+  });
+
+  it("refuses a size with no number rather than silently writing 0kg", async () => {
+    await expect(
+      productApiHttp.createOrUpdateProduct({
+        kode: "X",
+        nama: "X",
+        ukuran: "besar",
+        stokMinimum: 0,
+      }),
+    ).rejects.toThrow(/angka berat/);
+  });
+
+  it("defaults a create to the tenant's first product category", async () => {
+    getOne.mockResolvedValue([
+      { code: "non_subsidi", name: "Non-Subsidi", sort_order: 1 },
+      { code: "subsidi", name: "Subsidi", sort_order: 0 },
+    ]);
+    send.mockResolvedValue(wire());
+
+    await productApiHttp.createOrUpdateProduct({
+      kode: "LPG-009",
+      nama: "LPG 9 Kg",
+      ukuran: "9 kg",
+      stokMinimum: 5,
+    });
+
+    expect(send.mock.calls[0][2].category).toBe("non_subsidi");
+  });
+
+  it("reads the version before updating and sends it back", async () => {
+    getOne.mockResolvedValue(wire({ version: 4 }));
+    send.mockResolvedValue(wire({ version: 5 }));
+
+    await productApiHttp.createOrUpdateProduct({
+      id: ID,
+      kode: "LPG-003",
+      nama: "LPG 3 Kg Subsidi",
+      ukuran: "3 kg",
+      stokMinimum: 20,
+    });
+
+    const [method, path, body] = send.mock.calls[0];
+    expect(method).toBe("put");
+    expect(path).toBe(`/products/${ID}`);
+    expect(body.version).toBe(4);
+  });
+
+  /** ProductListPage only offers "Sesuaikan stok" when stokTersedia is true,
+   *  so reaching this in practice is already a bug elsewhere. */
+  it("refuses a stock adjustment -- core.stock_levels has no service in this build", async () => {
+    await expect(productApiHttp.changeStock(ID, 10, "test")).rejects.toThrow(/belum tersedia/);
+  });
+});

@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { unitLabel } from "@/lib/lexicon";
 
 interface Entry {
   name?: string;
@@ -16,7 +17,7 @@ export function ChartTooltip({
   active,
   payload,
   label,
-  unit = "tabung",
+  unit = `${unitLabel()}`,
   formatValue,
   className,
 }: {

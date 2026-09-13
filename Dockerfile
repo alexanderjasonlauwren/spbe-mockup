@@ -13,17 +13,23 @@ RUN npm ci
 COPY . .
 
 # Build args for frontend environment configuration
+ARG VITE_DATA_SOURCE=api
 ARG VITE_API_URL=/api/v1
 ARG VITE_APP_TITLE="Admin Dashboard"
 ARG VITE_MAP_TILE_URL=""
 ARG VITE_MAP_TILE_ATTRIBUTION=""
 ARG VITE_ROUTER_URL=""
 
+ENV VITE_DATA_SOURCE=$VITE_DATA_SOURCE
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_APP_TITLE=$VITE_APP_TITLE
 ENV VITE_MAP_TILE_URL=$VITE_MAP_TILE_URL
 ENV VITE_MAP_TILE_ATTRIBUTION=$VITE_MAP_TILE_ATTRIBUTION
 ENV VITE_ROUTER_URL=$VITE_ROUTER_URL
+
+# The production bundle currently exceeds Node's container-default heap while
+# Rollup renders chunks. This affects only the disposable builder stage.
+ENV NODE_OPTIONS=--max-old-space-size=1024
 
 # Build production distribution
 RUN npm run build

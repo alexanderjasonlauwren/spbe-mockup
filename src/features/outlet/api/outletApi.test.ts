@@ -1,0 +1,223 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+
+/**
+ * The HTTP adapter's mapping, which is where the two sources drift.
+ *
+ * Three things are asserted here that no screen would reveal until a number was
+ * wrong: the coordinate pair keeps its order, the delivery-derived figures are
+ * flagged unavailable rather than reported as zero, and the write payload
+ * carries only what the service accepts.
+ */
+
+const getList = vi.fn();
+const getOne = vi.fn();
+const send = vi.fn();
+
+vi.mock("@/lib/api", () => ({
+  getList: (...args: unknown[]) => getList(...args),
+  getOne: (...args: unknown[]) => getOne(...args),
+  send: (...args: unknown[]) => send(...args),
+  upload: vi.fn(),
+}));
+vi.mock("@/lib/export", () => ({ exportCsv: vi.fn(), timestampSuffix: () => "x" }));
+
+const { outletApiHttp } = await import("./outletApi.http");
+
+const ID = "11111111-1111-4111-8111-111111111111";
+
+function wire(overrides: Record<string, unknown> = {}) {
+  return {
+    id: ID,
+    branch_id: "22222222-2222-4222-8222-222222222222",
+    code: "PKL-001",
+    name: "Pangkalan Ahmad",
+    owner_name: "Ahmad Subarjo",
+    phone: "081234567890",
+    address: "Jl. Merdeka 12",
+    district: "Sidorejo",
+    city: "Salatiga",
+    province: "Jawa Tengah",
+    latitude: -7.3305,
+    longitude: 110.5084,
+    credit_limit: 5_000_000,
+    credit_balance: 1_250_000,
+    payment_terms_days: 14,
+    auto_block_on_overdue: true,
+    current_month_target_qty: 420,
+    service_tier: "standard",
+    status: "atv",
+    version: 3,
+    created_at: "2026-01-05T02:00:00Z",
+    updated_at: "2026-08-30T02:00:00Z",
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  getList.mockReset();
+  getOne.mockReset();
+  send.mockReset();
+});
+
+/**
+ * The coordinate pair survives the mapping, in the right order.
+ *
+ * `ST_MakePoint` takes longitude first and every mapping API says "lat, lng",
+ * so a swap is one keystroke and reads correctly in both files. Salatiga at
+ * 7.33S 110.51E becomes a point in the Indian Ocean off Somalia if they trade
+ * places — which looks like a data-entry mistake rather than a mapping bug, so
+ * it is asserted here where the confusion actually lives.
+ */
+it("keeps latitude and longitude the right way round", async () => {
+  getOne.mockResolvedValue(wire());
+
+  const outlet = await outletApiHttp.getOutletDetail(ID);
+
+  expect(outlet.lat).toBe(-7.3305);
+  expect(outlet.lng).toBe(110.5084);
+});
+
+/**
+ * The delivery-derived figures are flagged, not fabricated.
+ *
+ * Reported as zero without the flag, "0 tagihan tertunda" says this outlet owes
+ * nothing and "sisa kuota 0" says it may take no more cylinders. Both are
+ * claims a planner acts on, and neither is one this build can make.
+ */
+it("marks the delivery-derived figures unavailable", async () => {
+  getOne.mockResolvedValue(wire());
+
+  const outlet = await outletApiHttp.getOutletDetail(ID);
+
+  expect(outlet.statistikTersedia).toBe(false);
+  expect(outlet.terpakaiBulanIni).toBe(0);
+  expect(outlet.tagihanTertunda).toBe(0);
+  expect(outlet.pengirimanTerakhir).toBeUndefined();
+});
+
+/**
+ * What the outlet owes IS known, because it is a column on the outlet rather
+ * than a sum over invoices. Blanking it with the rest would throw away the one
+ * credit figure the service can answer.
+ */
+it("still reports the credit balance", async () => {
+  getOne.mockResolvedValue(wire());
+
+  expect((await outletApiHttp.getOutletDetail(ID)).nilaiTertunda).toBe(1_250_000);
+});
+
+/** The monthly obligation comes from outlet targets, joined onto the read. */
+it("maps the current month's target onto the monthly quota", async () => {
+  getOne.mockResolvedValue(wire());
+
+  expect((await outletApiHttp.getOutletDetail(ID)).kuotaBulanan).toBe(420);
+});
+
+describe("filtering", () => {
+  /**
+   * Filters go to the server, not to the array.
+   *
+   * A page is 100 rows. Filtered here, a search would look at one page of a
+   * longer list and report that the rest do not match — an empty result that
+   * reads as "no such outlet" rather than as "not on this page".
+   */
+  it("sends search, status and district to the server", async () => {
+    getList.mockResolvedValue({ items: [wire()], pagination: {} });
+
+    await outletApiHttp.getOutletList({
+      search: "ahmad",
+      status: "Aktif",
+      kecamatan: "Sidorejo",
+    });
+
+    const [, params] = getList.mock.calls[0];
+    expect(params.search).toBe("ahmad");
+    expect(params.filters).toEqual([
+      { field: "status", operator: "eq", value: "atv" },
+      { field: "district", operator: "eq", value: "Sidorejo" },
+    ]);
+  });
+
+  /** "Semua" is the absence of a filter, not a value to send. */
+  it("sends no filter for Semua", async () => {
+    getList.mockResolvedValue({ items: [], pagination: {} });
+
+    await outletApiHttp.getOutletList({ status: "Semua", kecamatan: "Semua" });
+
+    expect(getList.mock.calls[0][1].filters).toEqual([]);
+  });
+});
+
+describe("writing", () => {
+  /**
+   * An update carries the version the caller last read.
+   *
+   * Read immediately before the write, because the form holds a domain object
+   * with no version field. Without it the service refuses every update with
+   * 409, and the form would be permanently unable to save.
+   */
+  it("reads the version before updating and sends it back", async () => {
+    getOne.mockResolvedValue(wire({ version: 9 }));
+    send.mockResolvedValue(wire({ version: 10 }));
+
+    await outletApiHttp.createOrUpdateOutlet({ id: ID, nama: "Pangkalan Ahmad Jaya" });
+
+    const [method, path, body] = send.mock.calls[0];
+    expect(method).toBe("put");
+    expect(path).toBe(`/outlets/${ID}`);
+    expect(body.version).toBe(9);
+    expect(body.name).toBe("Pangkalan Ahmad Jaya");
+  });
+
+  /** A create has no version to send, and no id in the path. */
+  it("posts a create without a version", async () => {
+    send.mockResolvedValue(wire());
+
+    await outletApiHttp.createOrUpdateOutlet({ nama: "Baru", kode: "PKL-009" });
+
+    const [method, path, body] = send.mock.calls[0];
+    expect(method).toBe("post");
+    expect(path).toBe("/outlets");
+    expect(body.version).toBeUndefined();
+    expect(getOne).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The monthly quota is never written from this form.
+   *
+   * It is a sum over core.outlet_targets, edited per product per month on its
+   * own screen. Sending it here would be a second author for a number derived
+   * from others, and the two would disagree the first time either was used.
+   */
+  it("never sends the monthly quota", async () => {
+    send.mockResolvedValue(wire());
+
+    await outletApiHttp.createOrUpdateOutlet({ nama: "Baru", kuotaBulanan: 999 });
+
+    const body = send.mock.calls[0][2];
+    expect(Object.keys(body)).not.toContain("current_month_target_qty");
+    expect(JSON.stringify(body)).not.toContain("999");
+  });
+
+  /**
+   * The console's two words, back into the schema's three letters — and only on
+   * an update.
+   *
+   * `CreateOutletRequest` does not declare `status`, and the server refuses an
+   * unrecognised field outright rather than ignoring it, so sending one on
+   * create is a 422 on every new outlet. That is the right shape: an outlet is
+   * created active, and deactivating one is a decision about a record that
+   * already exists.
+   */
+  it("sends the status on update and never on create", async () => {
+    getOne.mockResolvedValue(wire({ version: 2 }));
+    send.mockResolvedValue(wire());
+    await outletApiHttp.createOrUpdateOutlet({ id: ID, status: "Nonaktif" });
+    expect(send.mock.calls[0][2].status).toBe("ina");
+
+    send.mockReset();
+    send.mockResolvedValue(wire());
+    await outletApiHttp.createOrUpdateOutlet({ nama: "Baru", status: "Aktif" });
+    expect(send.mock.calls[0][2]).not.toHaveProperty("status");
+  });
+});

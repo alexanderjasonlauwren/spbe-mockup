@@ -14,6 +14,8 @@ import {
   type TransactionRow,
 } from "@/features/transactions/api/transactionApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
+import { CanAccess } from "@/features/rbac/components/CanAccess";
+import { PERMISSIONS } from "@/features/rbac/permissions";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelHeader } from "@/components/common/Panel";
 import { DataTable, type Column } from "@/components/common/DataTable";
@@ -28,21 +30,28 @@ import {
   formatRupiah,
   formatRupiahShort,
 } from "@/lib/format";
+import { outletLabel, outletLabelTitle, unitLabel, unitLabelTitle } from "@/lib/lexicon";
 
 const STATUS_KIRIM = ["Semua", "Antrian", "Proses", "Selesai", "Tertunda"];
+// Matches TransactionRow.statusBayar's actual type, InvoiceStatus |
+// "Belum ditagih" -- these used to be PaymentStatusEntity's values
+// ("Menunggu Verifikasi" | "Terverifikasi" | "Ditolak"), which never equal
+// an invoice's own status, so three of five options could never match a row.
 const STATUS_BAYAR = [
   "Semua",
   "Belum ditagih",
-  "Menunggu Verifikasi",
-  "Terverifikasi",
-  "Ditolak",
+  "Terbit",
+  "Sebagian",
+  "Lunas",
+  "Jatuh Tempo",
+  "Batal",
 ];
 
 export function TransactionListPage() {
   const [filters, setFilters] = useState<TransactionFilters>(() => ({
     ...defaultRange(),
     search: "",
-    pangkalanId: "Semua",
+    outletId: "Semua",
     kecamatan: "Semua",
     driverId: "Semua",
     statusKirim: "Semua",
@@ -87,7 +96,7 @@ export function TransactionListPage() {
     setFilters({
       ...defaultRange(),
       search: "",
-      pangkalanId: "Semua",
+      outletId: "Semua",
       kecamatan: "Semua",
       driverId: "Semua",
       statusKirim: "Semua",
@@ -123,22 +132,22 @@ export function TransactionListPage() {
       sortValue: (row) => row.suratJalan,
     },
     {
-      key: "pangkalan",
-      header: "Pangkalan",
+      key: outletLabel(),
+      header: outletLabelTitle(),
       render: (row) => (
         <>
           <Link
-            to={`/pangkalan/${row.pangkalanId}`}
+            to={`/outlet/${row.outletId}`}
             className="block font-medium text-ink hover:underline hover:decoration-signal hover:decoration-2 hover:underline-offset-4"
           >
-            {row.pangkalan}
+            {row.outlet}
           </Link>
           <span className="block text-2xs text-ink-muted">
-            <span className="data">{row.kodePangkalan}</span> · Kec. {row.kecamatan}
+            <span className="data">{row.kodeOutlet}</span> · Kec. {row.kecamatan}
           </span>
         </>
       ),
-      sortValue: (row) => row.pangkalan,
+      sortValue: (row) => row.outlet,
     },
     {
       key: "armada",
@@ -152,7 +161,7 @@ export function TransactionListPage() {
       sortValue: (row) => row.driver,
     },
     {
-      key: "tabung",
+      key: `${unitLabel()}`,
       header: "Realisasi",
       align: "right",
       render: (row) => {
@@ -245,7 +254,7 @@ export function TransactionListPage() {
         title="Rekap Transaksi"
         description="Seluruh baris transaksi — surat jalan beserta tagihannya, ditambah kwitansi yang masuk lewat pindaian. Saring, lalu unduh untuk diolah di Excel."
         actions={
-          <>
+          <CanAccess permission={PERMISSIONS.TRANSACTIONS_EXPORT}>
             <Button
               variant="outline"
               onClick={() => csvMutation.mutate(undefined as never)}
@@ -261,7 +270,7 @@ export function TransactionListPage() {
               <FileSpreadsheet className="h-3.5 w-3.5" />
               Unduh Excel
             </Button>
-          </>
+          </CanAccess>
         }
       />
 
@@ -271,13 +280,13 @@ export function TransactionListPage() {
           label="Baris transaksi"
           value={formatNumber(s?.jumlah ?? 0)}
           unit="baris"
-          hint={`Dari ${formatNumber(s?.pangkalan ?? 0)} pangkalan`}
+          hint={`Dari ${formatNumber(s?.outlet ?? 0)} ${outletLabel()}`}
           isLoading={summary.isLoading}
         />
         <Stat
-          label="Tabung terkirim"
-          value={formatNumber(s?.tabung ?? 0)}
-          unit="tabung"
+          label={`${unitLabelTitle()} terkirim`}
+          value={formatNumber(s?.unit ?? 0)}
+          unit={unitLabel()}
           hint="Realisasi pada periode terpilih"
           isLoading={summary.isLoading}
         />
@@ -333,17 +342,17 @@ export function TransactionListPage() {
             <SearchInput
               value={filters.search ?? ""}
               onChange={(search) => patch({ search })}
-              placeholder="Surat jalan, invoice, pangkalan, driver, atau plat"
+              placeholder={`Surat jalan, invoice, ${outletLabel()}, driver, atau plat`}
             />
           </Field>
 
-          <Field label="Pangkalan">
+          <Field label={outletLabelTitle()}>
             <SelectInput
-              value={filters.pangkalanId}
-              onChange={(e) => patch({ pangkalanId: e.target.value })}
+              value={filters.outletId}
+              onChange={(e) => patch({ outletId: e.target.value })}
             >
-              <option value="Semua">Semua pangkalan</option>
-              {(options.data?.pangkalan ?? []).map((p) => (
+              <option value="Semua">Semua {outletLabel()}</option>
+              {(options.data?.outlet ?? []).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
                 </option>
@@ -444,7 +453,7 @@ export function TransactionListPage() {
                 Total {formatNumber(data.length)} baris
               </td>
               <td className="data px-4 py-3 text-right text-xs font-semibold text-ink">
-                {formatNumber(s?.tabung ?? 0)}
+                {formatNumber(s?.unit ?? 0)}
               </td>
               <td className="data px-4 py-3 text-right text-xs font-semibold text-ink">
                 {formatRupiah(s?.nilai ?? 0)}

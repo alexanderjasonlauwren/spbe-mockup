@@ -3,12 +3,12 @@ import { AlertCircle, RefreshCw } from "lucide-react";
 import { useMonitoring } from "@/features/monitoring/hooks/useMonitoring";
 import { DateRangeFilter } from "@/features/monitoring/components/DateRangeFilter";
 import { DriverCardRow } from "@/features/monitoring/components/DriverCardRow";
+import { RoundStopList } from "@/features/monitoring/components/RoundStopList";
 import { DistribusiMap } from "@/features/monitoring/components/DistribusiMap";
 import { MonitoringTable } from "@/features/monitoring/components/MonitoringTable";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelHeader } from "@/components/common/Panel";
-import { ConfirmDialog } from "@/components/common/ConfirmDialog";
-import { Field, SegmentedControl, TextInput } from "@/components/common/Field";
+import { Field, SegmentedControl, TextInput, TextareaInput } from "@/components/common/Field";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatNumber, formatPercentId, formatTime } from "@/lib/format";
 import type { MonitoringRow } from "@/features/monitoring/types";
+import { outletLabel, unitLabel } from "@/lib/lexicon";
+import { GeofenceAlertPanel } from "@/features/geofence/components/AlertPanel";
+import { CanAccess } from "@/features/rbac/components/CanAccess";
+import { PERMISSIONS } from "@/features/rbac/permissions";
 
 const STATUS_TABS = ["Semua", "Antrian", "Proses", "Selesai", "Tertunda"] as const;
 
@@ -53,6 +57,7 @@ export function MonitoringPage() {
   const [completing, setCompleting] = useState<MonitoringRow | null>(null);
   const [realisasi, setRealisasi] = useState(0);
   const [holding, setHolding] = useState<MonitoringRow | null>(null);
+  const [alasan, setAlasan] = useState("");
 
   const capaian =
     totals && totals.target > 0 ? (totals.realisasi / totals.target) * 100 : 0;
@@ -62,7 +67,7 @@ export function MonitoringPage() {
       <PageHeader
         eyebrow="Operasi harian"
         title="Monitoring Distribusi"
-        description="Setiap surat jalan yang sudah terbit, posisinya, dan apa yang benar-benar diterima pangkalan."
+        description={`Setiap surat jalan yang sudah terbit, posisinya, dan apa yang benar-benar diterima ${outletLabel()}.`}
         actions={<DateRangeFilter dateRange={dateRange} onChange={setDateRange} />}
       />
 
@@ -83,7 +88,7 @@ export function MonitoringPage() {
         <Stat
           label="Realisasi periode"
           value={formatNumber(totals?.realisasi ?? 0)}
-          unit="tabung"
+          unit={unitLabel()}
           hint={`${formatPercentId(capaian)} dari ${formatNumber(totals?.target ?? 0)} target`}
         />
         <Stat
@@ -130,7 +135,7 @@ export function MonitoringPage() {
           hint={
             driverFilter
               ? "Menampilkan satu armada. Klik peta atau kartu armada untuk melihat semuanya."
-              : "Titik pangkalan dan posisi armada yang sedang berjalan"
+              : `Titik ${outletLabel()} dan posisi armada yang sedang berjalan`
           }
           actions={
             <div className="flex items-center gap-3">
@@ -151,18 +156,46 @@ export function MonitoringPage() {
             </div>
           }
         />
-        <div className="p-4">
-          <DistribusiMap
-            heightClass="h-72 sm:h-96 lg:h-[420px]"
-            drivers={driverCards}
-            rows={allRows}
-            assignments={assignments}
-            selectedDriverId={driverFilter ?? undefined}
-            onSelectDriver={setDriverFilter}
-            hoveredDriverId={hoveredDriver}
-          />
+        {/* Map two thirds, round one third.
+            The map used to be full width at 420px tall: a 3.24:1 letterbox for
+            a round that is roughly square (3.4 x 4.5 km). fitBounds picks the
+            zoom where BOTH axes fit, so height was the binding constraint and
+            the camera was pinned at zoom 13 no matter what it did — the route
+            used 14% of the available width. Measured: 620px still gives zoom
+            13, 640px gives zoom 14 — and dropping a redundant second layer
+            of bounds padding buys the same level back at 560px. Trading width
+            for height buys the zoom;
+            the width that comes off goes to the stop list, which is where the
+            sequence wanted to live anyway. */}
+        <div className="grid gap-4 p-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <DistribusiMap
+              heightClass="h-72 sm:h-96 lg:h-[560px]"
+              drivers={driverCards}
+              rows={allRows}
+              assignments={assignments}
+              selectedDriverId={driverFilter ?? undefined}
+              onSelectDriver={setDriverFilter}
+              hoveredDriverId={hoveredDriver}
+            />
+          </div>
+          <div className="min-h-[18rem] lg:h-[560px]">
+            <RoundStopList
+              rows={allRows}
+              drivers={driverCards}
+              assignments={assignments}
+              focusedDriverId={hoveredDriver ?? driverFilter ?? null}
+            />
+          </div>
         </div>
       </Panel>
+
+      {/* Breaches sit between the map and the documents: they are about where
+          the truck went, which is what the map above shows, and they are read
+          before anyone works through the rows below. */}
+      <CanAccess permission={PERMISSIONS.GEOFENCE_ALERTS_VIEW}>
+        <GeofenceAlertPanel />
+      </CanAccess>
 
       <Panel>
         <PanelHeader
@@ -186,7 +219,12 @@ export function MonitoringPage() {
         <MonitoringTable
           data={monitoringTable}
           isLoading={isLoading}
-          pendingId={statusMutation.variables?.deliveryId}
+          // Only while the mutation is actually in flight -- react-query
+          // keeps `variables` set to whatever was last sent even after it
+          // settles, so without `isPending` a row whose status change keeps
+          // it in the same action branch (Antrian -> Proses both still show
+          // "Selesai") ends up permanently disabled after its first filing.
+          pendingId={statusMutation.isPending ? statusMutation.variables?.deliveryId : undefined}
           onStart={(row) =>
             statusMutation.mutate({ deliveryId: row.id, status: "Proses" })
           }
@@ -194,7 +232,10 @@ export function MonitoringPage() {
             setRealisasi(row.realisasi || row.target);
             setCompleting(row);
           }}
-          onHold={setHolding}
+          onHold={(row) => {
+            setAlasan("");
+            setHolding(row);
+          }}
           onPrint={(row) => printMutation.mutate(row.id)}
         />
       </Panel>
@@ -205,7 +246,7 @@ export function MonitoringPage() {
           <DialogHeader>
             <DialogTitle>Tutup {completing?.kode}</DialogTitle>
             <DialogDescription>
-              Catat jumlah tabung yang benar-benar diterima {completing?.pangkalan}.
+              Catat jumlah {unitLabel()} yang benar-benar diterima {completing?.outlet}.
               Angka ini menjadi dasar tagihan.
             </DialogDescription>
           </DialogHeader>
@@ -215,7 +256,7 @@ export function MonitoringPage() {
             htmlFor="realisasi"
             hint={
               completing
-                ? `Target pada surat jalan: ${formatNumber(completing.target)} tabung.`
+                ? `Target pada surat jalan: ${formatNumber(completing.target)} ${unitLabel()}.`
                 : undefined
             }
           >
@@ -233,7 +274,7 @@ export function MonitoringPage() {
           {completing && realisasi < completing.target && (
             <p className="rounded-md border border-line bg-signal-soft px-3 py-2 text-xs text-ink">
               Kurang <span className="data">{formatNumber(completing.target - realisasi)}</span>{" "}
-              tabung dari target. Selisih tercatat pada surat jalan dan laporan periode.
+              {unitLabel()} dari target. Selisih tercatat pada surat jalan dan laporan periode.
             </p>
           )}
 
@@ -257,22 +298,53 @@ export function MonitoringPage() {
         </DialogContent>
       </Dialog>
 
-      <ConfirmDialog
-        isOpen={!!holding}
-        title={`Tandai ${holding?.kode} tertunda?`}
-        message={`Pengiriman ke ${holding?.pangkalan} dicatat gagal diselesaikan hari ini.`}
-        details="Surat jalan tetap terbuka dan tidak menerbitkan tagihan. Jadwalkan ulang lewat rencana distribusi berikutnya."
-        confirmLabel="Tandai tertunda"
-        isPending={statusMutation.isPending}
-        onCancel={() => setHolding(null)}
-        onConfirm={() =>
-          holding &&
-          statusMutation.mutate(
-            { deliveryId: holding.id, status: "Tertunda" },
-            { onSettled: () => setHolding(null) },
-          )
-        }
-      />
+      {/*
+        A reason is required, not optional: POST /deliveries/:id/fail refuses
+        a failure nobody explained (ck_deliveries_failure_reason), and a
+        canned string here would satisfy that constraint while defeating the
+        reason it exists — an auditor reading this later gets nothing to
+        argue from. Mirrors the driver's own kendala dialog on /sopir.
+      */}
+      <Dialog open={!!holding} onOpenChange={(open) => !open && setHolding(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Tandai {holding?.kode} tertunda?</DialogTitle>
+            <DialogDescription>
+              Pengiriman ke {holding?.outlet} dicatat gagal diselesaikan hari ini. Surat
+              jalan tetap terbuka dan tidak menerbitkan tagihan.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Field label="Apa yang terjadi" htmlFor="m-alasan" required>
+            <TextareaInput
+              id="m-alasan"
+              rows={3}
+              value={alasan}
+              onChange={(e) => setAlasan(e.target.value)}
+              placeholder={`Contoh: ${holding?.outlet ?? "outlet"} tutup saat armada tiba.`}
+            />
+          </Field>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHolding(null)}>
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!alasan.trim() || statusMutation.isPending}
+              onClick={() =>
+                holding &&
+                statusMutation.mutate(
+                  { deliveryId: holding.id, status: "Tertunda", catatan: alasan },
+                  { onSettled: () => setHolding(null) },
+                )
+              }
+            >
+              Tandai tertunda
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

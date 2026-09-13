@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatDateId, formatNumber } from "@/lib/format";
 import type { DistributionPlan } from "../types";
+import { outletLabel, unitLabel } from "@/lib/lexicon";
 
 interface PlanListPanelProps {
   plans: DistributionPlan[];
@@ -44,7 +45,7 @@ export function PlanListPanel({
           <EmptyState
             icon={CalendarPlus}
             title="Belum ada rencana"
-            description="Buat rencana untuk tanggal pengiriman, lalu tambahkan pangkalan dan armada."
+            description={`Buat rencana untuk tanggal pengiriman, lalu tambahkan ${outletLabel()} dan armada.`}
           />
         ) : (
           plans.map((plan) => {
@@ -76,8 +77,8 @@ export function PlanListPanel({
                 </div>
                 <p className="data text-2xs text-ink-muted">{plan.kode}</p>
                 <p className="mt-1 text-xs text-ink-muted">
-                  <span className="data">{formatNumber(plan.totalTabung)}</span> tabung ·{" "}
-                  {plan.jumlahPangkalan} pangkalan · {plan.jumlahDriver} armada
+                  <span className="data">{formatNumber(plan.totalUnit)}</span> {unitLabel()} ·{" "}
+                  {plan.jumlahOutlet} {outletLabel()} · {plan.jumlahDriver} armada
                 </p>
               </button>
             );

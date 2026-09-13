@@ -5,6 +5,9 @@ import { useScheduleAgreement } from "@/features/sa/hooks/useScheduleAgreement";
 import { SAFilterBar } from "@/features/sa/components/SAFilterBar";
 import { SATable } from "@/features/sa/components/SATable";
 import { UploadSAForm } from "@/features/sa/components/UploadSAForm";
+import { ImportTargetsDialog } from "@/features/sa/components/ImportTargetsDialog";
+import { useAuthStore } from "@/features/auth/store/authStore";
+import { PERMISSIONS } from "@/features/rbac/permissions";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelBody, PanelHeader, Meter } from "@/components/common/Panel";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -19,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { formatNumber, formatPercentId } from "@/lib/format";
 import type { ScheduleAgreement } from "@/features/sa/types";
 import type { UploadSAFormValues } from "@/features/sa/schema";
+import { supplierLabel, unitLabel } from "@/lib/lexicon";
 
 export function SAManagementPage() {
   const {
@@ -27,7 +31,7 @@ export function SAManagementPage() {
     isError,
     error,
     refetch,
-    spbeOptions,
+    supplierOptions,
     filters,
     setFilters,
     uploadMutation,
@@ -38,6 +42,15 @@ export function SAManagementPage() {
 
   const [pendingDelete, setPendingDelete] = useState<ScheduleAgreement | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [importing, setImporting] = useState<ScheduleAgreement | null>(null);
+
+  // Importing replaces a month of contractual obligations from a spreadsheet,
+  // which is not the same authority as recording an agreement — so it has its
+  // own permission, and the action is absent rather than disabled for whoever
+  // lacks it.
+  const canImport = useAuthStore((state) =>
+    state.hasPermission(PERMISSIONS.SA_IMPORT),
+  );
 
   const live = saList.filter((s) => s.status === "Aktif" || s.status === "Limit");
   const totalKuota = live.reduce((sum, s) => sum + s.totalKuota, 0);
@@ -54,7 +67,7 @@ export function SAManagementPage() {
       <PageHeader
         eyebrow="Operasi harian"
         title="Schedule Agreement"
-        description="Kuota yang diterbitkan SPBE mitra. Setiap rencana distribusi menarik dari agreement yang aktif, jadi angka di sini adalah batas atas operasi bulan ini."
+        description={`Kuota yang diterbitkan ${supplierLabel()} mitra. Setiap rencana distribusi menarik dari agreement yang aktif, jadi angka di sini adalah batas atas operasi bulan ini.`}
         actions={
           <Button onClick={() => setUploading(true)}>
             <Upload className="h-3.5 w-3.5" />
@@ -85,7 +98,7 @@ export function SAManagementPage() {
             </span>{" "}
             <span className="text-ink-muted">
               Sisa {formatNumber(expiringSoon.reduce((s, x) => s + x.sisaKuota, 0))}{" "}
-              tabung akan hangus jika tidak dijadwalkan.
+              {unitLabel()} akan hangus jika tidak dijadwalkan.
             </span>
           </p>
           <Button asChild size="sm" variant="outline">
@@ -104,7 +117,7 @@ export function SAManagementPage() {
             <p className="data text-display font-semibold text-ink">
               {formatNumber(sisaKuota)}
             </p>
-            <p className="mt-1 text-sm text-ink-muted">tabung siap dijadwalkan</p>
+            <p className="mt-1 text-sm text-ink-muted">{unitLabel()} siap dijadwalkan</p>
             <Meter
               className="mt-4"
               value={terpakai}
@@ -127,7 +140,7 @@ export function SAManagementPage() {
                 to the next step until the previous one is done. */}
             <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {[
-                "SPBE menerbitkan agreement. Unggah dokumennya, dan sistem mencatatnya sebagai draf.",
+                `${supplierLabel()} menerbitkan agreement. Unggah dokumennya, dan sistem mencatatnya sebagai draf.`,
                 "Aktifkan agreement setelah dokumen diverifikasi. Kuota baru dapat ditarik setelah langkah ini.",
                 "Rencana distribusi yang dikonfirmasi menarik kuota dan menerbitkan surat jalan.",
                 "Agreement berstatus Limit saat tersisa di bawah 5%, dan Selesai saat habis atau periodenya lewat.",
@@ -157,6 +170,7 @@ export function SAManagementPage() {
           onActivate={(id) => activateMutation.mutate(id)}
           onPrint={(id) => printMutation.mutate(id)}
           onDelete={setPendingDelete}
+          onImport={canImport ? setImporting : undefined}
           pendingId={activateMutation.variables}
         />
       </Panel>
@@ -166,17 +180,19 @@ export function SAManagementPage() {
           <DialogHeader>
             <DialogTitle>Unggah Schedule Agreement</DialogTitle>
             <DialogDescription>
-              Catat kuota yang diterbitkan SPBE mitra. Agreement masuk sebagai draf
+              Catat kuota yang diterbitkan {supplierLabel()} mitra. Agreement masuk sebagai draf
               sampai Anda mengaktifkannya.
             </DialogDescription>
           </DialogHeader>
           <UploadSAForm
             onSubmit={handleUpload}
             isPending={uploadMutation.isPending}
-            spbeOptions={spbeOptions}
+            supplierOptions={supplierOptions}
           />
         </DialogContent>
       </Dialog>
+
+      <ImportTargetsDialog sa={importing} onClose={() => setImporting(null)} />
 
       <ConfirmDialog
         isOpen={!!pendingDelete}
@@ -186,12 +202,12 @@ export function SAManagementPage() {
           pendingDelete && (
             <dl className="space-y-1">
               <div className="flex justify-between gap-4">
-                <dt>SPBE</dt>
-                <dd className="text-ink">{pendingDelete.spbe}</dd>
+                <dt>{supplierLabel()}</dt>
+                <dd className="text-ink">{pendingDelete.supplier}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt>Total kuota</dt>
-                <dd className="data text-ink">{formatNumber(pendingDelete.totalKuota)} tabung</dd>
+                <dd className="data text-ink">{formatNumber(pendingDelete.totalKuota)} {unitLabel()}</dd>
               </div>
             </dl>
           )

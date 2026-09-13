@@ -8,25 +8,46 @@ import {
   useMap,
 } from "react-leaflet";
 import L from "leaflet";
+import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
+import markerIcon from "leaflet/dist/images/marker-icon.png";
+import markerShadow from "leaflet/dist/images/marker-shadow.png";
 import { cn, getInitials } from "@/lib/utils";
 import { fleetColor } from "@/lib/chart";
 import { useTheme } from "@/hooks/useTheme";
 import { STATUS_HEX, getStatusVariant } from "@/lib/status";
 import type { DriverCard, MonitoringAssignment, MonitoringRow } from "../types";
+import { buildRoundSequence, type StopState } from "../lib/roundSequence";
+import { snapToRoads } from "../lib/snapToRoads";
+import { unitLabel } from "@/lib/lexicon";
 
-// Fix default marker icons broken by bundlers.
+// Fix default marker icons broken by bundlers — bundled from the installed
+// package rather than fetched from unpkg, which this console never talks to
+// on an on-premise deployment with no route to the internet. Neither
+// <Marker> below actually uses L.Icon.Default (both pass an explicit
+// divIcon), so this is currently latent rather than live — but the first
+// plain <Marker> anyone adds turns it live, and the failure mode on an
+// air-gapped site would be an invisible marker, not an error.
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)
   ._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
 });
 
 type Coord = [number, number];
 
 type RouteMap = Record<string, Coord[]>;
+
+// The public OSM default is fine for the mock build — a static demo already
+// living on the internet. An on-premise deployment with no route out sets
+// both to its own tile server; hardcoding OSM's attribution on someone
+// else's tiles would be a licensing claim this console has no basis for.
+const tileUrl =
+  import.meta.env.VITE_MAP_TILE_URL || "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const tileAttribution =
+  import.meta.env.VITE_MAP_TILE_ATTRIBUTION ||
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 
 /** Map marks read from the same status palette as badges and row spines. */
 function colorForVariant(variant: ReturnType<typeof getStatusVariant>) {
@@ -55,7 +76,7 @@ function makeDriverIcon(initials: string, color: string, isSelected: boolean) {
   });
 }
 
-function makePangkalanIcon(color: string) {
+function makeOutletIcon(color: string) {
   return L.divIcon({
     className: "",
     html: `<div style="
@@ -68,8 +89,6 @@ function makePangkalanIcon(color: string) {
     iconAnchor: [7, 7],
   });
 }
-
-type StopState = "done" | "next" | "pending";
 
 /**
  * A stop on the selected round, carrying its position in the sequence.
@@ -167,7 +186,12 @@ function MapCamera({
     const first = lastKey.current === null;
     lastKey.current = focusKey;
 
-    const bounds = L.latLngBounds(points).pad(0.12);
+    // Padded once, in pixels. This also carried .pad(0.12), and the two
+    // compounded: a 12% ring on every side plus 36px cost roughly a whole zoom
+    // level, so the camera sat at 13 when the round would have fitted at 14.
+    // Pixel padding is the one to keep — it is what stops a marker halo from
+    // clipping, and it does not scale with how big the round happens to be.
+    const bounds = L.latLngBounds(points);
     // The first frame should just be there; later ones are a response to a
     // click and read better as movement.
     if (first || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -240,7 +264,7 @@ export function DistribusiMap({
   );
 
   const resolvedAssignments = useMemo(() => {
-    const pangkalanRow = new Map(points.map((row) => [row.pangkalanId, row]));
+    const outletRow = new Map(points.map((row) => [row.outletId, row]));
     const driverById = new Map(drivers.map((driver) => [driver.id, driver]));
 
     return assignments
@@ -250,7 +274,7 @@ export function DistribusiMap({
         return {
           assignment,
           driver,
-          target: pangkalanRow.get(assignment.pangkalanId),
+          target: outletRow.get(assignment.outletId),
           driverCoord: [
             assignment.driverCoord.lat,
             assignment.driverCoord.lng,
@@ -293,41 +317,21 @@ export function DistribusiMap({
     let cancelled = false;
 
     async function loadRoutes() {
+      if (!resolvedAssignments.length) {
+        if (!cancelled) setRoutesByAssignmentId({});
+        return;
+      }
+
       const entries = await Promise.all(
-        resolvedAssignments.map(async (a) => {
-          const fallback = a.waypoints;
-          if (a.waypoints.length < 2) return [a.assignment.id, fallback] as const;
-
-          try {
-            const path = a.waypoints.map(([lat, lng]) => `${lng},${lat}`).join(";");
-            const response = await fetch(
-              `https://router.project-osrm.org/route/v1/driving/${path}?overview=full&geometries=geojson`,
-            );
-            if (!response.ok) return [a.assignment.id, fallback] as const;
-
-            const data = (await response.json()) as {
-              routes?: Array<{ geometry?: { coordinates?: number[][] } }>;
-            };
-            const coordinates = data.routes?.[0]?.geometry?.coordinates;
-            if (!coordinates?.length) return [a.assignment.id, fallback] as const;
-
-            return [
-              a.assignment.id,
-              coordinates.map(([lng, lat]) => [lat, lng] as Coord),
-            ] as const;
-          } catch {
-            // Offline or the router is down — the straight path still shows the
-            // shape of the round.
-            return [a.assignment.id, fallback] as const;
-          }
-        }),
+        resolvedAssignments.map(
+          async (a) => [a.assignment.id, await snapToRoads(a.waypoints)] as const,
+        ),
       );
 
       if (!cancelled) setRoutesByAssignmentId(Object.fromEntries(entries));
     }
 
-    if (resolvedAssignments.length) loadRoutes();
-    else setRoutesByAssignmentId({});
+    loadRoutes();
 
     return () => {
       cancelled = true;
@@ -344,41 +348,22 @@ export function DistribusiMap({
    */
   useEffect(() => {
     let cancelled = false;
-    const focus = resolvedAssignments.find((a) => a.driver.id === focusedDriverId);
-    const done = focus ? (doneStopsByDriver.get(focus.driver.id) ?? []) : [];
-
-    if (!focus || done.length === 0) {
-      setTravelledPath([]);
-      return;
-    }
-
-    const legs: Coord[] = [
-      ...done.map((r) => [r.coord.lat, r.coord.lng] as Coord),
-      focus.driverCoord,
-    ];
 
     (async () => {
-      try {
-        const path = legs.map(([lat, lng]) => `${lng},${lat}`).join(";");
-        const response = await fetch(
-          `https://router.project-osrm.org/route/v1/driving/${path}?overview=full&geometries=geojson`,
-        );
-        if (!response.ok) throw new Error(String(response.status));
-        const data = (await response.json()) as {
-          routes?: Array<{ geometry?: { coordinates?: number[][] } }>;
-        };
-        const coordinates = data.routes?.[0]?.geometry?.coordinates;
-        if (!cancelled) {
-          setTravelledPath(
-            coordinates?.length
-              ? coordinates.map(([lng, lat]) => [lat, lng] as Coord)
-              : legs,
-          );
-        }
-      } catch {
-        // Straight legs still show which stops have been served.
-        if (!cancelled) setTravelledPath(legs);
+      const focus = resolvedAssignments.find((a) => a.driver.id === focusedDriverId);
+      const done = focus ? (doneStopsByDriver.get(focus.driver.id) ?? []) : [];
+
+      if (!focus || done.length === 0) {
+        if (!cancelled) setTravelledPath([]);
+        return;
       }
+
+      const legs: Coord[] = [
+        ...done.map((r) => [r.coord.lat, r.coord.lng] as Coord),
+        focus.driverCoord,
+      ];
+      const path = await snapToRoads(legs);
+      if (!cancelled) setTravelledPath(path);
     })();
 
     return () => {
@@ -403,43 +388,18 @@ export function DistribusiMap({
    * are bare coordinates with no identity — and the sequence has to span stops
    * already served as well as the ones still to come.
    */
-  const { stopSequence, isSingleRound } = useMemo(() => {
-    const map = new Map<string, { order: number; state: StopState }>();
-    if (!focusedRound) return { stopSequence: map, isSingleRound: false };
+  // Not a useMemo: buildRoundSequence runs over one day's rows at most, and
+  // nothing downstream keys a hook off this object's identity — the compiler
+  // could not prove the manual memo boundary was worth preserving here, and
+  // it wasn't buying anything a plain computation doesn't already give.
+  const sequence = buildRoundSequence(
+    rows,
+    focusedRound?.driver.id ?? null,
+    focusedRound?.assignment.outletId,
+  );
+  const stopSequence = sequence.byOutlet;
 
-    const mine = rows
-      .filter((r) => r.driverId === focusedRound.driver.id)
-      .sort((a, b) => a.jamRencana.localeCompare(b.jamRencana));
-
-    mine.forEach((row, i) => {
-      const state: StopState =
-        row.status === "Selesai"
-          ? "done"
-          : row.pangkalanId === focusedRound.assignment.pangkalanId
-            ? "next"
-            : "pending";
-      // Keyed by outlet, so a repeat visit overwrites: the newest state for an
-      // outlet is the one worth showing on a map.
-      map.set(row.pangkalanId, { order: i + 1, state });
-    });
-
-    // One round visits an outlet once. If the window holds repeat visits it is
-    // several rounds stacked together, the ordinals collide on the surviving
-    // key, and the sequence is a fiction.
-    return { stopSequence: map, isSingleRound: map.size === mine.length };
-  }, [focusedRound, rows]);
-
-  /**
-   * Number the stops only when the sequence is genuinely one round.
-   *
-   * Widen the board to seven days and a driver accumulates thirty-odd visits
-   * across a dozen outlets. "17 of 36" is not a sequence anyone drives, and
-   * because the map is keyed by outlet the ordinals collapse onto whichever
-   * visit happened to be written last — every pin ended up reading "11".
-   * Past that point the pins keep their state (served, next, still to come)
-   * and drop the ordinal, which is the part that stopped being true.
-   */
-  const numberedStops = isSingleRound && stopSequence.size > 0 && stopSequence.size <= 12;
+  const numberedStops = sequence.numbered;
 
   // Frame the focused round if there is one, otherwise the whole board.
   const fitPoints: Coord[] = focused
@@ -469,10 +429,7 @@ export function DistribusiMap({
         zoomControl
         scrollWheelZoom={false}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <TileLayer attribution={tileAttribution} url={tileUrl} />
         <MapCamera points={fitPoints} focusKey={focusKey} />
         <MapBackgroundClick onClear={() => onSelectDriver?.(null)} />
         <ResizeWatcher />
@@ -480,7 +437,7 @@ export function DistribusiMap({
         {points.map((p) => {
           // On a focused round the outlets stop being scenery and become the
           // sequence: numbered, with the one being driven to carrying a halo.
-          const seq = focused ? stopSequence.get(p.pangkalanId) : undefined;
+          const seq = focused ? stopSequence.get(p.outletId) : undefined;
           const offRound = !!focused && !seq;
 
           return (
@@ -492,7 +449,7 @@ export function DistribusiMap({
               icon={
                 seq
                   ? makeStopIcon(seq.order, seq.state, focused!.color, numberedStops)
-                  : makePangkalanIcon(p.color)
+                  : makeOutletIcon(p.color)
               }
             >
               <Popup>
@@ -500,19 +457,19 @@ export function DistribusiMap({
                   {seq && (
                     <p className="data text-2xs font-semibold text-ink-muted">
                       {numberedStops
-                        ? `Pemberhentian ${seq.order} dari ${stopSequence.size}`
+                        ? `Pemberhentian ${seq.order} dari ${sequence.stops.length}`
                         : seq.state === "done"
                           ? "Sudah dilayani"
                           : "Belum dilayani"}
                       {seq.state === "next" && " · tujuan berikutnya"}
                     </p>
                   )}
-                  <p className="font-bold text-sm">{p.pangkalan}</p>
+                  <p className="font-bold text-sm">{p.outlet}</p>
                   <p className="text-ink-muted">{p.alamat}</p>
                   <p className="text-ink-muted">Status: {p.status}</p>
                   <p className="text-ink-muted">
                     Realisasi: {p.realisasi.toLocaleString("id-ID")} /{" "}
-                    {p.target.toLocaleString("id-ID")} tabung
+                    {p.target.toLocaleString("id-ID")} {unitLabel()}
                   </p>
                 </div>
               </Popup>
@@ -616,7 +573,7 @@ export function DistribusiMap({
                     <p className="text-ink-muted">
                       {selesai
                         ? "Semua pemberhentian selesai"
-                        : `Tujuan berikutnya: ${a.target?.pangkalan ?? "—"}`}
+                        : `Tujuan berikutnya: ${a.target?.outlet ?? "—"}`}
                     </p>
                     <p className="text-ink-muted">
                       Sisa {a.assignment.stops.length} pemberhentian
@@ -642,7 +599,7 @@ export function DistribusiMap({
           {activeDrivers} armada berjalan
         </span>
         <span className="rounded-sm border border-line bg-panel/95 px-2.5 py-1 text-2xs font-semibold text-ink-muted">
-          <span className="data">{rows.length}</span> pangkalan
+          <span className="data">{rows.length}</span> outlet
         </span>
       </div>
 
@@ -698,7 +655,7 @@ export function DistribusiMap({
             {selected.driver.name}
           </p>
           <p className="text-xs text-ink-muted">
-            {selected.driver.status} · menuju {selected.target?.pangkalan ?? "—"}
+            {selected.driver.status} · menuju {selected.target?.outlet ?? "—"}
           </p>
         </div>
       )}

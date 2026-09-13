@@ -1,5 +1,5 @@
 import { scopeKey } from "@/mocks/scope";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Plus, Split, Wallet, XCircle } from "lucide-react";
@@ -8,11 +8,13 @@ import {
   getPayments,
   submitAllocation,
   submitPayment,
+  submitPaymentDecision,
   type PaymentView,
 } from "@/features/finance/api/financeApi";
-import { getPangkalanOptions } from "@/features/distribution/api/distributionApi";
-import { decidePayment } from "@/mocks/rules";
+import { getOutletOptions } from "@/features/distribution/api/distributionApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
+import { CanAccess } from "@/features/rbac/components/CanAccess";
+import { PERMISSIONS } from "@/features/rbac/permissions";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Panel, PanelHeader } from "@/components/common/Panel";
 import { DataTable, type Column } from "@/components/common/DataTable";
@@ -38,6 +40,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatDateId, formatRupiah, formatRupiahShort } from "@/lib/format";
 import type { BankNameEntity } from "@/mocks/types";
+import { outletLabel, outletLabelTitle } from "@/lib/lexicon";
+import { useResettableState } from "@/hooks/useResettableState";
 
 const TABS = ["Menunggu Verifikasi", "Terverifikasi", "Ditolak", "Semua"];
 const BANKS: BankNameEntity[] = ["BCA", "BNI", "Mandiri", "BRI", "BSI"];
@@ -69,7 +73,7 @@ export function PaymentPage() {
       id: string;
       action: "verify" | "reject";
       keterangan?: string;
-    }) => Promise.resolve(decidePayment(input.id, input.action, input.keterangan)),
+    }) => submitPaymentDecision(input.id, input.action, input.keterangan),
     errorTitle: "Verifikasi gagal",
     success: (p) => ({
       title:
@@ -109,17 +113,17 @@ export function PaymentPage() {
       sortValue: (row) => row.tanggal,
     },
     {
-      key: "pangkalan",
-      header: "Pangkalan",
+      key: outletLabel(),
+      header: outletLabelTitle(),
       render: (row) => (
         <Link
-          to={`/receivables?pangkalan=${row.pangkalanId}`}
+          to={`/receivables?${outletLabel()}=${row.outletId}`}
           className="font-medium text-ink hover:underline hover:decoration-signal hover:decoration-2 hover:underline-offset-4"
         >
-          {row.pangkalan}
+          {row.outlet}
         </Link>
       ),
-      sortValue: (row) => row.pangkalan,
+      sortValue: (row) => row.outlet,
     },
     {
       key: "bank",
@@ -190,7 +194,7 @@ export function PaymentPage() {
             </Button>
           )}
           {row.status === "Menunggu Verifikasi" && (
-            <>
+            <CanAccess permission={PERMISSIONS.PAYMENTS_VERIFY}>
               <Button
                 size="xs"
                 onClick={() => setDecision({ payment: row, action: "verify" })}
@@ -209,7 +213,7 @@ export function PaymentPage() {
               >
                 <XCircle className="h-3 w-3" />
               </Button>
-            </>
+            </CanAccess>
           )}
         </div>
       ),
@@ -221,12 +225,14 @@ export function PaymentPage() {
       <PageHeader
         eyebrow="Keuangan"
         title="Penerimaan Kas"
-        description="Uang masuk dari pangkalan. Setiap penerimaan dialokasikan ke tagihan tertentu — satu transfer boleh melunasi beberapa tagihan sekaligus."
+        description={`Uang masuk dari ${outletLabel()}. Setiap penerimaan dialokasikan ke tagihan tertentu — satu transfer boleh melunasi beberapa tagihan sekaligus.`}
         actions={
-          <Button onClick={() => setRecording(true)}>
-            <Plus className="h-3.5 w-3.5" />
-            Catat penerimaan
-          </Button>
+          <CanAccess permission={PERMISSIONS.PAYMENTS_CREATE}>
+            <Button onClick={() => setRecording(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              Catat penerimaan
+            </Button>
+          </CanAccess>
         }
         meta={
           <span className="text-xs text-ink-muted">
@@ -245,7 +251,7 @@ export function PaymentPage() {
               <SearchInput
                 value={search}
                 onChange={setSearch}
-                placeholder="Nomor, pangkalan, rekening"
+                placeholder={`Nomor, ${outletLabel()}, rekening`}
                 className="w-52"
               />
               <SegmentedControl
@@ -373,15 +379,21 @@ function AllocateDialog({
   payment: PaymentView | null;
   onClose: () => void;
 }) {
-  const [rows, setRows] = useState<Record<string, number>>({});
 
   const invoices = useQuery({
-    queryKey: [...scopeKey(), "open-invoices", payment?.pangkalanId],
-    queryFn: () => getOpenInvoices(payment!.pangkalanId),
+    queryKey: [...scopeKey(), "open-invoices", payment?.outletId],
+    queryFn: () => getOpenInvoices(payment!.outletId),
     enabled: !!payment,
   });
 
-  useEffect(() => setRows({}), [payment?.id]);
+  // Allocations are per payment, so opening a different one starts empty.
+  // Reset during render rather than in an effect: after an effect, the new
+  // payment's invoice list would paint for one frame carrying the amounts
+  // typed against the previous one.
+  const [rows, setRows] = useResettableState<Record<string, number>>(
+    [payment?.id],
+    () => ({}),
+  );
 
   const mutation = useDeskMutation({
     mutationFn: (input: {
@@ -440,7 +452,7 @@ function AllocateDialog({
         <div className="max-h-72 overflow-auto rounded-md border border-line">
           {(invoices.data ?? []).length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-ink-muted">
-              Tidak ada tagihan terbuka untuk pangkalan ini.
+              Tidak ada tagihan terbuka untuk {outletLabel()} ini.
             </p>
           ) : (
             <table className="w-full text-left">
@@ -534,7 +546,7 @@ function RecordPaymentDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [form, setForm] = useState({
-    pangkalanId: "",
+    outletId: "",
     jumlah: 0,
     tanggal: todayIso(),
     bank: "BCA" as BankNameEntity,
@@ -542,9 +554,9 @@ function RecordPaymentDialog({
     keterangan: "",
   });
 
-  const pangkalan = useQuery({
-    queryKey: [...scopeKey(), "pangkalan-options"],
-    queryFn: getPangkalanOptions,
+  const outlet = useQuery({
+    queryKey: [...scopeKey(), "outlet-options"],
+    queryFn: getOutletOptions,
   });
 
   const mutation = useDeskMutation({
@@ -552,7 +564,7 @@ function RecordPaymentDialog({
     errorTitle: "Penerimaan tidak tercatat",
     success: (p) => ({
       title: `${p.nomor} dicatat`,
-      description: "Alokasikan ke tagihan agar piutang pangkalan berkurang.",
+      description: `Alokasikan ke tagihan agar piutang ${outletLabel()} berkurang.`,
     }),
     onDone: () => onOpenChange(false),
   });
@@ -569,14 +581,14 @@ function RecordPaymentDialog({
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Pangkalan" htmlFor="p-pkl" required className="sm:col-span-2">
+          <Field label={outletLabelTitle()} htmlFor="p-pkl" required className="sm:col-span-2">
             <SelectInput
               id="p-pkl"
-              value={form.pangkalanId}
-              onChange={(e) => setForm({ ...form, pangkalanId: e.target.value })}
+              value={form.outletId}
+              onChange={(e) => setForm({ ...form, outletId: e.target.value })}
             >
-              <option value="">Pilih pangkalan</option>
-              {(pangkalan.data ?? []).map((p) => (
+              <option value="">Pilih {outletLabel()}</option>
+              {(outlet.data ?? []).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
                 </option>
@@ -638,7 +650,7 @@ function RecordPaymentDialog({
             Batal
           </Button>
           <Button
-            disabled={!form.pangkalanId || form.jumlah <= 0 || mutation.isPending}
+            disabled={!form.outletId || form.jumlah <= 0 || mutation.isPending}
             onClick={() => mutation.mutate(undefined as never)}
           >
             Catat penerimaan

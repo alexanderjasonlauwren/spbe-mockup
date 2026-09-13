@@ -11,11 +11,15 @@ import {
   createSeedDatabase,
   DB_VERSION,
   DEFAULT_NOTIFICATIONS,
+  DEFAULT_LEXICON,
   DEFAULT_NUMBERING,
   DEFAULT_OPERATIONS,
   isoDate,
+  seedSettings,
   startOfToday,
 } from "./seed";
+import { getActingTenant } from "./actingTenant";
+import { resolveSettings } from "./settingsResolver";
 import type { AuditEntry, Database, ReminderRuleKey } from "./types";
 
 const STORAGE_KEY = "sidistrib:db:v1";
@@ -52,12 +56,22 @@ function read(): Database | null {
  * they have already done in the session.
  */
 function migrate(db: Database): Database {
-  db.spbe ??= [];
+  db.suppliers ??= [];
   db.bankAccounts ??= [];
+  db.deliveryEvents ??= [];
+  db.saDailyTargets ??= [];
+  db.saImportBatches ??= [];
 
   const s = db.settings as Partial<Database["settings"]>;
   s.penomoran ??= { ...DEFAULT_NUMBERING };
+  s.istilah ??= { ...DEFAULT_LEXICON };
+  // A tenant stored before the lexicon existed keeps its unit word.
+  s.istilah.satuan ??= (s as { satuanDefault?: string }).satuanDefault ?? DEFAULT_LEXICON.satuan;
+  s.istilah.outlet ??= DEFAULT_LEXICON.outlet;
+  s.istilah.pemasok ??= DEFAULT_LEXICON.pemasok;
   s.operasi ??= { ...DEFAULT_OPERATIONS };
+  s.operasi.rekamLokasi ??= DEFAULT_OPERATIONS.rekamLokasi;
+  s.operasi.radiusGeofenceMeter ??= DEFAULT_OPERATIONS.radiusGeofenceMeter;
   s.notifikasi ??= structuredClone(DEFAULT_NOTIFICATIONS);
 
   // A rule added after this database was stored still needs its default.
@@ -81,6 +95,23 @@ export function getDb(): Database {
     db = read() ?? createSeedDatabase();
     write(db);
   }
+  // `settings` is derived, not stored: it is the acting tenant's row resolved up
+  // the tree. Resolved here rather than at each call site because a dozen
+  // readers across the console want the effective value and would otherwise
+  // each have to walk the hierarchy — and the one that forgot would silently
+  // render the root's vocabulary inside a subsidiary.
+  //
+  // Assigned onto the same object rather than returning a copy: mutate() writes
+  // `db` back to storage, and a copy here would drop every other change.
+  db.settings = resolveSettings(
+    // The pristine defaults, not db.settings. Feeding the previous result back
+    // in makes the base drift: after viewing tenant A, any field A resolved
+    // becomes the default tenant B inherits, and mutate() persists the drift.
+    seedSettings(),
+    db.settingsByTenant ?? [],
+    db.tenants,
+    getActingTenant() || db.tenants.find((t) => t.indukId === null)?.id || "",
+  );
   return db;
 }
 
@@ -152,6 +183,25 @@ export function currentActor(): string {
     /* fall through */
   }
   return "Sistem";
+}
+
+/**
+ * The signed-in user's own id, for the one place a rule needs to compare an
+ * identity rather than display one — a dual-control override naming the
+ * acting session as its own second approver (D3 A-Step 2/3), the mock's own
+ * parity check for `ck_deliveries_credit_override` on the real API.
+ */
+export function currentActorId(): string | undefined {
+  try {
+    const raw = localStorage.getItem("auth-storage");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return parsed?.state?.user?.id;
+    }
+  } catch {
+    /* fall through */
+  }
+  return undefined;
 }
 
 /** Appends to the audit trail. Every write in `rules.ts` goes through here. */

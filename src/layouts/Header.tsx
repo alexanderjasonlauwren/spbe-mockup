@@ -24,7 +24,8 @@ import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { relativeTime } from "@/lib/format";
 import { sectionFor, titleFor } from "./nav";
 import { CommandPalette } from "./CommandPalette";
-import { BranchSwitcher } from "@/features/tenancy/BranchSwitcher";
+import { ScopeSwitcher } from "@/features/tenancy/ScopeSwitcher";
+import { describeRoles } from "@/features/rbac/access";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -117,7 +118,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         {/* shrink-0 so the title block yields first and truncates. Without it
             nothing arbitrates between the two clusters and they collide. */}
         <div className="flex shrink-0 items-center gap-1.5">
-          <BranchSwitcher />
+          <ScopeSwitcher />
 
           <button
             onClick={() => setPaletteOpen(true)}
@@ -253,7 +254,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                   {user?.name ?? "Pengguna"}
                 </span>
                 <span className="block text-2xs capitalize leading-tight text-ink-muted">
-                  {user?.role ?? "staf"}
+                  {describeRoles(user?.roles)}
                 </span>
               </span>
               <span className="flex h-8 w-8 items-center justify-center rounded-md bg-ink text-2xs font-bold text-ink-on">

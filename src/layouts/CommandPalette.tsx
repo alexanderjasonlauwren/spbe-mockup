@@ -1,12 +1,20 @@
+import { crewedArmada } from "@/mocks/fleet";
 import { scopeKey } from "@/mocks/scope";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CornerDownLeft, Search, Store, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDb } from "@/mocks/db";
-import { ALL_NAV_ITEMS } from "./nav";
+import { ALL_NAV_ITEMS, mayOpen } from "./nav";
+import { useAuthStore } from "@/features/auth/store/authStore";
+import { outletLabel, outletLabelTitle } from "@/lib/lexicon";
+import { useResettableState } from "@/hooks/useResettableState";
+
+// A stable reference: `?? []` inside the selector would return a new array
+// on every render and re-run the memo below forever.
+const EMPTY_PERMISSIONS: readonly string[] = [];
 
 interface Entry {
   id: string;
@@ -29,8 +37,6 @@ export function CommandPalette({
   onClose: () => void;
 }) {
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
-  const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -39,7 +45,7 @@ export function CommandPalette({
     queryFn: async () => {
       const db = getDb();
       return {
-        pangkalan: db.pangkalan.map((p) => ({
+        outlet: db.outlets.map((p) => ({
           id: p.id,
           nama: p.nama,
           kecamatan: p.kecamatan,
@@ -48,16 +54,22 @@ export function CommandPalette({
         drivers: db.drivers.map((d) => ({
           id: d.id,
           nama: d.nama,
-          plat: d.plat,
-          armada: d.armada,
+          // The truck, from the fleet. A driver has no plate of their own --
+          // the pairing belongs to the run, and `crewedVehicle` is what stands
+          // in for it in this build.
+          ...crewedArmada(db, d),
         })),
       };
     },
     enabled: open,
   });
 
+  const held = useAuthStore((s) => s.user?.permissions) ?? EMPTY_PERMISSIONS;
+
   const entries = useMemo<Entry[]>(() => {
-    const nav: Entry[] = ALL_NAV_ITEMS.map((i) => ({
+    // Filtered like the sidebar: ⌘K offering a page that answers a refusal
+    // panel is the same broken promise, just faster to reach.
+    const nav: Entry[] = ALL_NAV_ITEMS.filter((i) => mayOpen(i, held)).map((i) => ({
       id: `nav-${i.href}`,
       label: i.name,
       hint: i.hint,
@@ -66,12 +78,12 @@ export function CommandPalette({
       icon: i.icon,
     }));
 
-    const pangkalan: Entry[] = (records.data?.pangkalan ?? []).map((p) => ({
+    const outlet: Entry[] = (records.data?.outlet ?? []).map((p) => ({
       id: `pkl-${p.id}`,
       label: p.nama,
       hint: `${p.kode} · Kec. ${p.kecamatan}`,
-      group: "Pangkalan",
-      href: `/pangkalan/${p.id}`,
+      group: outletLabelTitle(),
+      href: `/outlet/${p.id}`,
       icon: Store,
     }));
 
@@ -84,8 +96,13 @@ export function CommandPalette({
       icon: Truck,
     }));
 
-    return [...nav, ...pangkalan, ...drivers];
-  }, [records.data]);
+    return [...nav, ...outlet, ...drivers];
+  }, [records.data, held]);
+
+  // Each opening starts clean. Reset during render rather than in an effect,
+  // so the palette never paints one frame carrying the previous search.
+  const [query, setQuery] = useResettableState([open], () => "");
+  const [cursor, setCursor] = useResettableState([open], () => 0);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -99,12 +116,9 @@ export function CommandPalette({
   }, [entries, query]);
 
   useEffect(() => {
-    if (open) {
-      setQuery("");
-      setCursor(0);
-      // Let the dialog paint before stealing focus.
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
+    // Focus stays in an effect: moving it is a real side effect on the DOM,
+    // not state, and it has to happen after the dialog has painted.
+    if (open) requestAnimationFrame(() => inputRef.current?.focus());
   }, [open]);
 
   useEffect(() => {
@@ -132,7 +146,7 @@ export function CommandPalette({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Cari halaman, pangkalan, atau armada"
+        aria-label={`Cari halaman, ${outletLabel()}, atau armada`}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === "Escape") onClose();
@@ -160,7 +174,7 @@ export function CommandPalette({
               setQuery(e.target.value);
               setCursor(0);
             }}
-            placeholder="Cari halaman, pangkalan, atau nomor plat"
+            placeholder={`Cari halaman, ${outletLabel()}, atau nomor plat`}
             className="h-12 w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-muted"
           />
           <kbd className="label rounded-sm border border-line px-1.5 py-0.5 text-[0.625rem] text-ink-muted">
@@ -171,7 +185,7 @@ export function CommandPalette({
         <div ref={listRef} className="max-h-80 overflow-y-auto py-1.5">
           {results.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-ink-muted">
-              Tidak ada yang cocok dengan “{query}”. Coba nama pangkalan, nomor
+              Tidak ada yang cocok dengan “{query}”. Coba nama {outletLabel()}, nomor
               plat, atau nama halaman.
             </p>
           ) : (

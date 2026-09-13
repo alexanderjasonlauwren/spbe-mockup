@@ -11,14 +11,15 @@ import {
 } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
 import { uploadSASchema, type UploadSAFormValues } from "../schema";
+import { supplierLabel, unitLabel } from "@/lib/lexicon";
 
 interface UploadSAFormProps {
   onSubmit: (values: UploadSAFormValues & { namaDokumen?: string }) => void;
   isPending: boolean;
-  spbeOptions?: string[];
+  supplierOptions?: string[];
 }
 
-export function UploadSAForm({ onSubmit, isPending, spbeOptions }: UploadSAFormProps) {
+export function UploadSAForm({ onSubmit, isPending, supplierOptions }: UploadSAFormProps) {
   const [file, setFile] = useState<File | null>(null);
 
   const {
@@ -28,10 +29,10 @@ export function UploadSAForm({ onSubmit, isPending, spbeOptions }: UploadSAFormP
     formState: { errors },
   } = useForm<UploadSAFormValues>({
     resolver: zodResolver(uploadSASchema),
-    defaultValues: { nomorSA: "", spbe: "", periodeMulai: "", periodeBerakhir: "" },
+    defaultValues: { nomorSA: "", supplier: "", periodeMulai: "", periodeBerakhir: "" },
   });
 
-  const options = spbeOptions ?? [];
+  const options = supplierOptions ?? [];
 
   const submit = handleSubmit((values) => {
     onSubmit({ ...values, namaDokumen: file?.name });
@@ -51,10 +52,10 @@ export function UploadSAForm({ onSubmit, isPending, spbeOptions }: UploadSAFormP
         />
       </Field>
 
-      <Field label="SPBE penerbit" htmlFor="spbe" error={errors.spbe?.message} required>
-        <SelectInput id="spbe" invalid={!!errors.spbe} {...register("spbe")}>
+      <Field label={`${supplierLabel()} penerbit`} htmlFor="supplier" error={errors.supplier?.message} required>
+        <SelectInput id="supplier" invalid={!!errors.supplier} {...register("supplier")}>
           <option value="">
-            {options.length === 0 ? "Belum ada mitra SPBE terdaftar" : "Pilih SPBE"}
+            {options.length === 0 ? `Belum ada mitra ${supplierLabel()} terdaftar` : `Pilih ${supplierLabel()}`}
           </option>
           {options.map((s) => (
             <option key={s} value={s}>
@@ -97,7 +98,7 @@ export function UploadSAForm({ onSubmit, isPending, spbeOptions }: UploadSAFormP
         label="Total kuota"
         htmlFor="totalKuota"
         error={errors.totalKuota?.message}
-        hint="Jumlah tabung yang dialokasikan SPBE untuk periode ini."
+        hint={`Jumlah ${unitLabel()} yang dialokasikan ${supplierLabel()} untuk periode ini.`}
         required
       >
         <TextInput
@@ -124,7 +125,7 @@ export function UploadSAForm({ onSubmit, isPending, spbeOptions }: UploadSAFormP
       <Field label="Catatan" htmlFor="notes" error={errors.notes?.message}>
         <TextareaInput
           id="notes"
-          placeholder="Misalnya: menunggu tanda tangan basah dari SPBE."
+          placeholder={`Misalnya: menunggu tanda tangan basah dari ${supplierLabel()}.`}
           {...register("notes")}
         />
       </Field>

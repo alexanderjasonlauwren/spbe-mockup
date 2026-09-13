@@ -16,6 +16,7 @@ import type {
   JournalLine,
   JournalSourceType,
 } from "./types";
+import { unitLabelTitle } from "@/lib/lexicon";
 
 /* ── chart of accounts ─────────────────────────────────────────────────── */
 
@@ -28,7 +29,7 @@ const CHART: Seed[] = [
   { kode: "1-1000", nama: "Kas", tipe: "Aset", saldoNormal: "debit", induk: "1-0000", role: "kas", sistem: true, aktif: true },
   { kode: "1-1100", nama: "Bank", tipe: "Aset", saldoNormal: "debit", induk: "1-0000", role: "bank", sistem: true, aktif: true },
   { kode: "1-1200", nama: "Piutang Usaha", tipe: "Aset", saldoNormal: "debit", induk: "1-0000", role: "piutang", sistem: true, aktif: true },
-  { kode: "1-1300", nama: "Persediaan Tabung", tipe: "Aset", saldoNormal: "debit", induk: "1-0000", role: "persediaan", sistem: true, aktif: true },
+  { kode: "1-1300", nama: `Persediaan ${unitLabelTitle()}`, tipe: "Aset", saldoNormal: "debit", induk: "1-0000", role: "persediaan", sistem: true, aktif: true },
 
   // Kewajiban
   { kode: "2-0000", nama: "KEWAJIBAN", tipe: "Kewajiban", saldoNormal: "kredit", sistem: true, aktif: true },
@@ -42,7 +43,7 @@ const CHART: Seed[] = [
 
   // Pendapatan
   { kode: "4-0000", nama: "PENDAPATAN", tipe: "Pendapatan", saldoNormal: "kredit", sistem: true, aktif: true },
-  { kode: "4-1000", nama: "Penjualan LPG", tipe: "Pendapatan", saldoNormal: "kredit", induk: "4-0000", role: "pendapatan", sistem: true, aktif: true },
+  { kode: "4-1000", nama: "Penjualan", tipe: "Pendapatan", saldoNormal: "kredit", induk: "4-0000", role: "pendapatan", sistem: true, aktif: true },
   { kode: "4-1900", nama: "Retur & Potongan Penjualan", tipe: "Pendapatan", saldoNormal: "debit", induk: "4-0000", role: "returPenjualan", sistem: true, aktif: true },
 
   // Beban

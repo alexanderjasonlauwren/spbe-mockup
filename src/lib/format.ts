@@ -25,11 +25,6 @@ export function formatNumber(value: number): string {
   return value.toLocaleString("id-ID");
 }
 
-/** "1.284 tabung" — the unit stays in the sans face at the call site. */
-export function formatTabung(value: number): string {
-  return `${formatNumber(value)}`;
-}
-
 export function formatRupiah(value: number): string {
   return `Rp ${formatNumber(Math.round(value))}`;
 }

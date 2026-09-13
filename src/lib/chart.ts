@@ -91,7 +91,7 @@ export function axisProps(isDark: boolean) {
   };
 }
 
-export function compactTabung(value: number): string {
+export function compactUnit(value: number): string {
   const abs = Math.abs(value);
   if (abs >= 1_000_000)
     return `${(value / 1_000_000).toLocaleString("id-ID", { maximumFractionDigits: 1 })} jt`;

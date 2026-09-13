@@ -104,11 +104,18 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Keuangan",
     items: [
       {
-        name: "OCR Kwitansi",
+        name: "Pengeluaran & Kas Kecil",
+        href: "/expenses",
+        icon: Fuel,
+        hint: "Catat biaya operasional dan persetujuannya",
+        permission: PERMISSIONS.EXPENSES_VIEW,
+      },
+      {
+        name: "Bukti Pengeluaran",
         href: "/ocr",
         icon: Receipt,
-        hint: "Pindai bukti bayar dan terbitkan tagihan",
-        permission: PERMISSIONS.PAYMENTS_VIEW,
+        hint: "Catat dan klasifikasikan struk biaya operasional",
+        permission: [PERMISSIONS.OCR_VIEW, PERMISSIONS.OCR_ARCHIVE_VIEW],
       },
       {
         name: "Piutang",

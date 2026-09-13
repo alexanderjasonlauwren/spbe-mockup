@@ -16,6 +16,20 @@ vi.mock("../api/sopirApi", () => ({
 let watchPositionMock: ReturnType<typeof vi.fn>;
 let clearWatchMock: ReturnType<typeof vi.fn>;
 
+// Node 26 exposes an experimental, undefined localStorage unless it receives
+// --localstorage-file. That shadows jsdom's storage in this test environment,
+// so install the small Storage surface the hook actually uses.
+const stored = new Map<string, string>();
+Object.defineProperty(globalThis, "localStorage", {
+  configurable: true,
+  value: {
+    clear: () => stored.clear(),
+    getItem: (key: string) => stored.get(key) ?? null,
+    setItem: (key: string, value: string) => stored.set(key, value),
+    removeItem: (key: string) => stored.delete(key),
+  },
+});
+
 beforeEach(() => {
   localStorage.clear();
   postGpsFixes.mockReset().mockResolvedValue(undefined);

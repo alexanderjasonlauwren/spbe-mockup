@@ -85,6 +85,15 @@ export const PERMISSIONS = {
   TRANSPORTATION_CLAIMS_CREATE: "distribution.create.transportation_claims",
   TRANSPORTATION_CLAIMS_EDIT: "distribution.update.transportation_claims",
   TRANSPORTATION_CLAIMS_DELETE: "distribution.delete.transportation_claims",
+
+  // Operational costs and petty cash (D3 A-Step 4).
+  EXPENSES_VIEW: "distribution.read.expenses",
+  EXPENSES_CREATE: "distribution.create.expenses",
+  EXPENSES_APPROVE: "distribution.approve.expenses",
+  OCR_CREATE: "ocr.create.ocr_inbox",
+  OCR_VIEW: "ocr.read.ocr_extractions",
+  OCR_VERIFY: "ocr.create.ocr_verifications",
+  OCR_ARCHIVE_VIEW: "ocr.read.ocr_archive",
   /**
    * The chart of accounts itself, distinct from reading the journals posted
    * against it. Confirmed live: finance_officer holds finance.read.journals

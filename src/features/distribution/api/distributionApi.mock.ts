@@ -23,6 +23,8 @@ import { isoDate, startOfToday } from "@/mocks/seed";
 import type { PlanEntity } from "@/mocks/types";
 import type {
   AssignmentSuggestion,
+  DistributionMonthGrid,
+  DistributionPaymentBoard,
   DistributionPlan,
   DriverOption,
   PlanOption,
@@ -131,6 +133,129 @@ async function getPlanDetail(planId: string): Promise<PlanRow[]> {
         alasanBlokir: exp.alasan,
       } satisfies PlanRow;
     });
+}
+
+function datesInMonth(month: string): string[] {
+  const [year, monthNumber] = month.split("-").map(Number);
+  if (!year || !monthNumber || monthNumber < 1 || monthNumber > 12) return [];
+  const count = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  return Array.from({ length: count }, (_, index) =>
+    `${month}-${String(index + 1).padStart(2, "0")}`,
+  );
+}
+
+async function getMonthlyGrid(month: string): Promise<DistributionMonthGrid> {
+  await latency("read");
+  const db = scopedDb();
+  const dates = datesInMonth(month);
+  const dateSet = new Set(dates);
+  const plansById = new Map(
+    db.plans.filter((plan) => dateSet.has(plan.tanggal)).map((plan) => [plan.id, plan]),
+  );
+  const plannedByOutlet = new Map<string, Record<string, number>>();
+  for (const row of db.planRows) {
+    const plan = plansById.get(row.planId);
+    if (!plan) continue;
+    const cells = plannedByOutlet.get(row.outletId) ?? {};
+    cells[plan.tanggal] = (cells[plan.tanggal] ?? 0) + row.jumlahUnit;
+    plannedByOutlet.set(row.outletId, cells);
+  }
+
+  const requiredByDate = new Map<string, number>();
+  for (const target of db.saDailyTargets) {
+    if (!dateSet.has(target.tanggal)) continue;
+    requiredByDate.set(target.tanggal, (requiredByDate.get(target.tanggal) ?? 0) + target.target);
+  }
+  const rows = db.outlets
+    .filter((outlet) => outlet.status === "Aktif")
+    .sort((a, b) => a.kode.localeCompare(b.kode))
+    .map((outlet) => {
+      const cells = plannedByOutlet.get(outlet.id) ?? {};
+      const total = Object.values(cells).reduce((sum, qty) => sum + qty, 0);
+      return {
+        outletId: outlet.id,
+        outletCode: outlet.kode,
+        outletName: outlet.nama,
+        cells,
+        targetQty: outlet.kuotaBulanan,
+        total,
+        remainingQty: outlet.kuotaBulanan - total,
+      };
+    });
+  const footer = dates.map((date) => {
+    const planned = rows.reduce((sum, row) => sum + (row.cells[date] ?? 0), 0);
+    const required = requiredByDate.get(date) ?? 0;
+    return { date, planned, required, hasTarget: requiredByDate.has(date), shortfall: required - planned };
+  });
+  const planned = footer.reduce((sum, day) => sum + day.planned, 0);
+  const required = footer.reduce((sum, day) => sum + day.required, 0);
+  return {
+    month,
+    dates,
+    rows,
+    footer,
+    totals: { planned, required, shortfall: required - planned, outlets: rows.length },
+  };
+}
+
+async function getPaymentBoard(date: string): Promise<DistributionPaymentBoard> {
+  await latency("read");
+  const db = scopedDb();
+  const plans = db.plans.filter((plan) => plan.tanggal === date);
+  const rowsByOutlet = new Map<string, { planned: number; funded: number }>();
+  for (const plan of plans) {
+    const details = await getPlanDetail(plan.id);
+    for (const row of details) {
+      const current = rowsByOutlet.get(row.outletId) ?? { planned: 0, funded: 0 };
+      current.planned += row.jumlahUnit;
+      if (row.statusBayar === "Lunas") current.funded += row.jumlahUnit;
+      rowsByOutlet.set(row.outletId, current);
+    }
+  }
+  const rows = [...rowsByOutlet].map(([outletId, amounts]) => {
+    const outlet = db.outlets.find((item) => item.id === outletId);
+    const unpaidQty = amounts.planned - amounts.funded;
+    return {
+      outletId,
+      outletCode: outlet?.kode ?? "—",
+      outletName: outlet?.nama ?? "—",
+      plannedQty: amounts.planned,
+      fundedQty: amounts.funded,
+      unpaidQty,
+      creditQty: 0,
+      deliveredQty: db.deliveries
+        .filter((delivery) => delivery.outletId === outletId && delivery.tanggal === date)
+        .reduce((sum, delivery) => sum + delivery.realisasi, 0),
+      state: unpaidQty === 0 ? ("paid" as const) : amounts.funded > 0 ? ("partial" as const) : ("unpaid" as const),
+      lastPaymentAt: undefined,
+      late: undefined,
+      hasUnverifiedPayment: false,
+    };
+  });
+  const targetRows = db.saDailyTargets.filter((target) => target.tanggal === date);
+  const required = targetRows.reduce((sum, target) => sum + target.target, 0);
+  const planned = rows.reduce((sum, row) => sum + row.plannedQty, 0);
+  const funded = rows.reduce((sum, row) => sum + row.fundedQty, 0);
+  const unpaid = rows.reduce((sum, row) => sum + row.unpaidQty, 0);
+  const delivered = rows.reduce((sum, row) => sum + row.deliveredQty, 0);
+  return {
+    date,
+    cutoff: "",
+    timezone: "Asia/Jakarta",
+    rows,
+    summary: {
+      required,
+      hasTarget: targetRows.length > 0,
+      planned,
+      funded,
+      unpaid,
+      delivered,
+      shortfall: required - delivered,
+      outlets: rows.length,
+      paidOutlets: rows.filter((row) => row.state === "paid").length,
+      lateOutlets: 0,
+    },
+  };
 }
 
 async function saveDraft(planId: string, rows: PlanRow[]): Promise<void> {
@@ -442,6 +567,8 @@ export const distributionApiMock: DistributionApi = {
   getPlanList,
   getPlan,
   getPlanDetail,
+  getMonthlyGrid,
+  getPaymentBoard,
   createPlan,
   saveDraft,
   confirmPlan,

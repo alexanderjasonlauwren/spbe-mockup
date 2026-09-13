@@ -34,6 +34,8 @@ import { getList, getOne, send } from "@/lib/api";
 import { scheduleOneOrder } from "@/features/orders/api/orderApi.http";
 import type {
   AssignmentSuggestion,
+  DistributionMonthGrid,
+  DistributionPaymentBoard,
   DistributionPlan,
   DriverOption,
   PlanOption,
@@ -70,6 +72,7 @@ interface OrderItemResponse {
   assigned: boolean;
   payment_method: string;
   payment_state: string;
+  payment_status?: string;
   item_status: string;
   notes?: string;
 }
@@ -170,6 +173,54 @@ interface AgreementListResponse {
   period_end: string;
   total_quota_qty: number;
   allocated_quota_qty: number;
+}
+
+interface GridResponse {
+  month: string;
+  dates: string[];
+  rows: {
+    outlet_id: string;
+    outlet_code: string;
+    outlet_name: string;
+    cells: Record<string, number>;
+    target_qty: number;
+    total: number;
+    remaining_qty: number;
+  }[];
+  footer: { date: string; planned: number; required: number; has_target: boolean; shortfall: number }[];
+  totals: { planned: number; required: number; shortfall: number; outlets: number };
+}
+
+interface PaymentBoardWire {
+  date: string;
+  cutoff: string;
+  timezone: string;
+  rows: {
+    outlet_id: string;
+    outlet_code: string;
+    outlet_name: string;
+    planned_qty: number;
+    funded_qty: number;
+    unpaid_qty: number;
+    credit_qty: number;
+    delivered_qty: number;
+    state: "paid" | "partial" | "unpaid" | "credit";
+    last_payment_at?: string;
+    late?: boolean;
+    has_unverified_payment: boolean;
+  }[];
+  summary: {
+    required: number;
+    has_target: boolean;
+    planned: number;
+    funded: number;
+    unpaid: number;
+    delivered: number;
+    shortfall: number;
+    outlets: number;
+    paid_outlets: number;
+    late_outlets: number;
+  };
 }
 
 /**
@@ -313,7 +364,11 @@ function toPlanRows(items: OrderItemResponse[], board?: BoardResponse): PlanRow[
       tripNo: crew?.tripNo ?? item.sequence_no ?? null,
       tripId: crew?.tripId ?? null,
       tripStatus: crew?.tripStatus,
-      statusBayar: item.payment_state === "paid" ? "Lunas" : "Belum Lunas",
+      statusBayar:
+        item.payment_state === "credit" ||
+        (item.payment_state === "paid" && item.payment_status === "verified")
+          ? "Lunas"
+          : "Belum Lunas",
       sisaKuotaOutlet: 0,
       piutang: 0,
       piutangJatuhTempo: 0,
@@ -323,7 +378,12 @@ function toPlanRows(items: OrderItemResponse[], board?: BoardResponse): PlanRow[
     row.jumlahUnit += item.planned_qty;
     // Any unpaid line makes the stop unpaid: the truck is loaded per stop, and
     // the half that is funded cannot be delivered on its own.
-    if (item.payment_state !== "paid") row.statusBayar = "Belum Lunas";
+    if (
+      item.payment_state !== "credit" &&
+      !(item.payment_state === "paid" && item.payment_status === "verified")
+    ) {
+      row.statusBayar = "Belum Lunas";
+    }
     byOutlet.set(outletId, row);
   }
 
@@ -351,6 +411,68 @@ async function getPlanDetail(planId: string): Promise<PlanRow[]> {
   // that is a better answer than an error page for a plan nobody has assigned.
   const board = await getBoard(planId);
   return toPlanRows(order.items ?? [], board);
+}
+
+async function getMonthlyGrid(month: string): Promise<DistributionMonthGrid> {
+  const wire = await getOne<GridResponse>(`/distribution/grid?month=${encodeURIComponent(month)}`);
+  return {
+    month: wire.month,
+    dates: wire.dates,
+    rows: wire.rows.map((row) => ({
+      outletId: row.outlet_id,
+      outletCode: row.outlet_code,
+      outletName: row.outlet_name,
+      cells: row.cells,
+      targetQty: row.target_qty,
+      total: row.total,
+      remainingQty: row.remaining_qty,
+    })),
+    footer: wire.footer.map((day) => ({
+      date: day.date,
+      planned: day.planned,
+      required: day.required,
+      hasTarget: day.has_target,
+      shortfall: day.shortfall,
+    })),
+    totals: wire.totals,
+  };
+}
+
+async function getPaymentBoard(date: string): Promise<DistributionPaymentBoard> {
+  const wire = await getOne<PaymentBoardWire>(
+    `/distribution/payment-board?date=${encodeURIComponent(date)}`,
+  );
+  return {
+    date: wire.date,
+    cutoff: wire.cutoff,
+    timezone: wire.timezone,
+    rows: wire.rows.map((row) => ({
+      outletId: row.outlet_id,
+      outletCode: row.outlet_code,
+      outletName: row.outlet_name,
+      plannedQty: row.planned_qty,
+      fundedQty: row.funded_qty,
+      unpaidQty: row.unpaid_qty,
+      creditQty: row.credit_qty,
+      deliveredQty: row.delivered_qty,
+      state: row.state,
+      lastPaymentAt: row.last_payment_at,
+      late: row.late,
+      hasUnverifiedPayment: row.has_unverified_payment,
+    })),
+    summary: {
+      required: wire.summary.required,
+      hasTarget: wire.summary.has_target,
+      planned: wire.summary.planned,
+      funded: wire.summary.funded,
+      unpaid: wire.summary.unpaid,
+      delivered: wire.summary.delivered,
+      shortfall: wire.summary.shortfall,
+      outlets: wire.summary.outlets,
+      paidOutlets: wire.summary.paid_outlets,
+      lateOutlets: wire.summary.late_outlets,
+    },
+  };
 }
 
 async function getBoard(planId: string): Promise<BoardResponse | undefined> {
@@ -674,6 +796,8 @@ export const distributionApiHttp: DistributionApi = {
   getPlanList,
   getPlan,
   getPlanDetail,
+  getMonthlyGrid,
+  getPaymentBoard,
   createPlan,
   saveDraft,
   confirmPlan,

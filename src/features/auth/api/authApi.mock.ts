@@ -62,6 +62,13 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.ORDERS_EDIT,
     PERMISSIONS.INVOICES_VIEW,
     PERMISSIONS.INVOICES_EXPORT,
+    PERMISSIONS.EXPENSES_VIEW,
+    PERMISSIONS.EXPENSES_CREATE,
+    PERMISSIONS.EXPENSES_APPROVE,
+    PERMISSIONS.OCR_CREATE,
+    PERMISSIONS.OCR_VIEW,
+    PERMISSIONS.OCR_VERIFY,
+    PERMISSIONS.OCR_ARCHIVE_VIEW,
     PERMISSIONS.SETTINGS_VIEW,
   ],
   finance: [
@@ -76,6 +83,9 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     // Only finance_officer and tenant_admin hold journal read on the
     // backend -- this mock role is the finance_officer counterpart.
     PERMISSIONS.JOURNALS_VIEW,
+    PERMISSIONS.EXPENSES_VIEW,
+    PERMISSIONS.EXPENSES_APPROVE,
+    PERMISSIONS.OCR_ARCHIVE_VIEW,
     PERMISSIONS.PRODUCTS_VIEW,
     PERMISSIONS.OUTLETS_VIEW,
     PERMISSIONS.SETTINGS_VIEW,
@@ -100,6 +110,12 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.PRODUCTS_VIEW,
     PERMISSIONS.PAYMENTS_VIEW,
     PERMISSIONS.INVOICES_VIEW,
+    PERMISSIONS.EXPENSES_VIEW,
+    PERMISSIONS.EXPENSES_CREATE,
+    PERMISSIONS.OCR_CREATE,
+    PERMISSIONS.OCR_VIEW,
+    PERMISSIONS.OCR_VERIFY,
+    PERMISSIONS.OCR_ARCHIVE_VIEW,
   ],
   viewer: [
     PERMISSIONS.SA_VIEW,
@@ -110,6 +126,8 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.OUTLETS_VIEW,
     PERMISSIONS.DRIVERS_VIEW,
     PERMISSIONS.INVOICES_VIEW,
+    PERMISSIONS.EXPENSES_VIEW,
+    PERMISSIONS.OCR_ARCHIVE_VIEW,
     // Deliberately no GPS_TRACKS_VIEW, and therefore no Monitoring in the
     // nav. This is the demo's copy of the real gap: warehouse_staff,
     // finance_officer and auditor_viewer all hold deliveries read without
@@ -123,7 +141,15 @@ const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
    * DISTRIBUTION_VIEW opens the planner with every outlet's credit position on
    * it. Neither is anything a driver at a gate can act on.
    */
-  driver: [PERMISSIONS.DELIVERIES_EXECUTE],
+  driver: [
+    PERMISSIONS.DELIVERIES_EXECUTE,
+    PERMISSIONS.EXPENSES_VIEW,
+    PERMISSIONS.EXPENSES_CREATE,
+    PERMISSIONS.OCR_CREATE,
+    PERMISSIONS.OCR_VIEW,
+    PERMISSIONS.OCR_VERIFY,
+    PERMISSIONS.OCR_ARCHIVE_VIEW,
+  ],
 };
 
 /** Stand-in for the password a real deployment would check against a hash. */

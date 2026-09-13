@@ -170,6 +170,73 @@ describe("plan mapping", () => {
   });
 });
 
+describe("allocation and payment control mapping", () => {
+  it("maps the workbook-shaped monthly grid without losing absent cells or signed remainder", async () => {
+    getOne.mockResolvedValue({
+      month: "2026-08",
+      dates: ["2026-08-01", "2026-08-02"],
+      rows: [{
+        outlet_id: OUTLET_A,
+        outlet_code: "4507441079858009",
+        outlet_name: "Agus Triyanto",
+        cells: { "2026-08-01": 50 },
+        target_qty: 40,
+        total: 50,
+        remaining_qty: -10,
+      }],
+      footer: [{ date: "2026-08-01", planned: 50, required: 60, has_target: true, shortfall: 10 }],
+      totals: { planned: 50, required: 60, shortfall: 10, outlets: 1 },
+    });
+
+    const grid = await distributionApiHttp.getMonthlyGrid("2026-08");
+
+    expect(getOne).toHaveBeenCalledWith("/distribution/grid?month=2026-08");
+    expect(grid.rows[0]).toMatchObject({
+      outletCode: "4507441079858009",
+      targetQty: 40,
+      remainingQty: -10,
+      cells: { "2026-08-01": 50 },
+    });
+    expect(grid.rows[0].cells["2026-08-02"]).toBeUndefined();
+  });
+
+  it("keeps an unverified payment visible without mapping it to funded quantity", async () => {
+    getOne.mockResolvedValue({
+      date: "2026-08-01",
+      cutoff: "15:00:00",
+      timezone: "Asia/Jakarta",
+      rows: [{
+        outlet_id: OUTLET_A,
+        outlet_code: "4507441079858009",
+        outlet_name: "Agus Triyanto",
+        planned_qty: 50,
+        funded_qty: 0,
+        unpaid_qty: 50,
+        credit_qty: 0,
+        delivered_qty: 0,
+        state: "unpaid",
+        has_unverified_payment: true,
+      }],
+      summary: {
+        required: 50,
+        has_target: true,
+        planned: 50,
+        funded: 0,
+        unpaid: 50,
+        delivered: 0,
+        shortfall: 50,
+        outlets: 1,
+        paid_outlets: 0,
+        late_outlets: 0,
+      },
+    });
+
+    const board = await distributionApiHttp.getPaymentBoard("2026-08-01");
+
+    expect(board.rows[0]).toMatchObject({ fundedQty: 0, unpaidQty: 50, hasUnverifiedPayment: true });
+  });
+});
+
 describe("stop mapping", () => {
   /**
    * One outlet taking two products is one stop, not two.
@@ -234,6 +301,18 @@ describe("stop mapping", () => {
             item({ id: "second", product_id: "p2", payment_state: "unpaid" }),
           ],
         }),
+      )
+      .mockRejectedValueOnce(new Error("no board yet"));
+
+    const rows = await distributionApiHttp.getPlanDetail(PLAN_ID);
+
+    expect(rows[0].statusBayar).toBe("Belum Lunas");
+  });
+
+  it("does not show a pending linked payment as paid", async () => {
+    getOne
+      .mockResolvedValueOnce(
+        order({ items: [item({ payment_state: "paid", payment_status: "pending" })] }),
       )
       .mockRejectedValueOnce(new Error("no board yet"));
 

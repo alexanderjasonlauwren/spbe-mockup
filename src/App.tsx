@@ -11,6 +11,7 @@ import { SAManagementPage } from "./pages/sa/SAManagementPage";
 import { DistributionPage } from "./pages/distribution/DistributionPage";
 import { MonitoringPage } from "./pages/monitoring/MonitoringPage";
 import { TransportationClaimListPage } from "./pages/transportation/TransportationClaimListPage";
+import { ExpensePage } from "./pages/expenses/ExpensePage";
 import { SopirPage } from "./pages/sopir/SopirPage";
 import { OcrPage } from "./pages/ocr/OcrPage";
 import { PaymentPage } from "./pages/payments/PaymentPage";
@@ -97,6 +98,11 @@ const router = createBrowserRouter([
           <TransportationClaimListPage />
         </RequirePermission>
       ) },
+      { path: "expenses", element: (
+        <RequirePermission permission={PERMISSIONS.EXPENSES_VIEW}>
+          <ExpensePage />
+        </RequirePermission>
+      ) },
 
       // Lapangan — the driver's own console.
       { path: "sopir", element: (
@@ -107,7 +113,7 @@ const router = createBrowserRouter([
 
       // Keuangan — what the day is worth.
       { path: "ocr", element: (
-        <RequirePermission permission={PERMISSIONS.PAYMENTS_VIEW}>
+        <RequirePermission permissions={[PERMISSIONS.OCR_VIEW, PERMISSIONS.OCR_ARCHIVE_VIEW]}>
           <OcrPage />
         </RequirePermission>
       ) },

@@ -4,6 +4,7 @@ import { scopeKey } from "@/mocks/scope";
 import { useDistributionPlan } from "@/features/distribution/hooks/useDistributionPlan";
 import { PlanListPanel } from "@/features/distribution/components/PlanListPanel";
 import { PlanDetailPanel } from "@/features/distribution/components/PlanDetailPanel";
+import { AllocationControlPanel } from "@/features/distribution/components/AllocationControlPanel";
 import { getUsers } from "@/features/users/api/userApi";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -62,6 +63,7 @@ export function DistributionPage() {
   } = useDistributionPlan();
 
   const [creating, setCreating] = useState(false);
+  const [view, setView] = useState<"daily" | "allocation">("daily");
   const [newDate, setNewDate] = useState(tomorrowIso());
   const [newSaId, setNewSaId] = useState("");
   /**
@@ -135,44 +137,65 @@ export function DistributionPage() {
         }
       />
 
-      <div className="grid min-h-[36rem] grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-3">
-          <PlanListPanel
-            plans={planList}
-            isLoading={isLoadingList}
-            selectedId={selectedPlanId}
-            onSelect={setSelectedPlanId}
-            onCreate={() => {
-              setNewSaId(saOptions.find((s) => !s.disabled)?.id ?? "");
-              setCreating(true);
-            }}
-          />
-        </div>
-
-        <div className="lg:col-span-9">
-          <PlanDetailPanel
-            plan={selectedPlan}
-            rows={planDetail}
-            isLoading={isLoadingDetail}
-            outletOptions={outletOptions}
-            productOptions={productOptions}
-            driverOptions={driverOptions}
-            vehicleOptions={vehicleOptions}
-            onSaveDraft={handleSaveDraft}
-            onConfirm={() => setConfirming(true)}
-            onCancelPlan={() => setCancelling(true)}
-            onPrint={() => selectedPlanId && printMutation.mutate(selectedPlanId)}
-            isSaving={saveDraftMutation.isPending}
-            isConfirming={confirmPlanMutation.isPending}
-            onDispatchTrip={handleDispatchTrip}
-            dispatchingTripId={
-              dispatchTripMutation.isPending
-                ? (dispatchTripMutation.variables?.tripId ?? null)
-                : null
-            }
-          />
-        </div>
+      <div className="flex w-fit rounded-lg border border-line bg-panel p-1">
+        <Button
+          size="sm"
+          variant={view === "daily" ? "default" : "ghost"}
+          onClick={() => setView("daily")}
+        >
+          Rencana harian
+        </Button>
+        <Button
+          size="sm"
+          variant={view === "allocation" ? "default" : "ghost"}
+          onClick={() => setView("allocation")}
+        >
+          Alokasi & pembayaran
+        </Button>
       </div>
+
+      {view === "allocation" ? (
+        <AllocationControlPanel />
+      ) : (
+        <div className="grid min-h-[36rem] grid-cols-1 gap-4 lg:grid-cols-12">
+          <div className="lg:col-span-3">
+            <PlanListPanel
+              plans={planList}
+              isLoading={isLoadingList}
+              selectedId={selectedPlanId}
+              onSelect={setSelectedPlanId}
+              onCreate={() => {
+                setNewSaId(saOptions.find((s) => !s.disabled)?.id ?? "");
+                setCreating(true);
+              }}
+            />
+          </div>
+
+          <div className="lg:col-span-9">
+            <PlanDetailPanel
+              plan={selectedPlan}
+              rows={planDetail}
+              isLoading={isLoadingDetail}
+              outletOptions={outletOptions}
+              productOptions={productOptions}
+              driverOptions={driverOptions}
+              vehicleOptions={vehicleOptions}
+              onSaveDraft={handleSaveDraft}
+              onConfirm={() => setConfirming(true)}
+              onCancelPlan={() => setCancelling(true)}
+              onPrint={() => selectedPlanId && printMutation.mutate(selectedPlanId)}
+              isSaving={saveDraftMutation.isPending}
+              isConfirming={confirmPlanMutation.isPending}
+              onDispatchTrip={handleDispatchTrip}
+              dispatchingTripId={
+                dispatchTripMutation.isPending
+                  ? (dispatchTripMutation.variables?.tripId ?? null)
+                  : null
+              }
+            />
+          </div>
+        </div>
+      )}
 
       {/* New plan */}
       <Dialog open={creating} onOpenChange={setCreating}>

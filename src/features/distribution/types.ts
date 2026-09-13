@@ -156,3 +156,58 @@ export interface AssignmentSuggestion {
    */
   dasar: string;
 }
+
+/** Workbook-shaped monthly allocation view: pangkalan down, dates across. */
+export interface DistributionMonthGrid {
+  month: string;
+  dates: string[];
+  rows: {
+    outletId: string;
+    outletCode: string;
+    outletName: string;
+    cells: Record<string, number>;
+    targetQty: number;
+    total: number;
+    remainingQty: number;
+  }[];
+  footer: {
+    date: string;
+    planned: number;
+    required: number;
+    hasTarget: boolean;
+    shortfall: number;
+  }[];
+  totals: { planned: number; required: number; shortfall: number; outlets: number };
+}
+
+export interface DistributionPaymentBoard {
+  date: string;
+  cutoff: string;
+  timezone: string;
+  rows: {
+    outletId: string;
+    outletCode: string;
+    outletName: string;
+    plannedQty: number;
+    fundedQty: number;
+    unpaidQty: number;
+    creditQty: number;
+    deliveredQty: number;
+    state: "paid" | "partial" | "unpaid" | "credit";
+    lastPaymentAt?: string;
+    late?: boolean;
+    hasUnverifiedPayment: boolean;
+  }[];
+  summary: {
+    required: number;
+    hasTarget: boolean;
+    planned: number;
+    funded: number;
+    unpaid: number;
+    delivered: number;
+    shortfall: number;
+    outlets: number;
+    paidOutlets: number;
+    lateOutlets: number;
+  };
+}

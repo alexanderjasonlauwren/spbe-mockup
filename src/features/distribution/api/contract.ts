@@ -12,6 +12,8 @@
 import type {
   AssignmentSuggestion,
   DistributionPlan,
+  DistributionMonthGrid,
+  DistributionPaymentBoard,
   DriverOption,
   PlanOption,
   PlanRow,
@@ -65,6 +67,8 @@ export interface DistributionApi {
   getPlanList(): Promise<DistributionPlan[]>;
   getPlan(planId: string): Promise<DistributionPlan>;
   getPlanDetail(planId: string): Promise<PlanRow[]>;
+  getMonthlyGrid(month: string): Promise<DistributionMonthGrid>;
+  getPaymentBoard(date: string): Promise<DistributionPaymentBoard>;
 
   /**
    * Opens a plan for a day.

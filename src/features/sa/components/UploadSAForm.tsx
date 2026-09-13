@@ -5,7 +5,6 @@ import { Loader2, Upload } from "lucide-react";
 import {
   Field,
   FileDrop,
-  SelectInput,
   TextInput,
   TextareaInput,
 } from "@/components/common/Field";

@@ -190,7 +190,7 @@ export function LoginPage() {
                 type="email"
                 mono
                 autoComplete="username"
-                placeholder="nama@sidistrib.id"
+                placeholder="nama@perusahaan.id"
                 value={email}
                 invalid={!!error}
                 onChange={(e) => setEmail(e.target.value)}
@@ -244,24 +244,6 @@ export function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 rounded-md border border-line bg-panel-sunk px-4 py-3">
-            <p className="label mb-1.5 text-2xs text-ink-muted">Akun contoh</p>
-            <p className="text-xs leading-relaxed text-ink-muted">
-              Masuk dengan{" "}
-              <button
-                type="button"
-                onClick={() => {
-                  setEmail("alex@sidistrib.id");
-                  setPassword("sidistrib");
-                }}
-                className="data font-semibold text-ink underline decoration-signal decoration-2 underline-offset-4"
-              >
-                alex@sidistrib.id
-              </button>{" "}
-              dan kata sandi <span className="data text-ink">sidistrib</span>. Akun lain
-              yang terdaftar di halaman Pengguna juga bisa dipakai.
-            </p>
-          </div>
         </div>
       </div>
     </div>

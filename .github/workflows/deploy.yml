@@ -50,9 +50,19 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Build API-backed image assets
+        run: npm run build
+        env:
+          VITE_DATA_SOURCE: api
+          VITE_API_URL: /api/v1
+
   deploy:
     name: Deploy
     needs: check
+    # Vercel's GitHub integration already creates previews. Keep the duplicate
+    # CLI deployment disabled unless the repository is deliberately configured
+    # with both this variable and the Vercel secrets below.
+    if: ${{ vars.VERCEL_CLI_DEPLOY_ENABLED == 'true' }}
     runs-on: ubuntu-latest
 
     steps:

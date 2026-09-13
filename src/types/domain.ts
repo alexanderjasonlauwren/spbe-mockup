@@ -40,9 +40,10 @@ export interface TenantEntity {
    * How deep in the tree, counted from the ROOT — not from whoever is looking.
    *
    * Also the number of ancestors it has. Absolute on purpose, so two people
-   * acting as different tenants describe the same tenant the same way. A
-   * switcher rendering indentation must subtract its own depth, or a
-   * subsidiary's tree draws off the left edge of the panel.
+   * acting as different tenants describe the same tenant the same way. The
+   * scope switcher renders this absolute depth as a numbered level. That
+   * keeps a parent visibly above its subsidiaries even when the active tenant
+   * is itself a subsidiary.
    */
   level: number;
 

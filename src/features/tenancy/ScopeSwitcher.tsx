@@ -43,18 +43,12 @@ export function ScopeSwitcher() {
     );
   }
 
-  // Indentation is RELATIVE. `level` counts from the root, so rendering it
-  // directly would indent a subsidiary's own subtree off the left edge of a
-  // 16rem panel. Subtracting the acting tenant's level makes the tree read the
-  // same wherever in it you happen to be standing.
-  const baseLevel = tenant?.level ?? 0;
-
   return (
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-label="Ganti cabang"
+        aria-label={canSwitchTenant ? "Ganti tenant atau cabang" : "Ganti cabang"}
         className={cn(
           "flex shrink-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
           isConsolidated
@@ -84,16 +78,17 @@ export function ScopeSwitcher() {
       </button>
 
       {open && (
-        <div className="animate-in-up absolute right-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-md border border-line bg-panel shadow-pop">
+        <div className="animate-in-up absolute right-0 top-full z-50 mt-2 w-[min(20rem,calc(100vw-1rem))] overflow-hidden rounded-md border border-line bg-panel shadow-pop">
           {canSwitchTenant && (
             <>
-              <p className="label border-b border-line px-4 py-2 text-2xs text-ink-muted">
-                Tenant
-              </p>
+              <div className="flex items-end justify-between border-b border-line px-4 py-2.5">
+                <p className="label text-2xs text-ink-muted">Struktur tenant</p>
+                <p className="data text-[0.625rem] text-ink-muted">01 = tertinggi</p>
+              </div>
               <ul className="max-h-56 overflow-y-auto border-b border-line">
                 {tenants.map((t) => {
                   const active = t.id === tenant?.id;
-                  const indent = Math.max(0, t.level - baseLevel);
+                  const displayLevel = t.level + 1;
                   return (
                     <li key={t.id}>
                       <button
@@ -102,20 +97,36 @@ export function ScopeSwitcher() {
                           setOpen(false);
                         }}
                         className={cn(
-                          "flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-panel-sunk",
-                          active && "bg-panel-sunk",
+                          "flex w-full items-center gap-3 border-l-2 border-transparent px-3 py-2.5 text-left transition-colors hover:bg-panel-sunk",
+                          active && "border-signal bg-panel-sunk",
                         )}
-                        style={{ paddingLeft: `${1 + indent * 0.875}rem` }}
+                        aria-current={active ? "true" : undefined}
                       >
-                        <Network className="h-4 w-4 shrink-0 text-ink-muted" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium text-ink">
-                            {t.nama}
-                          </span>
-                          <span className="block truncate text-2xs text-ink-muted">
-                            {/* A holding runs no operations, so say so rather
-                                than showing an industry it does not have. */}
-                            {t.jenis === "grup" ? "Grup" : businessTypeLabel(t.jenisUsaha)}
+                        <span
+                          className={cn(
+                            "data flex h-6 w-8 shrink-0 items-center justify-center rounded-sm border border-line bg-panel-raised text-[0.625rem] font-medium text-ink-muted",
+                            active && "border-signal/50 bg-signal-soft text-signal-ink",
+                          )}
+                          aria-label={`Tingkat ${displayLevel}`}
+                        >
+                          {String(displayLevel).padStart(2, "0")}
+                        </span>
+                        <span
+                          className="flex min-w-0 flex-1 items-center gap-2.5"
+                          style={{ paddingLeft: `${Math.min(t.level, 4) * 0.75}rem` }}
+                        >
+                          {t.jenis === "grup" ? (
+                            <Network className="h-4 w-4 shrink-0 text-ink-muted" />
+                          ) : (
+                            <Building2 className="h-4 w-4 shrink-0 text-ink-muted" />
+                          )}
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium text-ink">
+                              {t.nama}
+                            </span>
+                            <span className="block truncate text-2xs text-ink-muted">
+                              Tingkat {displayLevel} · {t.jenis === "grup" ? "Grup induk" : businessTypeLabel(t.jenisUsaha)}
+                            </span>
                           </span>
                         </span>
                         {active && <Check className="h-3.5 w-3.5 shrink-0 text-ink" />}

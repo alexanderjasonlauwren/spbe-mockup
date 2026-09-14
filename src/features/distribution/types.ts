@@ -78,6 +78,20 @@ export interface PlanRow {
   tripStatus?: string;
 }
 
+/**
+ * One outlet's SIM3LON-planned allocation for a single date -- what a new
+ * plan's stops are pre-filled from, instead of a manually-added, wrongly-
+ * defaulted row. Absent entirely for an SA typed by hand, or a date its
+ * import never covered.
+ */
+export interface SAOutletPlanRow {
+  outletId: string;
+  outlet: string;
+  productId: string;
+  productName: string;
+  jumlah: number;
+}
+
 export interface PlanOption {
   id: string;
   label: string;

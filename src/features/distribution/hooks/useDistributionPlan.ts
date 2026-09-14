@@ -1,6 +1,7 @@
 import { scopeKey } from "@/mocks/scope";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
+import { useToast } from "@/hooks/useToast";
 import {
   addApprovedOrders,
   cancelDistributionPlan,
@@ -11,6 +12,8 @@ import {
   getDriverOptions,
   getOutletOptions,
   getProductOptions,
+  getSAOutletPlan,
+  getSAProductOptions,
   getVehicleOptions,
   applyAssignment,
   getPlan,
@@ -20,11 +23,14 @@ import {
   saveDraft,
 } from "../api/distributionApi";
 import type { CreditOverrideInput } from "../api/contract";
-import type { PlanRow } from "../types";
+import type { DistributionPlan, PlanOption, PlanRow } from "../types";
 import { outletLabel, unitLabel } from "@/lib/lexicon";
 import { useResettableState } from "@/hooks/useResettableState";
 
 export function useDistributionPlan() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   const planList = useQuery({ queryKey: [...scopeKey(), "plan-list"], queryFn: getPlanList });
 
   // Open on the plan that needs attention: today's, or the newest draft.
@@ -83,6 +89,14 @@ export function useDistributionPlan() {
   const productOptions = useQuery({
     queryKey: [...scopeKey(), "product-options"],
     queryFn: getProductOptions,
+  });
+
+  // What the open plan's own SA is for -- a new stop should default to this,
+  // not to the catalogue-wide list above.
+  const saProductOptions = useQuery({
+    queryKey: [...scopeKey(), "sa-product-options", selectedPlanQuery.data?.saId],
+    queryFn: () => getSAProductOptions(selectedPlanQuery.data!.saId),
+    enabled: !!selectedPlanQuery.data?.saId,
   });
 
   const saOptions = useQuery({
@@ -166,7 +180,10 @@ export function useDistributionPlan() {
       title: `Rencana ${plan.kode} dibuat`,
       description: `Tambahkan ${outletLabel()} dan tetapkan driver sebelum konfirmasi.`,
     }),
-    onDone: (plan) => setSelectedPlanId(plan.id),
+    onDone: (plan) => {
+      setSelectedPlanId(plan.id);
+      void fillFromSAPlan(plan, outletOptions.data ?? [], queryClient, toast);
+    },
   });
 
   const cancelPlanMutation = useDeskMutation({
@@ -205,6 +222,7 @@ export function useDistributionPlan() {
     outletOptions: outletOptions.data ?? [],
     vehicleOptions: vehicleOptions.data ?? [],
     productOptions: productOptions.data ?? [],
+    saProductOptions: saProductOptions.data ?? [],
     driverOptions: driverOptions.data ?? [],
     saOptions: saOptions.data ?? [],
     saveDraftMutation,
@@ -215,6 +233,71 @@ export function useDistributionPlan() {
     addOrdersMutation,
     printMutation,
   };
+}
+
+/**
+ * Pre-fills a freshly created plan from its SA's own SIM3LON planning table --
+ * the pangkalan x tanggal -> jumlah tabung data the checker used to build a
+ * day's plan by hand (flow doc §6.1/§16, docs/flow-gap-analysis.md D6).
+ *
+ * A plan with no such data (an SA typed by hand, or a date its import never
+ * covered) is left empty, same as before -- the planner adds stops with
+ * "Tambah pangkalan" as always.
+ */
+async function fillFromSAPlan(
+  plan: DistributionPlan,
+  outlets: PlanOption[],
+  queryClient: ReturnType<typeof useQueryClient>,
+  toast: ReturnType<typeof useToast>["toast"],
+): Promise<void> {
+  if (!plan.saId) return;
+  let planned;
+  try {
+    planned = await getSAOutletPlan(plan.saId, plan.tanggal);
+  } catch {
+    // Not fatal: the plan was created fine, it just starts empty. The
+    // planner can still add stops by hand.
+    return;
+  }
+  if (planned.length === 0) return;
+
+  const byId = new Map(outlets.map((o) => [o.id, o]));
+  const rows: PlanRow[] = planned.map((p, i) => ({
+    id: `sa-plan-${i}`,
+    outletId: p.outletId,
+    outlet: p.outlet,
+    alamat: byId.get(p.outletId)?.sublabel ?? "",
+    lines: [{ productId: p.productId, jumlah: p.jumlah }],
+    jumlahUnit: p.jumlah,
+    driverId: null,
+    driver: "Belum ditetapkan",
+    vehicleId: null,
+    vehicle: "Belum ditetapkan",
+    jamPengiriman: "07:00",
+    statusBayar: "Lunas",
+    sisaKuotaOutlet: 0,
+    piutang: 0,
+    piutangJatuhTempo: 0,
+    tripNo: null,
+  }));
+
+  try {
+    await saveDraft(plan.id, rows, plan.version);
+    await queryClient.invalidateQueries({ queryKey: [...scopeKey(), "plan-detail", plan.id] });
+    await queryClient.invalidateQueries({ queryKey: [...scopeKey(), "plan", plan.id] });
+    await queryClient.invalidateQueries({ queryKey: [...scopeKey(), "plan-list"] });
+    toast({
+      title: `${rows.length} pangkalan diisi otomatis`,
+      description: "Diambil dari rencana SIM3LON agreement ini untuk tanggal yang dipilih.",
+      tone: "success",
+    });
+  } catch {
+    toast({
+      title: "Tidak bisa mengisi otomatis dari SA",
+      description: `Tambahkan ${outletLabel()} secara manual.`,
+      tone: "error",
+    });
+  }
 }
 
 /**

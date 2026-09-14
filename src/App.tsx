@@ -8,6 +8,7 @@ import { LoginPage } from "./pages/auth/LoginPage";
 import { DashboardPage } from "./pages/dashboard/DashboardPage";
 import { OrderListPage } from "./pages/orders/OrderListPage";
 import { SAManagementPage } from "./pages/sa/SAManagementPage";
+import { SADetailPage } from "./pages/sa/SADetailPage";
 import { DistributionPage } from "./pages/distribution/DistributionPage";
 import { MonitoringPage } from "./pages/monitoring/MonitoringPage";
 import { TransportationClaimListPage } from "./pages/transportation/TransportationClaimListPage";
@@ -76,6 +77,11 @@ const router = createBrowserRouter([
       { path: "sa", element: (
         <RequirePermission permission={PERMISSIONS.SA_VIEW}>
           <SAManagementPage />
+        </RequirePermission>
+      ) },
+      { path: "sa/:id", element: (
+        <RequirePermission permission={PERMISSIONS.SA_VIEW}>
+          <SADetailPage />
         </RequirePermission>
       ) },
       { path: "distribution", element: (

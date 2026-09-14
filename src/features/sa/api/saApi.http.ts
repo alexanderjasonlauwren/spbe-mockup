@@ -14,6 +14,7 @@ import type {
   SAImportBatch,
   SAImportChangeKind,
   SAImportDiff,
+  SAImportSummary,
   SIM3LONApplied,
   SIM3LONPreview,
   ScheduleAgreement,
@@ -42,10 +43,35 @@ interface AgreementResponse {
   total_quota_qty: number;
   allocated_quota_qty: number;
   used_quota_qty: number;
+  products: AgreementProductQuota[];
   notes?: string;
   version: number;
   created_at: string;
   updated_at: string;
+}
+
+interface AgreementProductQuota {
+  product_id: string;
+  product_name: string;
+  total_quota_qty: number;
+  allocated_quota_qty: number;
+  used_quota_qty: number;
+}
+
+/** Mirrors the SIM3LON usecase's ImportSummaryResponse. */
+interface ImportSummaryResponse {
+  file_name?: string;
+  supplier_name?: string;
+  checksum_sha256?: string;
+  imported_at?: string;
+  outlets: Array<{
+    registration_code: string;
+    name: string;
+    allocation_qty: number;
+    normal_qty: number;
+    fakultatif_qty: number;
+    remaining_qty: number;
+  }>;
 }
 
 /**
@@ -114,6 +140,32 @@ function toDomain(row: AgreementResponse): ScheduleAgreement {
     // Plans drawing on this agreement. Not exposed yet; 0 rather than a
     // fabricated count.
     jumlahRencana: 0,
+    products: (row.products ?? []).map((p) => ({
+      productId: p.product_id,
+      productName: p.product_name,
+      totalKuota: p.total_quota_qty,
+      dialokasikan: p.allocated_quota_qty,
+      terpakai: p.used_quota_qty,
+      sisaKuota: Math.max(0, p.total_quota_qty - p.allocated_quota_qty),
+    })),
+  };
+}
+
+function toImportSummary(row: ImportSummaryResponse | null): SAImportSummary | null {
+  if (!row) return null;
+  return {
+    namaBerkas: row.file_name,
+    supplier: row.supplier_name,
+    checksum: row.checksum_sha256,
+    diimporPada: row.imported_at,
+    outlets: (row.outlets ?? []).map((o) => ({
+      registrationCode: o.registration_code,
+      nama: o.name,
+      alokasi: o.allocation_qty,
+      normal: o.normal_qty,
+      fakultatif: o.fakultatif_qty,
+      sisa: o.remaining_qty,
+    })),
   };
 }
 
@@ -323,6 +375,12 @@ export const saApiHttp: ScheduleAgreementApi = {
 
   async getSADetail(id: string): Promise<ScheduleAgreement> {
     return toDomain(await getOne<AgreementResponse>(`/schedule-agreements/${id}`));
+  },
+
+  async getImportSummary(id: string): Promise<SAImportSummary | null> {
+    return toImportSummary(
+      await getOne<ImportSummaryResponse | null>(`/schedule-agreements/${id}/import-summary`),
+    );
   },
 
   async uploadSA(payload: UploadSAPayload): Promise<ScheduleAgreement> {

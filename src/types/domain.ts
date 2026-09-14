@@ -254,6 +254,12 @@ export interface SAEntity extends Scoped {
   namaDokumen?: string;
   diunggahOleh: string;
   diunggahPada: string;
+  // Absent for an agreement typed by hand: the mock only models a single
+  // product per agreement (the real backend's SIM3LON import is the same,
+  // one product per batch), and a manual entry has no product quota at all
+  // until one is imported or added.
+  productId?: ID;
+  productName?: string;
 }
 
 /**

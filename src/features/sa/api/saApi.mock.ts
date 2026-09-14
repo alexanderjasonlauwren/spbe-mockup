@@ -19,6 +19,7 @@ import type { SAEntity } from "@/mocks/types";
 import type {
   SAImportApplied,
   SAImportBatch,
+  SAImportSummary,
   SIM3LONApplied,
   SIM3LONPreview,
   ScheduleAgreement,
@@ -48,6 +49,18 @@ function toView(sa: SAEntity, planCount: number): ScheduleAgreement {
     diunggahOleh: sa.diunggahOleh,
     diunggahPada: sa.diunggahPada,
     jumlahRencana: planCount,
+    products: sa.productId
+      ? [
+          {
+            productId: sa.productId,
+            productName: sa.productName ?? "Produk",
+            totalKuota: sa.totalKuota,
+            dialokasikan: sa.terpakai,
+            terpakai: sa.terpakai,
+            sisaKuota: Math.max(0, sa.totalKuota - sa.terpakai),
+          },
+        ]
+      : [],
   };
 }
 
@@ -200,6 +213,19 @@ async function applySIM3LON(batchId: string): Promise<SIM3LONApplied> {
 }
 
 /**
+ * The mock has no outlet-level import snapshot to show: SIM3LON import only
+ * runs against the real API (see previewSIM3LON above), and the Base SA CSV
+ * import this mock does model carries dates and quantities, not outlets. Null
+ * is the honest answer, the same one a hand-typed agreement gets from the
+ * real backend.
+ */
+async function getImportSummary(id: string): Promise<SAImportSummary | null> {
+  void id;
+  await latency("read");
+  return null;
+}
+
+/**
  * SHA-256 of the uploaded bytes.
  *
  * Computed rather than invented, even in the mock: the console renders it as
@@ -222,6 +248,7 @@ import type { ScheduleAgreementApi } from "./contract";
 export const saApiMock: ScheduleAgreementApi = {
   getSAList,
   getSADetail,
+  getImportSummary,
   uploadSA,
   activateSA,
   deleteSA,

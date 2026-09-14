@@ -52,6 +52,7 @@ export function DistributionPage() {
     outletOptions,
     vehicleOptions,
     productOptions,
+    saProductOptions,
     driverOptions,
     saOptions,
     saveDraftMutation,
@@ -178,6 +179,7 @@ export function DistributionPage() {
               isLoading={isLoadingDetail}
               outletOptions={outletOptions}
               productOptions={productOptions}
+              saProductOptions={saProductOptions}
               driverOptions={driverOptions}
               vehicleOptions={vehicleOptions}
               onSaveDraft={handleSaveDraft}

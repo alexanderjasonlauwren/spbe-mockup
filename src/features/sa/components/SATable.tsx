@@ -1,4 +1,5 @@
 import { CheckCircle2, FileText, Printer, Trash2, Upload } from "lucide-react";
+import { Link } from "react-router-dom";
 import { DataTable, type Column } from "@/components/common/DataTable";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { getStatusVariant, spineFor } from "@/lib/status";
@@ -40,13 +41,30 @@ export function SATable({
       width: "13rem",
       render: (row) => (
         <>
-          <span className="data block whitespace-nowrap text-xs font-semibold text-ink">
+          <Link
+            to={`/sa/${row.id}`}
+            className="data block whitespace-nowrap text-xs font-semibold text-ink hover:underline hover:decoration-signal hover:decoration-2 hover:underline-offset-4"
+          >
             {row.nomorSA}
-          </span>
+          </Link>
           <span className="block text-xs text-ink-muted">{row.supplier}</span>
         </>
       ),
       sortValue: (row) => row.nomorSA,
+    },
+    {
+      key: "produk",
+      header: "Produk",
+      width: "10rem",
+      render: (row) =>
+        row.products.length === 0 ? (
+          <span className="text-xs text-ink-muted">—</span>
+        ) : (
+          <span className="block text-xs text-ink">
+            {row.products.map((p) => p.productName).join(", ")}
+          </span>
+        ),
+      sortValue: (row) => row.products[0]?.productName ?? "",
     },
     {
       key: "periode",

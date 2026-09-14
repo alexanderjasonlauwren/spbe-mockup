@@ -15,6 +15,7 @@ const api: ScheduleAgreementApi = pick(saApiMock, saApiHttp);
 
 export const getSAList = api.getSAList.bind(api);
 export const getSADetail = api.getSADetail.bind(api);
+export const getImportSummary = api.getImportSummary.bind(api);
 export const uploadSA = api.uploadSA.bind(api);
 export const activateSA = api.activateSA.bind(api);
 export const deleteSA = api.deleteSA.bind(api);

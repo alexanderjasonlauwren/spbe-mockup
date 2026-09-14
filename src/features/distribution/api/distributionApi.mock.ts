@@ -18,7 +18,6 @@ import {
 } from "@/mocks/rules";
 import { printDocument } from "@/lib/export";
 import { outletExposure } from "@/mocks/ar";
-import { defaultProduct } from "@/mocks/lines";
 import { isoDate, startOfToday } from "@/mocks/seed";
 import type { PlanEntity } from "@/mocks/types";
 import type {
@@ -29,6 +28,7 @@ import type {
   DriverOption,
   PlanOption,
   PlanRow,
+  SAOutletPlanRow,
   VehicleOption,
 } from "../types";
 import type {
@@ -332,9 +332,34 @@ async function getProductOptions(): Promise<
     .map((p) => ({ id: p.id, label: p.nama, satuan: p.satuan }));
 }
 
-/** The line a brand-new stop starts with, so a row is never empty. */
-async function getDefaultProductId(): Promise<string> {
-  return defaultProduct(scopedDb().products)?.id ?? "";
+/**
+ * The product(s) an agreement is actually for -- see the contract's own doc
+ * comment for why a new stop must default to this rather than to
+ * `getProductOptions()`'s catalogue-wide list.
+ *
+ * The mock models a single product per agreement, set only when the demo
+ * seed says so; a hand-typed one has none, same as the real backend.
+ */
+async function getSAProductOptions(
+  saId: string,
+): Promise<{ id: string; label: string; satuan: string }[]> {
+  await latency("read");
+  const sa = scopedDb().scheduleAgreements.find((s) => s.id === saId);
+  if (!sa?.productId) return [];
+  return [{ id: sa.productId, label: sa.productName ?? "Produk", satuan: "" }];
+}
+
+/**
+ * The mock has no SIM3LON-style per-outlet, per-date import snapshot to read
+ * -- see `saApiMock.getImportSummary`'s own comment. An empty plan for the
+ * planner to fill by hand is the honest answer, the same one a hand-typed
+ * agreement gets from the real backend.
+ */
+async function getSAOutletPlan(saId: string, tanggal: string): Promise<SAOutletPlanRow[]> {
+  void saId;
+  void tanggal;
+  await latency("read");
+  return [];
 }
 
 async function getDriverOptions(planId: string): Promise<DriverOption[]> {
@@ -575,10 +600,11 @@ export const distributionApiMock: DistributionApi = {
   cancelDistributionPlan,
   getOutletOptions,
   getProductOptions,
-  getDefaultProductId,
+  getSAProductOptions,
   getDriverOptions,
   getVehicleOptions,
   getActiveSaOptions,
+  getSAOutletPlan,
   suggestAssignment: suggestAssignmentMock,
   applyAssignment,
   dispatchTrip,

@@ -41,6 +41,7 @@ import type {
   PlanOption,
   PlanRow,
   PlanStatus,
+  SAOutletPlanRow,
   VehicleOption,
   SuggestedStop,
   SuggestedTrip,
@@ -588,9 +589,52 @@ async function getProductOptions(): Promise<ProductOption[]> {
   }));
 }
 
-async function getDefaultProductId(): Promise<string> {
-  const options = await getProductOptions();
-  return options[0]?.id ?? "";
+/**
+ * The product(s) an agreement is actually for, read from its own quota
+ * breakdown -- not the catalogue-wide `getProductOptions()` above, which is
+ * unrelated to any agreement and is where a new stop used to default from
+ * (whatever sorted first alphabetically, regardless of the plan's SA).
+ */
+async function getSAProductOptions(saId: string): Promise<ProductOption[]> {
+  if (!saId) return [];
+  const agreement = await getOne<AgreementDetailResponse>(`/schedule-agreements/${saId}`);
+  return (agreement.products ?? []).map((p) => ({
+    id: p.product_id,
+    label: p.product_name,
+    satuan: "",
+  }));
+}
+
+interface AgreementDetailResponse {
+  products?: Array<{ product_id: string; product_name: string }>;
+}
+
+interface OutletPlanRowResponse {
+  outlet_id: string;
+  outlet_name: string;
+  product_id: string;
+  product_name: string;
+  planned_qty: number;
+}
+
+/**
+ * What the agreement's own SIM3LON import says each outlet should receive on
+ * this date -- read straight through, not derived from anything else the
+ * console already fetched. See fortius-backend's
+ * `saimport.OutletPlanForDate` for where this comes from.
+ */
+async function getSAOutletPlan(saId: string, tanggal: string): Promise<SAOutletPlanRow[]> {
+  if (!saId) return [];
+  const rows = await getOne<OutletPlanRowResponse[]>(
+    `/schedule-agreements/${saId}/outlet-plan?date=${tanggal}`,
+  );
+  return (rows ?? []).map((r) => ({
+    outletId: r.outlet_id,
+    outlet: r.outlet_name,
+    productId: r.product_id,
+    productName: r.product_name,
+    jumlah: r.planned_qty,
+  }));
 }
 
 /**
@@ -804,10 +848,11 @@ export const distributionApiHttp: DistributionApi = {
   cancelDistributionPlan,
   getOutletOptions,
   getProductOptions,
-  getDefaultProductId,
+  getSAProductOptions,
   getDriverOptions,
   getVehicleOptions,
   getActiveSaOptions,
+  getSAOutletPlan,
   suggestAssignment,
   applyAssignment,
   dispatchTrip,

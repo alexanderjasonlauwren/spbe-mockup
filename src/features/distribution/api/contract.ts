@@ -17,6 +17,7 @@ import type {
   DriverOption,
   PlanOption,
   PlanRow,
+  SAOutletPlanRow,
   VehicleOption,
 } from "../types";
 
@@ -97,12 +98,26 @@ export interface DistributionApi {
   /* ── option lists for the planner ────────────────────────────────────── */
   getOutletOptions(): Promise<PlanOption[]>;
   getProductOptions(): Promise<ProductOption[]>;
-  /** The line a brand-new stop starts with, so a row is never empty. */
-  getDefaultProductId(): Promise<string>;
+  /**
+   * The product(s) the given Schedule Agreement is actually for.
+   *
+   * A new stop should default to what its own plan's SA was imported for, not
+   * the alphabetically-first entry of the whole catalogue -- which is what
+   * `getProductOptions()` returns and is unrelated to any agreement. Empty
+   * for an SA typed by hand with no product quota recorded yet.
+   */
+  getSAProductOptions(saId: string): Promise<ProductOption[]>;
   getDriverOptions(planId: string): Promise<DriverOption[]>;
   /** The trucks a run can be put on. Capacity lives here, not on the driver. */
   getVehicleOptions(): Promise<VehicleOption[]>;
   getActiveSaOptions(): Promise<PlanOption[]>;
+
+  /**
+   * What the agreement's own SIM3LON import says each outlet should receive
+   * on this date -- the data a new plan's stops should be pre-filled from.
+   * Empty for an SA typed by hand, or a date its import never covered.
+   */
+  getSAOutletPlan(saId: string, tanggal: string): Promise<SAOutletPlanRow[]>;
 
   /**
    * Proposes how to pack the plan's stops onto trips.

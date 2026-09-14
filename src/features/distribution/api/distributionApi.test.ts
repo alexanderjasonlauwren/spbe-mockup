@@ -672,3 +672,82 @@ describe("addApprovedOrders", () => {
     expect(body).toEqual({ version: 5, distribution_order_id: PLAN_ID });
   });
 });
+
+// The bug this exists to prevent: a new stop defaulting to whatever product
+// sorts first in the whole catalogue, regardless of what the plan's own SA
+// was imported for.
+describe("the SA's own product options", () => {
+  it("reads the agreement's product quota, not the catalogue", async () => {
+    getOne.mockResolvedValue({
+      products: [{ product_id: "prod-1", product_name: "Bright Gas 12 Kg" }],
+    });
+
+    const options = await distributionApiHttp.getSAProductOptions(SA_ID);
+
+    expect(getOne).toHaveBeenCalledWith(`/schedule-agreements/${SA_ID}`);
+    expect(options).toEqual([{ id: "prod-1", label: "Bright Gas 12 Kg", satuan: "" }]);
+  });
+
+  // A hand-typed agreement, or one not yet applied, has no product quota row
+  // at all -- empty, not a guess.
+  it("is empty for an agreement with no product quota", async () => {
+    getOne.mockResolvedValue({ products: [] });
+
+    const options = await distributionApiHttp.getSAProductOptions(SA_ID);
+
+    expect(options).toEqual([]);
+  });
+
+  it("does not call the API for an unset SA", async () => {
+    const options = await distributionApiHttp.getSAProductOptions("");
+
+    expect(options).toEqual([]);
+    expect(getOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("the SA's own outlet plan for a date", () => {
+  it("maps the agreement's SIM3LON-planned outlets for the date", async () => {
+    getOne.mockResolvedValue([
+      {
+        outlet_id: OUTLET_A,
+        outlet_name: "Pangkalan Ahmad",
+        product_id: "prod-1",
+        product_name: "Bright Gas 12 Kg",
+        planned_qty: 70,
+      },
+    ]);
+
+    const rows = await distributionApiHttp.getSAOutletPlan(SA_ID, "2026-09-15");
+
+    expect(getOne).toHaveBeenCalledWith(
+      `/schedule-agreements/${SA_ID}/outlet-plan?date=2026-09-15`,
+    );
+    expect(rows).toEqual([
+      {
+        outletId: OUTLET_A,
+        outlet: "Pangkalan Ahmad",
+        productId: "prod-1",
+        productName: "Bright Gas 12 Kg",
+        jumlah: 70,
+      },
+    ]);
+  });
+
+  // An SA typed by hand, or a date its import never covered: empty, not an
+  // error -- the planner adds stops by hand as before.
+  it("is empty when the import has nothing for the date", async () => {
+    getOne.mockResolvedValue(null);
+
+    const rows = await distributionApiHttp.getSAOutletPlan(SA_ID, "2026-09-15");
+
+    expect(rows).toEqual([]);
+  });
+
+  it("does not call the API for an unset SA", async () => {
+    const rows = await distributionApiHttp.getSAOutletPlan("", "2026-09-15");
+
+    expect(rows).toEqual([]);
+    expect(getOne).not.toHaveBeenCalled();
+  });
+});

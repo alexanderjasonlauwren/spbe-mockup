@@ -12,6 +12,7 @@
 import type {
   SAImportApplied,
   SAImportBatch,
+  SAImportSummary,
   SIM3LONApplied,
   SIM3LONPreview,
   ScheduleAgreement,
@@ -22,6 +23,12 @@ import type {
 export interface ScheduleAgreementApi {
   getSAList(filters?: SAFilterParams): Promise<ScheduleAgreement[]>;
   getSADetail(id: string): Promise<ScheduleAgreement>;
+  /**
+   * What the agreement's import looked like -- the raw per-outlet rows behind
+   * its quota, for checking an import against the document it came from.
+   * `null` for an agreement typed by hand.
+   */
+  getImportSummary(id: string): Promise<SAImportSummary | null>;
   uploadSA(payload: UploadSAPayload): Promise<ScheduleAgreement>;
   activateSA(id: string): Promise<ScheduleAgreement>;
   deleteSA(id: string): Promise<void>;

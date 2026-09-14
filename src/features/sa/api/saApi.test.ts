@@ -321,3 +321,100 @@ describe("mapping an import's diff onto the domain", () => {
     expect(applied.barisDitulis).toBe(31);
   });
 });
+
+describe("the per-product quota breakdown", () => {
+  // This is the field the SA list/detail screens and the distribution
+  // planner's product default all depend on -- see PlanDetailPanel's
+  // addRow() and the "Produk" column on SATable.
+  it("maps each product's quota across", async () => {
+    getList.mockResolvedValue({
+      items: [
+        wire({
+          products: [
+            {
+              product_id: "prod-1",
+              product_name: "Bright Gas 12 Kg",
+              total_quota_qty: 41300,
+              allocated_quota_qty: 100,
+              used_quota_qty: 0,
+            },
+          ],
+        }),
+      ],
+      pagination: {},
+    });
+
+    const [sa] = await saApiHttp.getSAList();
+
+    expect(sa.products).toEqual([
+      {
+        productId: "prod-1",
+        productName: "Bright Gas 12 Kg",
+        totalKuota: 41300,
+        dialokasikan: 100,
+        terpakai: 0,
+        sisaKuota: 41200,
+      },
+    ]);
+  });
+
+  // An SA typed by hand, or not yet applied from an import, has no product
+  // quota rows at all -- not missing data, just nothing to show yet.
+  it("is empty for an agreement with no product quota", async () => {
+    getList.mockResolvedValue({ items: [wire({ products: undefined })], pagination: {} });
+
+    const [sa] = await saApiHttp.getSAList();
+
+    expect(sa.products).toEqual([]);
+  });
+});
+
+describe("the import summary", () => {
+  it("maps the batch and its outlets across", async () => {
+    getOne.mockResolvedValue({
+      file_name: "SIM3LON-202609-BASE.xlsx",
+      supplier_name: "Pertamina",
+      checksum_sha256: "abc123",
+      imported_at: "2026-09-10T02:00:00Z",
+      outlets: [
+        {
+          registration_code: "PGKL-0001",
+          name: "Pangkalan A",
+          allocation_qty: 70,
+          normal_qty: 70,
+          fakultatif_qty: 0,
+          remaining_qty: 0,
+        },
+      ],
+    });
+
+    const summary = await saApiHttp.getImportSummary("sa-1");
+
+    expect(getOne).toHaveBeenCalledWith("/schedule-agreements/sa-1/import-summary");
+    expect(summary).toEqual({
+      namaBerkas: "SIM3LON-202609-BASE.xlsx",
+      supplier: "Pertamina",
+      checksum: "abc123",
+      diimporPada: "2026-09-10T02:00:00Z",
+      outlets: [
+        {
+          registrationCode: "PGKL-0001",
+          nama: "Pangkalan A",
+          alokasi: 70,
+          normal: 70,
+          fakultatif: 0,
+          sisa: 0,
+        },
+      ],
+    });
+  });
+
+  // A hand-typed agreement has no import behind it -- null, not an error.
+  it("is null for an agreement typed by hand", async () => {
+    getOne.mockResolvedValue(null);
+
+    const summary = await saApiHttp.getImportSummary("sa-1");
+
+    expect(summary).toBeNull();
+  });
+});

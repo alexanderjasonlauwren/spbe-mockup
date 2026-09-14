@@ -1,5 +1,20 @@
 export type SAStatus = "Aktif" | "Selesai" | "Draft" | "Limit";
 
+/**
+ * One product's ceiling within the agreement.
+ *
+ * An agreement typed by hand, or not yet imported/applied, has none of these —
+ * that is not missing data, it is an agreement with no product quota yet.
+ */
+export interface SAProductQuota {
+  productId: string;
+  productName: string;
+  totalKuota: number;
+  dialokasikan: number;
+  terpakai: number;
+  sisaKuota: number;
+}
+
 export interface ScheduleAgreement {
   id: string;
   nomorSA: string;
@@ -19,6 +34,30 @@ export interface ScheduleAgreement {
   diunggahPada: string;
   /** Confirmed plans drawing on this agreement. */
   jumlahRencana: number;
+  /** Per-product breakdown behind the totals above. See SAProductQuota. */
+  products: SAProductQuota[];
+}
+
+/** One outlet's allocation as an import recorded it, for the detail screen. */
+export interface SAImportedOutlet {
+  registrationCode: string;
+  nama: string;
+  alokasi: number;
+  normal: number;
+  fakultatif: number;
+  sisa: number;
+}
+
+/**
+ * What an agreement's import looked like, for checking it against the
+ * document it came from. `null` when the agreement was typed by hand.
+ */
+export interface SAImportSummary {
+  namaBerkas?: string;
+  supplier?: string;
+  checksum?: string;
+  diimporPada?: string;
+  outlets: SAImportedOutlet[];
 }
 
 export interface SAFilterParams {

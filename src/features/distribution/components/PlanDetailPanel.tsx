@@ -43,6 +43,13 @@ interface PlanDetailPanelProps {
   isLoading: boolean;
   outletOptions: PlanOption[];
   productOptions: { id: string; label: string; satuan: string }[];
+  /**
+   * What the open plan's own SA is actually for. A new stop defaults to this
+   * rather than to `productOptions[0]`, which is the whole catalogue sorted
+   * alphabetically and unrelated to any agreement. Empty for an SA typed by
+   * hand with no product quota recorded yet.
+   */
+  saProductOptions: { id: string; label: string; satuan: string }[];
   driverOptions: DriverOption[];
   vehicleOptions: VehicleOption[];
   onSaveDraft: (rows: PlanRow[]) => void;
@@ -161,6 +168,7 @@ export function PlanDetailPanel({
   isLoading,
   outletOptions,
   productOptions,
+  saProductOptions,
   driverOptions,
   vehicleOptions,
   onSaveDraft,
@@ -334,6 +342,10 @@ export function PlanDetailPanel({
     if (!next) return;
     tempSeq += 1;
     const hour = Math.min(17, 7 + draft.length);
+    // The SA this plan draws on, first -- not the whole catalogue's
+    // alphabetically-first entry, which has nothing to do with what this
+    // agreement was actually imported for.
+    const defaultProductId = saProductOptions[0]?.id ?? productOptions[0]?.id ?? "";
     setDraft((prev) => [
       ...prev,
       {
@@ -343,7 +355,7 @@ export function PlanDetailPanel({
         vehicle: "Belum ditetapkan",
         outlet: next.label,
         alamat: next.sublabel ?? "",
-        lines: [{ productId: productOptions[0]?.id ?? "", jumlah: 100 }],
+        lines: [{ productId: defaultProductId, jumlah: 100 }],
         jumlahUnit: 100,
         driverId: null,
         driver: "Belum ditetapkan",

@@ -298,10 +298,22 @@ export function DistributionPage() {
 
       <ConfirmDialog
         isOpen={cancelling}
-        title={`Batalkan ${selectedPlan?.kode ?? "rencana"}?`}
-        message="Surat jalan yang belum berjalan akan ditarik kembali dan kuota dikembalikan ke agreement."
-        details="Rencana yang sebagian armadanya sudah bergerak tidak dapat dibatalkan sekaligus — tutup surat jalan satu per satu di Monitoring Distribusi."
-        confirmLabel="Batalkan rencana"
+        title={
+          selectedPlan?.status === "Draft"
+            ? `Hapus ${selectedPlan?.kode ?? "draf"}?`
+            : `Batalkan ${selectedPlan?.kode ?? "rencana"}?`
+        }
+        message={
+          selectedPlan?.status === "Draft"
+            ? "Draf ini belum dikonfirmasi, jadi belum ada kuota yang ditarik dari Schedule Agreement untuk dikembalikan."
+            : "Surat jalan yang belum berjalan akan ditarik kembali dan kuota dikembalikan ke agreement."
+        }
+        details={
+          selectedPlan?.status === "Draft"
+            ? undefined
+            : "Rencana yang sebagian armadanya sudah bergerak tidak dapat dibatalkan sekaligus — tutup surat jalan satu per satu di Monitoring Distribusi."
+        }
+        confirmLabel={selectedPlan?.status === "Draft" ? "Hapus draf" : "Batalkan rencana"}
         isPending={cancelPlanMutation.isPending}
         onCancel={() => setCancelling(false)}
         onConfirm={() => {

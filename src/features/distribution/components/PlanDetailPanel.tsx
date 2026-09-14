@@ -459,6 +459,24 @@ export function PlanDetailPanel({
                     Konfirmasi
                   </Button>
                 </CanAccess>
+                {/*
+                  A draft draws no quota yet -- see the create-plan dialog's
+                  own copy, "kuota baru berkurang saat rencana dikonfirmasi" --
+                  so discarding one is not the same act as cancelling a
+                  confirmed plan, even though both call the same backend
+                  transition (routes.go: "both are cancelled, never erased").
+                  Styled apart from the primary draft-building actions since
+                  it is the one that ends the record instead of building it.
+                */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onCancelPlan}
+                  className="hover:bg-rust-soft hover:text-rust-ink"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Hapus draf
+                </Button>
               </>
             ) : plan.status === "Terkonfirmasi" ? (
               <Button variant="outline" size="sm" onClick={onCancelPlan}>

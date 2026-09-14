@@ -189,10 +189,15 @@ export function useDistributionPlan() {
   const cancelPlanMutation = useDeskMutation({
     mutationFn: (planId: string) => cancelDistributionPlan(planId, version()),
     errorTitle: "Pembatalan gagal",
-    success: () => ({
-      title: "Rencana dibatalkan",
-      description: "Kuota dikembalikan ke Schedule Agreement.",
-    }),
+    // A draft never drew quota -- see the create-plan dialog's own copy --
+    // so "kuota dikembalikan" would describe a return that never happened.
+    success: () =>
+      selectedPlanQuery.data?.status === "Draft"
+        ? { title: "Draf dihapus" }
+        : {
+            title: "Rencana dibatalkan",
+            description: "Kuota dikembalikan ke Schedule Agreement.",
+          },
   });
 
   const addOrdersMutation = useDeskMutation({

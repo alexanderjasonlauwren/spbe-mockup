@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { CalendarPlus } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { getStatusVariant, spineFor } from "@/lib/status";
 import { Skeleton } from "@/components/common/Panel";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { formatDateId, formatNumber } from "@/lib/format";
 import type { DistributionPlan } from "../types";
@@ -24,13 +27,30 @@ export function PlanListPanel({
   onSelect,
   onCreate,
 }: PlanListPanelProps) {
+  const [hideCancelled, setHideCancelled] = useState(true);
+  const visiblePlans = hideCancelled
+    ? plans.filter((plan) => plan.status !== "Batal")
+    : plans;
+  const cancelledCount = plans.length - plans.filter((p) => p.status !== "Batal").length;
+
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-md border border-line bg-panel">
-      <div className="border-b border-line p-3">
+      <div className="space-y-3 border-b border-line p-3">
         <Button onClick={onCreate} className="w-full">
           <CalendarPlus className="h-4 w-4" />
           Rencana baru
         </Button>
+
+        {cancelledCount > 0 && (
+          <Label htmlFor="hide-cancelled" className="justify-start text-xs font-normal text-ink-muted">
+            <Checkbox
+              id="hide-cancelled"
+              checked={hideCancelled}
+              onCheckedChange={(checked) => setHideCancelled(checked === true)}
+            />
+            Sembunyikan yang dibatalkan ({cancelledCount})
+          </Label>
+        )}
       </div>
 
       <div className="flex-1 divide-y divide-line overflow-y-auto">
@@ -41,14 +61,18 @@ export function PlanListPanel({
               <Skeleton className="h-3 w-1/2" />
             </div>
           ))
-        ) : plans.length === 0 ? (
+        ) : visiblePlans.length === 0 ? (
           <EmptyState
             icon={CalendarPlus}
-            title="Belum ada rencana"
-            description={`Buat rencana untuk tanggal pengiriman, lalu tambahkan ${outletLabel()} dan armada.`}
+            title={plans.length === 0 ? "Belum ada rencana" : "Semua rencana dibatalkan"}
+            description={
+              plans.length === 0
+                ? `Buat rencana untuk tanggal pengiriman, lalu tambahkan ${outletLabel()} dan armada.`
+                : "Tampilkan yang dibatalkan untuk melihatnya kembali."
+            }
           />
         ) : (
-          plans.map((plan) => {
+          visiblePlans.map((plan) => {
             const active = selectedId === plan.id;
             return (
               <button

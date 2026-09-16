@@ -107,6 +107,27 @@ export interface AllocationLine {
   jumlah: number;
 }
 
+/**
+ * Fund/release act on one stop -- one pangkalan, one plan, one date -- not a
+ * line, because that is the granularity the truck loads at and the payment
+ * board already collapses to. See fortius-backend's
+ * docs/open-findings.md #5.
+ */
+export interface FundStopInput {
+  paymentId: string;
+  distributionOrderId: string;
+  outletId: string;
+}
+
+export interface FundingResult {
+  payment: PaymentView;
+  distributionOrderId: string;
+  outletId: string;
+  linesAffected: number;
+  /** What the receipt has left after this action. */
+  availableBalance: number;
+}
+
 export interface CreditNoteInput {
   outletId: string;
   invoiceId: string | null;
@@ -175,6 +196,16 @@ export interface FinanceApi {
     action: "verify" | "reject",
     keterangan?: string,
   ): Promise<PaymentView>;
+  /** Candidate receipts for funding one outlet's stop -- unrejected, newest
+   *  first, so the operator can see what is available without a separate
+   *  screen. */
+  getOutletReceipts(outletId: string): Promise<PaymentView[]>;
+  /** Links a receipt to every live line of one outlet on one plan, releasing
+   *  it for dispatch once the receipt is verified (or verifying it in the
+   *  same call -- see fortius-backend's payment.FundStop). */
+  fundDistributionStop(input: FundStopInput): Promise<FundingResult>;
+  /** Reverses fundDistributionStop for a stop not yet dispatched. */
+  releaseDistributionStop(input: FundStopInput): Promise<FundingResult>;
   submitCreditNote(input: CreditNoteInput): Promise<CreditNoteView>;
   getJournals(range?: DateRange): Promise<JournalView[]>;
   getTrialBalance(range: { from: string; to: string }): Promise<TrialBalanceView>;

@@ -1,5 +1,5 @@
 import { scopedDb } from "@/mocks/scope";
-import { latency } from "@/mocks/db";
+import { ApiError, latency } from "@/mocks/db";
 import { agingBucket, invoiceSisa, outletExposure, unallocated } from "@/mocks/ar";
 import { accountBalances, profitAndLoss, trialBalance } from "@/mocks/ledger";
 import {
@@ -20,6 +20,8 @@ import type {
   CreditNoteView,
   DateRange,
   FinanceApi,
+  FundingResult,
+  FundStopInput,
   InvoiceFilters,
   InvoiceView,
   JournalView,
@@ -232,6 +234,74 @@ async function submitCreditNote(input: CreditNoteInput): Promise<CreditNoteView>
   return createCreditNote(input);
 }
 
+/* ── distribution funding ─────────────────────────────────────────────────
+ *
+ * Known gap, deliberately not papered over (same policy as the HTTP
+ * adapter's own header comment): the mock has no notion of "this line is
+ * funded by receipt X". `AllocationControlPanel`'s Lunas/Belum Lunas signal
+ * comes from `outletExposure`'s credit standing (distributionApi.mock's
+ * `getPaymentBoard`), a wholly different, pre-existing concept -- so acting
+ * here cannot flip it, the way FundStop flips payment_state on the real API.
+ *
+ * What this DOES do honestly: track which receipt is assigned to which
+ * outlet's stop, in module-local memory (not the persisted `db`, so it does
+ * not survive a reload), so Danai/Lepas round-trip sensibly within one
+ * session and the console can show "funded by PAY-..." without inventing a
+ * number. `fundedAmount`/`plannedAmount` on the mock board stay 0 for the
+ * same reason as `hasUnpricedLine: true` there -- the mock has never priced
+ * a plan line, so there is no honest rupiah figure to report.
+ */
+const mockStopFunding = new Map<string, { paymentId: string; distributionOrderId: string }>();
+
+function stopFundingKey(outletId: string, distributionOrderId: string): string {
+  return `${outletId}|${distributionOrderId}`;
+}
+
+async function getOutletReceipts(outletId: string): Promise<PaymentView[]> {
+  return (await getPayments()).filter(
+    (p) => p.outletId === outletId && p.status !== "Ditolak",
+  );
+}
+
+async function fundDistributionStop(input: FundStopInput): Promise<FundingResult> {
+  await latency("write");
+  const payments = await getPayments();
+  const payment = payments.find((p) => p.id === input.paymentId);
+  if (!payment) throw new ApiError("Pembayaran tidak ditemukan.", 404);
+  if (payment.outletId !== input.outletId) {
+    throw new ApiError("Pembayaran ini milik pangkalan lain.", 409);
+  }
+  mockStopFunding.set(stopFundingKey(input.outletId, input.distributionOrderId), {
+    paymentId: input.paymentId,
+    distributionOrderId: input.distributionOrderId,
+  });
+  return {
+    payment,
+    distributionOrderId: input.distributionOrderId,
+    outletId: input.outletId,
+    linesAffected: 1,
+    availableBalance: payment.belumDialokasikan,
+  };
+}
+
+async function releaseDistributionStop(input: FundStopInput): Promise<FundingResult> {
+  await latency("write");
+  const key = stopFundingKey(input.outletId, input.distributionOrderId);
+  const funded = mockStopFunding.get(key);
+  if (!funded || funded.paymentId !== input.paymentId) {
+    throw new ApiError("Titik ini tidak didanai oleh pembayaran tersebut.", 404);
+  }
+  mockStopFunding.delete(key);
+  const payment = (await getPayments()).find((p) => p.id === input.paymentId)!;
+  return {
+    payment,
+    distributionOrderId: input.distributionOrderId,
+    outletId: input.outletId,
+    linesAffected: 1,
+    availableBalance: payment.belumDialokasikan,
+  };
+}
+
 /* ── general ledger ────────────────────────────────────────────────────── */
 
 async function getJournals(range?: DateRange): Promise<JournalView[]> {
@@ -286,6 +356,9 @@ export const financeApiMock: FinanceApi = {
   submitPayment,
   submitAllocation,
   submitPaymentDecision,
+  getOutletReceipts,
+  fundDistributionStop,
+  releaseDistributionStop,
   submitCreditNote,
   getJournals,
   getTrialBalance,

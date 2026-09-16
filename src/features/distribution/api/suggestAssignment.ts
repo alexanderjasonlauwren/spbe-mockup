@@ -114,8 +114,10 @@ export function suggestAssignment(
     bin.sisa -= row.jumlahUnit;
     // Unpaid stops are carried and flagged, per the client's instruction: the
     // dispatcher needs to see what the day looks like if payment lands and what
-    // to drop if it does not.
-    if (row.statusBayar !== "Lunas") bin.muatanBerisiko += row.jumlahUnit;
+    // to drop if it does not. A credit stop is not this kind of risk -- it was
+    // approved to go out unpaid, not left unpaid -- so only "Belum Lunas"
+    // counts here, not "Kredit" alongside it.
+    if (row.statusBayar === "Belum Lunas") bin.muatanBerisiko += row.jumlahUnit;
   }
 
   const trips: SuggestedTrip[] = bins

@@ -19,6 +19,7 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { getStatusVariant } from "@/lib/status";
 import { SelectInput, TextInput } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/useToast";
 import { CanAccess } from "@/features/rbac/components/CanAccess";
@@ -146,7 +147,10 @@ function groupIntoTrips(
     }
     group.rows.push(row);
     group.muatan += row.jumlahUnit;
-    if (row.statusBayar !== "Lunas") group.berisiko += row.jumlahUnit;
+    // A credit stop was approved to go out unpaid, not left unpaid -- it is
+    // not the risk this figure warns about (see suggestAssignment's own copy
+    // of this rule).
+    if (row.statusBayar === "Belum Lunas") group.berisiko += row.jumlahUnit;
   }
 
   // Fleet order, then trip number: the board reads down the day the way the
@@ -223,6 +227,23 @@ export function PlanDetailPanel({
     () => groupIntoTrips(draft, driverOptions, vehicleOptions),
     [draft, driverOptions, vehicleOptions],
   );
+
+  /**
+   * Which trip currently holds each truck.
+   *
+   * Keyed by driver, not by trip: the same driver running the truck out twice
+   * in a day (trip 1, trip 2) is the normal multi-cycle case documented above
+   * and must stay pickable, but a second driver reaching for a truck already
+   * out with someone else is a double-booking the picker should refuse rather
+   * than let the planner discover at the gate.
+   */
+  const vehicleUsage = useMemo(() => {
+    const map = new Map<string, TripGroup>();
+    for (const t of trips) {
+      if (t.vehicleId && !map.has(t.vehicleId)) map.set(t.vehicleId, t);
+    }
+    return map;
+  }, [trips]);
 
   const overloaded = trips.filter((t) => t.muatan > t.kapasitas);
   const unassigned = draft.filter((r) => !r.driverId);
@@ -373,6 +394,72 @@ export function PlanDetailPanel({
   const removeRow = (id: string) => {
     setDraft((prev) => prev.filter((r) => r.id !== id));
     setDirty(true);
+  };
+
+  /**
+   * Which stops the bulk bar acts on.
+   *
+   * Reset with the same seed as the draft itself: a selection made on
+   * yesterday's board applying itself to today's after a plan switch would be
+   * a silent mass-edit of stops the planner never looked at.
+   */
+  const [selected, setSelected] = useResettableState<Set<string>>(
+    [rows, plan?.id],
+    () => new Set<string>(),
+  );
+  const [bulkDriverId, setBulkDriverId] = useState("");
+  const [bulkTripNo, setBulkTripNo] = useState("1");
+  const [bulkJam, setBulkJam] = useState("");
+
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const allSelected = draft.length > 0 && draft.every((r) => selected.has(r.id));
+  const toggleSelectAll = (checked: boolean) => {
+    setSelected(checked ? new Set(draft.map((r) => r.id)) : new Set());
+  };
+
+  const clearSelection = () => setSelected(new Set());
+
+  const applyBulkDriver = () => {
+    if (!bulkDriverId || selected.size === 0) return;
+    const driver = driverOptions.find((d) => d.id === bulkDriverId);
+    const tripNo = Number(bulkTripNo);
+    setDraft((prev) =>
+      prev.map((r) =>
+        selected.has(r.id)
+          ? {
+              ...r,
+              driverId: bulkDriverId,
+              driver: driver?.label ?? "Belum ditetapkan",
+              tripNo,
+            }
+          : r,
+      ),
+    );
+    setDirty(true);
+    clearSelection();
+  };
+
+  const applyBulkJam = () => {
+    if (!bulkJam || selected.size === 0) return;
+    setDraft((prev) =>
+      prev.map((r) => (selected.has(r.id) ? { ...r, jamPengiriman: bulkJam } : r)),
+    );
+    setDirty(true);
+  };
+
+  const bulkRemove = () => {
+    if (selected.size === 0) return;
+    setDraft((prev) => prev.filter((r) => !selected.has(r.id)));
+    setDirty(true);
+    clearSelection();
   };
 
   if (!plan) {
@@ -586,6 +673,88 @@ export function PlanDetailPanel({
         </ul>
       )}
 
+      {/*
+        Bulk-assign bar — one driver/trip or one delivery hour applied to
+        every checked stop at once. Typing the same driver into fifteen rows
+        one at a time is exactly the input cost this exists to cut; the
+        per-row controls stay underneath for the stop that needs its own
+        answer.
+      */}
+      {editable && selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-line bg-signal-soft/40 px-5 py-2.5">
+          <span className="text-xs font-semibold text-ink">
+            {selected.size} titik dipilih
+          </span>
+
+          <span className="mx-1 h-4 w-px bg-line" aria-hidden />
+
+          <SelectInput
+            aria-label="Driver untuk titik terpilih"
+            className="h-8 w-44 py-1.5 text-xs"
+            value={bulkDriverId}
+            onChange={(e) => setBulkDriverId(e.target.value)}
+          >
+            <option value="">Pilih driver</option>
+            {driverOptions.map((d) => (
+              <option key={d.id} value={d.id} disabled={d.disabled}>
+                {d.label} — {d.sublabel}
+                {d.disabled ? " (cuti)" : ""}
+              </option>
+            ))}
+          </SelectInput>
+          <SelectInput
+            aria-label="Trip untuk titik terpilih"
+            className="h-8 w-24 py-1.5 text-xs"
+            value={bulkTripNo}
+            onChange={(e) => setBulkTripNo(e.target.value)}
+          >
+            {Array.from({ length: MAX_TRIP }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>
+                Trip {n}
+              </option>
+            ))}
+          </SelectInput>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!bulkDriverId}
+            onClick={applyBulkDriver}
+          >
+            Tetapkan
+          </Button>
+
+          <span className="mx-1 h-4 w-px bg-line" aria-hidden />
+
+          <TextInput
+            type="time"
+            mono
+            aria-label="Jam pengiriman untuk titik terpilih"
+            className="h-8 w-28 py-1.5 text-xs"
+            value={bulkJam}
+            onChange={(e) => setBulkJam(e.target.value)}
+          />
+          <Button size="sm" variant="outline" disabled={!bulkJam} onClick={applyBulkJam}>
+            Atur jam
+          </Button>
+
+          <span className="mx-1 h-4 w-px bg-line" aria-hidden />
+
+          <Button
+            size="sm"
+            variant="ghost"
+            className="hover:bg-rust-soft hover:text-rust-ink"
+            onClick={bulkRemove}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Hapus
+          </Button>
+
+          <Button size="sm" variant="ghost" className="ml-auto" onClick={clearSelection}>
+            Batal pilih
+          </Button>
+        </div>
+      )}
+
       {/* Stop list */}
       <div className="flex-1 overflow-x-auto">
         {isLoading ? (
@@ -617,6 +786,15 @@ export function PlanDetailPanel({
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-line bg-panel-sunk">
+                {editable && (
+                  <th className="px-3 py-2.5" style={{ width: "2.5rem" }}>
+                    <Checkbox
+                      aria-label="Pilih semua titik"
+                      checked={allSelected}
+                      onCheckedChange={(checked) => toggleSelectAll(checked === true)}
+                    />
+                  </th>
+                )}
                 <th className="label px-5 py-2.5 text-2xs text-ink-muted">{outletLabelTitle()}</th>
                 <th className="label px-3 py-2.5 text-2xs text-ink-muted" style={{ width: "6.5rem" }}>
                   Jam
@@ -638,9 +816,10 @@ export function PlanDetailPanel({
                 <Fragment key={trip.key}>
                   <TripHeader
                     trip={trip}
-                    colSpan={editable ? 6 : 5}
+                    colSpan={editable ? 7 : 5}
                     editable={editable}
                     vehicleOptions={vehicleOptions}
+                    vehicleUsage={vehicleUsage}
                     onVehicleChange={setTripVehicle}
                     onDispatchTrip={onDispatchTrip}
                     isDispatching={
@@ -658,6 +837,8 @@ export function PlanDetailPanel({
                       patchRow={patchRow}
                       patchLines={patchLines}
                       removeRow={removeRow}
+                      selected={selected.has(row.id)}
+                      onToggleSelected={toggleSelected}
                     />
                   ))}
                 </Fragment>
@@ -669,7 +850,7 @@ export function PlanDetailPanel({
               {unassigned.length > 0 && (
                 <Fragment>
                   <tr className="border-b border-line bg-panel-sunk">
-                    <td colSpan={editable ? 6 : 5} className="px-5 py-2">
+                    <td colSpan={editable ? 7 : 5} className="px-5 py-2">
                       <span className="label text-2xs text-rust-ink">
                         Belum ditugaskan · {unassigned.length} titik ·{" "}
                         {formatNumber(unassigned.reduce((s, r) => s + r.jumlahUnit, 0))}{" "}
@@ -688,6 +869,8 @@ export function PlanDetailPanel({
                       patchRow={patchRow}
                       patchLines={patchLines}
                       removeRow={removeRow}
+                      selected={selected.has(row.id)}
+                      onToggleSelected={toggleSelected}
                     />
                   ))}
                 </Fragment>
@@ -899,6 +1082,8 @@ function StopRow({
   patchRow,
   patchLines,
   removeRow,
+  selected,
+  onToggleSelected,
 }: {
   row: PlanRow;
   editable: boolean;
@@ -909,11 +1094,22 @@ function StopRow({
   patchRow: (id: string, patch: Partial<PlanRow>) => void;
   patchLines: (id: string, lines: PlanRow["lines"]) => void;
   removeRow: (id: string) => void;
+  selected?: boolean;
+  onToggleSelected?: (id: string, checked: boolean) => void;
 }) {
   const driver = driverOptions.find((d) => d.id === row.driverId);
 
   return (
-      <tr className="border-b border-line last:border-b-0">
+      <tr className={cn("border-b border-line last:border-b-0", selected && "bg-signal-soft/30")}>
+        {editable && (
+          <td className="px-3 py-2.5">
+            <Checkbox
+              aria-label={`Pilih ${row.outlet}`}
+              checked={!!selected}
+              onCheckedChange={(checked) => onToggleSelected?.(row.id, checked === true)}
+            />
+          </td>
+        )}
         <td className="px-5 py-2.5">
           <span className="block text-sm font-medium text-ink">
             {row.outlet}
@@ -1014,6 +1210,19 @@ function StopRow({
               piutang {formatNumber(Math.round(row.piutang / 1000))} rb
             </span>
           )}
+          {/* Payment standing for THIS stop, distinct from the credit-exposure
+              badge above -- an outlet can be "Lancar" overall and still have
+              this delivery unpaid, or be on approved credit terms for it. */}
+          {row.statusBayar !== "Lunas" && (
+            <span
+              className={cn(
+                "mt-1 block text-2xs",
+                row.statusBayar === "Kredit" ? "text-ink-muted" : "text-warning",
+              )}
+            >
+              {row.statusBayar === "Kredit" ? "Kredit disetujui" : "Belum didanai"}
+            </span>
+          )}
         </td>
 
         {editable && (
@@ -1045,6 +1254,7 @@ function TripHeader({
   colSpan,
   editable,
   vehicleOptions,
+  vehicleUsage,
   onVehicleChange,
   onDispatchTrip,
   isDispatching,
@@ -1053,6 +1263,8 @@ function TripHeader({
   colSpan: number;
   editable: boolean;
   vehicleOptions: VehicleOption[];
+  /** Which trip already has each truck out — see the doc comment where this is built. */
+  vehicleUsage: Map<string, TripGroup>;
   onVehicleChange: (tripKey: string, vehicleId: string) => void;
   onDispatchTrip?: (tripId: string, rows: PlanRow[]) => void;
   isDispatching?: boolean;
@@ -1092,19 +1304,31 @@ function TripHeader({
           {editable ? (
             <SelectInput
               aria-label={`Armada trip ${trip.tripNo}`}
-              className={cn("h-7 w-40 text-2xs", !trip.vehicleId && "border-rust")}
+              className={cn(
+                "data h-8 w-64 text-xs font-semibold",
+                !trip.vehicleId && "border-rust",
+              )}
               value={trip.vehicleId ?? ""}
               onChange={(e) => onVehicleChange(trip.key, e.target.value)}
             >
               <option value="">Pilih armada</option>
-              {vehicleOptions.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.label} · {formatNumber(v.kapasitas)}
-                </option>
-              ))}
+              {vehicleOptions.map((v) => {
+                const usedByTrip = vehicleUsage.get(v.id);
+                const usedByOther = !!usedByTrip && usedByTrip.driverId !== trip.driverId;
+                // Capacity is not repeated here — the load meter beside this
+                // picker already states it against this trip's own muatan.
+                return (
+                  <option key={v.id} value={v.id} disabled={usedByOther}>
+                    {v.label} — {v.sublabel}
+                    {usedByOther
+                      ? ` (dipakai ${usedByTrip.driver?.label ?? "trip lain"})`
+                      : ""}
+                  </option>
+                );
+              })}
             </SelectInput>
           ) : (
-            <span className="data text-2xs text-ink-muted">
+            <span className="data text-xs font-medium text-ink-muted">
               {trip.vehicle?.label ?? "Armada tidak ditetapkan"}
             </span>
           )}

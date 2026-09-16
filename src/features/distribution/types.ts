@@ -51,7 +51,15 @@ export interface PlanRow {
   vehicleId: string | null;
   vehicle: string;
   jamPengiriman: string;
-  statusBayar: "Lunas" | "Belum Lunas";
+  /**
+   * "Kredit" is its own state, not a flavour of "Lunas" -- an on-account
+   * stop has not been paid, it has been APPROVED to go out unpaid, and
+   * collapsing the two hid that distinction from suggestAssignment's
+   * at-risk load calculation (a stop excluded from risk because it happened
+   * to read "Lunas" was excluded for the wrong reason). See
+   * fortius-backend's payment_state = 'credit'.
+   */
+  statusBayar: "Lunas" | "Belum Lunas" | "Kredit";
   /** Cylinders this outlet may still take this month. */
   sisaKuotaOutlet: number;
   /** Outstanding receivable, so credit risk is visible while planning. */
@@ -207,6 +215,22 @@ export interface DistributionPaymentBoard {
     unpaidQty: number;
     creditQty: number;
     deliveredQty: number;
+    /** Rupiah pair mirroring plannedQty/fundedQty. hasUnpricedLine flags why
+     *  they can under-report: a line with no unit_price contributes 0 to
+     *  either sum instead of failing the whole board. */
+    plannedAmount: number;
+    fundedAmount: number;
+    hasUnpricedLine: boolean;
+    /** Which plan Danai/Lepas would act on. planCount > 1 is the anomaly the
+     *  console must refuse to guess through -- disable both actions and say
+     *  why rather than picking one plan silently. */
+    distributionOrderId: string;
+    planCount: number;
+    /** The receipt currently funding this stop, if any -- what Lepas acts
+     *  on. Set even before the receipt is verified (see fundedAmount, which
+     *  only counts a verified one). */
+    fundingPaymentId?: string;
+    fundingPaymentNumber?: string;
     state: "paid" | "partial" | "unpaid" | "credit";
     lastPaymentAt?: string;
     late?: boolean;

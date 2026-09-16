@@ -202,19 +202,21 @@ async function getPaymentBoard(date: string): Promise<DistributionPaymentBoard> 
   await latency("read");
   const db = scopedDb();
   const plans = db.plans.filter((plan) => plan.tanggal === date);
-  const rowsByOutlet = new Map<string, { planned: number; funded: number }>();
+  const rowsByOutlet = new Map<string, { planned: number; funded: number; orderIds: Set<string> }>();
   for (const plan of plans) {
     const details = await getPlanDetail(plan.id);
     for (const row of details) {
-      const current = rowsByOutlet.get(row.outletId) ?? { planned: 0, funded: 0 };
+      const current = rowsByOutlet.get(row.outletId) ?? { planned: 0, funded: 0, orderIds: new Set<string>() };
       current.planned += row.jumlahUnit;
       if (row.statusBayar === "Lunas") current.funded += row.jumlahUnit;
+      current.orderIds.add(plan.id);
       rowsByOutlet.set(row.outletId, current);
     }
   }
   const rows = [...rowsByOutlet].map(([outletId, amounts]) => {
     const outlet = db.outlets.find((item) => item.id === outletId);
     const unpaidQty = amounts.planned - amounts.funded;
+    const orderIds = [...amounts.orderIds];
     return {
       outletId,
       outletCode: outlet?.kode ?? "—",
@@ -226,6 +228,20 @@ async function getPaymentBoard(date: string): Promise<DistributionPaymentBoard> 
       deliveredQty: db.deliveries
         .filter((delivery) => delivery.outletId === outletId && delivery.tanggal === date)
         .reduce((sum, delivery) => sum + delivery.realisasi, 0),
+      // The mock has never priced a plan line -- see PlanRow, which carries
+      // no unit price at all -- so there is no honest rupiah figure to sum.
+      // hasUnpricedLine: true says so rather than reporting a silent 0 as if
+      // every line were priced and simply worth nothing.
+      plannedAmount: 0,
+      fundedAmount: 0,
+      hasUnpricedLine: true,
+      distributionOrderId: orderIds[0] ?? "",
+      planCount: orderIds.length,
+      // Which receipt funds this stop is tracked only inside financeApi.mock
+      // (module-local, not this shared db) -- see its own "distribution
+      // funding" section for why. Left undefined here rather than guessed.
+      fundingPaymentId: undefined,
+      fundingPaymentNumber: undefined,
       state: unpaidQty === 0 ? ("paid" as const) : amounts.funded > 0 ? ("partial" as const) : ("unpaid" as const),
       lastPaymentAt: undefined,
       late: undefined,

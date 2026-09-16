@@ -40,6 +40,8 @@ import type {
   CreditNoteView,
   DateRange,
   FinanceApi,
+  FundingResult,
+  FundStopInput,
   InvoiceFilters,
   InvoiceView,
   JournalView,
@@ -422,6 +424,69 @@ async function submitPaymentDecision(
   return toPaymentView(updated, outlets);
 }
 
+/* ── distribution funding ──────────────────────────────────────────────── */
+
+/** Mirrors the backend's FundingResponse. */
+interface FundingResponseWire {
+  payment: PaymentResponse;
+  distribution_order_id: string;
+  outlet_id: string;
+  lines_affected: number;
+  available_balance: number;
+}
+
+function toFundingResult(
+  wire: FundingResponseWire,
+  outlets: Map<string, OutletView>,
+): FundingResult {
+  return {
+    payment: toPaymentView(wire.payment, outlets),
+    distributionOrderId: wire.distribution_order_id,
+    outletId: wire.outlet_id,
+    linesAffected: wire.lines_affected,
+    availableBalance: wire.available_balance,
+  };
+}
+
+/** Every unrejected receipt for this outlet -- a rejected one is refused by
+ *  FundStop itself, so there is no point offering it in the picker. */
+async function getOutletReceipts(outletId: string): Promise<PaymentView[]> {
+  const [page, outlets] = await Promise.all([
+    getList<PaymentResponse>("/payments", {
+      pageSize: PAGE_SIZE,
+      sort: [{ field: "payment_date", direction: "desc" }],
+      filters: [{ field: "outlet_id", operator: "eq" as const, value: outletId }],
+    }),
+    outletsById(),
+  ]);
+  return page.items
+    .filter((r) => r.payment_status !== "rejected")
+    .map((r) => toPaymentView(r, outlets));
+}
+
+async function fundDistributionStop(input: FundStopInput): Promise<FundingResult> {
+  const outlets = await outletsById();
+  const wire = await send<FundingResponseWire>(
+    "post",
+    `/payments/${input.paymentId}/funding`,
+    { distribution_order_id: input.distributionOrderId, outlet_id: input.outletId },
+  );
+  return toFundingResult(wire, outlets);
+}
+
+async function releaseDistributionStop(input: FundStopInput): Promise<FundingResult> {
+  const outlets = await outletsById();
+  const params = new URLSearchParams({
+    distribution_order_id: input.distributionOrderId,
+    outlet_id: input.outletId,
+  });
+  const wire = await send<FundingResponseWire>(
+    "delete",
+    `/payments/${input.paymentId}/funding?${params.toString()}`,
+  );
+  return toFundingResult(wire, outlets);
+}
+
 /* ── credit notes ──────────────────────────────────────────────────────── */
 
 interface CreditNoteResponse {
@@ -763,6 +828,9 @@ export const financeApiHttp: FinanceApi = {
   submitPayment,
   submitAllocation,
   submitPaymentDecision,
+  getOutletReceipts,
+  fundDistributionStop,
+  releaseDistributionStop,
   submitCreditNote,
   getJournals,
   getTrialBalance,

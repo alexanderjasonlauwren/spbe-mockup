@@ -16,6 +16,8 @@ export type {
   AgingRow,
   CreditNoteInput,
   CreditNoteView,
+  FundingResult,
+  FundStopInput,
   InvoiceFilters,
   InvoiceView,
   JournalView,
@@ -34,6 +36,9 @@ export const getOpenInvoices = api.getOpenInvoices.bind(api);
 export const submitPayment = api.submitPayment.bind(api);
 export const submitAllocation = api.submitAllocation.bind(api);
 export const submitPaymentDecision = api.submitPaymentDecision.bind(api);
+export const getOutletReceipts = api.getOutletReceipts.bind(api);
+export const fundDistributionStop = api.fundDistributionStop.bind(api);
+export const releaseDistributionStop = api.releaseDistributionStop.bind(api);
 export const submitCreditNote = api.submitCreditNote.bind(api);
 export const getJournals = api.getJournals.bind(api);
 export const getTrialBalance = api.getTrialBalance.bind(api);

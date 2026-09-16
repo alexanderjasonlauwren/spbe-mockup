@@ -205,6 +205,13 @@ interface PaymentBoardWire {
     unpaid_qty: number;
     credit_qty: number;
     delivered_qty: number;
+    planned_amount: number;
+    funded_amount: number;
+    has_unpriced_line: boolean;
+    distribution_order_id: string;
+    plan_count: number;
+    funding_payment_id?: string;
+    funding_payment_number?: string;
     state: "paid" | "partial" | "unpaid" | "credit";
     last_payment_at?: string;
     late?: boolean;
@@ -304,6 +311,14 @@ function toPlanView(order: OrderResponse): DistributionPlan {
   };
 }
 
+/** Lunas/Belum Lunas/Kredit for one line -- see toPlanRows for how several
+ *  of these fold into one stop-level status. */
+function statusBayarFor(paymentState?: string, paymentStatus?: string): PlanRow["statusBayar"] {
+  if (paymentState === "credit") return "Kredit";
+  if (paymentState === "paid" && paymentStatus === "verified") return "Lunas";
+  return "Belum Lunas";
+}
+
 /**
  * One PlanRow per outlet, whatever the stop is carrying.
  *
@@ -365,11 +380,7 @@ function toPlanRows(items: OrderItemResponse[], board?: BoardResponse): PlanRow[
       tripNo: crew?.tripNo ?? item.sequence_no ?? null,
       tripId: crew?.tripId ?? null,
       tripStatus: crew?.tripStatus,
-      statusBayar:
-        item.payment_state === "credit" ||
-        (item.payment_state === "paid" && item.payment_status === "verified")
-          ? "Lunas"
-          : "Belum Lunas",
+      statusBayar: statusBayarFor(item.payment_state, item.payment_status),
       sisaKuotaOutlet: 0,
       piutang: 0,
       piutangJatuhTempo: 0,
@@ -377,13 +388,16 @@ function toPlanRows(items: OrderItemResponse[], board?: BoardResponse): PlanRow[
 
     row.lines.push({ productId: item.product_id ?? "", jumlah: item.planned_qty });
     row.jumlahUnit += item.planned_qty;
-    // Any unpaid line makes the stop unpaid: the truck is loaded per stop, and
-    // the half that is funded cannot be delivered on its own.
-    if (
-      item.payment_state !== "credit" &&
-      !(item.payment_state === "paid" && item.payment_status === "verified")
-    ) {
+    // Fold rule for a multi-line stop: any unpaid line makes the whole stop
+    // unpaid -- the truck loads per stop, and the funded half cannot go
+    // without the rest. Otherwise "Kredit" only holds when every line agrees;
+    // a stop mixing a credit line with a verified-paid one is fully covered,
+    // not on account, so it reads Lunas rather than either extreme alone.
+    const lineStatus = statusBayarFor(item.payment_state, item.payment_status);
+    if (lineStatus === "Belum Lunas" || row.statusBayar === "Belum Lunas") {
       row.statusBayar = "Belum Lunas";
+    } else if (lineStatus !== row.statusBayar) {
+      row.statusBayar = "Lunas";
     }
     byOutlet.set(outletId, row);
   }
@@ -456,6 +470,13 @@ async function getPaymentBoard(date: string): Promise<DistributionPaymentBoard> 
       unpaidQty: row.unpaid_qty,
       creditQty: row.credit_qty,
       deliveredQty: row.delivered_qty,
+      plannedAmount: row.planned_amount,
+      fundedAmount: row.funded_amount,
+      hasUnpricedLine: row.has_unpriced_line,
+      distributionOrderId: row.distribution_order_id,
+      planCount: row.plan_count,
+      fundingPaymentId: row.funding_payment_id,
+      fundingPaymentNumber: row.funding_payment_number,
       state: row.state,
       lastPaymentAt: row.last_payment_at,
       late: row.late,

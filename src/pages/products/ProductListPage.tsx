@@ -109,7 +109,7 @@ export function ProductListPage() {
       render: (row) => (
         <>
           <span className="data block text-ink">{formatRupiah(row.hargaJual)}</span>
-          {row.stokTersedia && (
+          {row.hargaBeli > 0 && (
             <span className="data block text-2xs text-ink-muted">
               beli {formatRupiah(row.hargaBeli)}
             </span>
@@ -122,8 +122,13 @@ export function ProductListPage() {
       key: "margin",
       header: "Margin",
       align: "right",
+      // Gated on hargaBeli, not stokTersedia: cost/sell pricing has its own
+      // write path on the real API now and is independent of stock, which
+      // still has none (core.stock_levels serves nothing yet). The two used
+      // to be unavailable together, which is the only reason sharing one
+      // flag ever looked correct.
       render: (row) =>
-        row.stokTersedia ? (
+        row.hargaBeli > 0 ? (
           <>
             <span className="data block text-ink">{formatRupiah(row.margin)}</span>
             <span className="data block text-2xs text-ink-muted">

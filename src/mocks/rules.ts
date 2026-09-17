@@ -1107,6 +1107,8 @@ export function saveOutlet(
       lng: input.lng ?? 110.5084,
       penanggungJawab: input.penanggungJawab ?? "",
       telepon: input.telepon ?? "",
+      bank: input.bank,
+      noRekening: input.noRekening,
       status: input.status ?? "Aktif",
       kuotaBulanan: input.kuotaBulanan ?? 600,
       termin: input.termin ?? 7,

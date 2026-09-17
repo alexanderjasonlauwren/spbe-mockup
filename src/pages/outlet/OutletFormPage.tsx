@@ -19,15 +19,19 @@ import {
   Toggle,
 } from "@/components/common/Field";
 import { Button } from "@/components/ui/button";
-import type { OutletStatus } from "@/mocks/types";
+import type { BankNameEntity, OutletStatus } from "@/mocks/types";
 import { outletLabel, outletLabelTitle, unitLabel } from "@/lib/lexicon";
 import { useResettableState } from "@/hooks/useResettableState";
+
+const BANKS: BankNameEntity[] = ["BCA", "BNI", "Mandiri", "BRI", "BSI"];
 
 interface FormState {
   kode: string;
   nama: string;
   penanggungJawab: string;
   telepon: string;
+  bank: BankNameEntity | "";
+  noRekening: string;
   alamat: string;
   kecamatan: string;
   kota: string;
@@ -45,6 +49,8 @@ const EMPTY: FormState = {
   nama: "",
   penanggungJawab: "",
   telepon: "",
+  bank: "",
+  noRekening: "",
   alamat: "",
   kecamatan: "",
   kota: "Kota Salatiga",
@@ -86,6 +92,8 @@ export function OutletFormPage() {
       nama: p.nama,
       penanggungJawab: p.penanggungJawab,
       telepon: p.telepon,
+      bank: p.bank ?? "",
+      noRekening: p.noRekening ?? "",
       alamat: p.alamat,
       kecamatan: p.kecamatan,
       kota: p.kota,
@@ -100,8 +108,14 @@ export function OutletFormPage() {
   });
 
   const saveMutation = useDeskMutation({
-    mutationFn: (values: FormState) =>
-      createOrUpdateOutlet(isEdit ? { ...values, id } : values),
+    mutationFn: (values: FormState) => {
+      // "" means "no bank on file" in the form's own select, which is a
+      // legitimate state for an outlet whose account isn't known yet -- but
+      // OutletEntity.bank is BankNameEntity | undefined, so the empty option
+      // is normalised to absent here rather than sent as a literal string.
+      const payload = { ...values, bank: values.bank || undefined };
+      return createOrUpdateOutlet(isEdit ? { ...payload, id } : payload);
+    },
     errorTitle: isEdit ? "Perubahan tidak tersimpan" : `${outletLabelTitle()} tidak terdaftar`,
     success: (p) => ({
       title: isEdit ? `${p.nama} diperbarui` : `${p.nama} terdaftar`,
@@ -304,6 +318,34 @@ export function OutletFormPage() {
                   mono
                   value={form.batasKredit}
                   onChange={(e) => set("batasKredit", Number(e.target.value))}
+                />
+              </Field>
+
+              <Field
+                label="Bank"
+                htmlFor="bank"
+                hint="Rekening asal yang diharapkan. Otomatis mengisi form penerimaan kas."
+              >
+                <SelectInput
+                  id="bank"
+                  value={form.bank}
+                  onChange={(e) => set("bank", e.target.value as BankNameEntity | "")}
+                >
+                  <option value="">Belum diketahui</option>
+                  {BANKS.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </SelectInput>
+              </Field>
+
+              <Field label="No. rekening" htmlFor="rekening">
+                <TextInput
+                  id="rekening"
+                  mono
+                  value={form.noRekening}
+                  onChange={(e) => set("noRekening", e.target.value)}
                 />
               </Field>
 

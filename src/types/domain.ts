@@ -130,6 +130,13 @@ export interface OutletEntity extends Scoped {
   batasKredit: number;
   /** Refuse to dispatch when the outlet is over limit or overdue. */
   blokirOtomatis: boolean;
+
+  /* ── expected receiving account ── */
+  /** The account a receipt from this outlet is expected to arrive from --
+   *  what recording a payment for it defaults to. Absent for an outlet whose
+   *  account is not on file yet, which is a real state, not an error. */
+  bank?: BankNameEntity;
+  noRekening?: string;
 }
 
 export type DriverStatusEntity =

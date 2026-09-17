@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock3, Wallet } from "lucide-react";
 import { Panel, PanelBody, PanelHeader, Skeleton } from "@/components/common/Panel";
@@ -13,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getMonthlyGrid, getPaymentBoard } from "@/features/distribution/api/distributionApi";
+import { getPaymentBoard } from "@/features/distribution/api/distributionApi";
 import {
   fundDistributionStop,
   getOutletReceipts,
@@ -27,7 +28,7 @@ import { formatNumber, formatRupiah, formatRupiahShort } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /** One outlet's stop for one plan, on the date the board is showing --
- *  everything Danai/Lepas needs that a board row already carries. */
+ *  everything Alokasikan/Lepas needs that a board row already carries. */
 interface StopTarget {
   outletId: string;
   outletCode: string;
@@ -35,11 +36,6 @@ interface StopTarget {
   distributionOrderId: string;
   fundingPaymentId?: string;
   hasUnpricedLine: boolean;
-}
-
-function currentMonth() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function today() {
@@ -54,8 +50,7 @@ const stateLabel = {
   credit: "Kredit disetujui",
 } as const;
 
-export function AllocationControlPanel() {
-  const [month, setMonth] = useState(currentMonth);
+export function PaymentControlBoard() {
   const [date, setDate] = useState(today);
   const [funding, setFunding] = useState<StopTarget | null>(null);
   const canSeePayments = useAuthStore((state) => state.hasPermission(PERMISSIONS.PAYMENTS_VIEW));
@@ -80,11 +75,6 @@ export function AllocationControlPanel() {
     }),
   });
 
-  const grid = useQuery({
-    queryKey: [...scopeKey(), "distribution-month-grid", month],
-    queryFn: () => getMonthlyGrid(month),
-    enabled: /^\d{4}-\d{2}$/.test(month),
-  });
   const board = useQuery({
     queryKey: [...scopeKey(), "distribution-payment-board", date],
     queryFn: () => getPaymentBoard(date),
@@ -94,83 +84,7 @@ export function AllocationControlPanel() {
   return (
     <div className="space-y-4">
       <Panel>
-        <PanelHeader
-          title="Matriks alokasi pangkalan"
-          hint="Format operasional: Id Registrasi / pangkalan × tanggal"
-        />
-        <PanelBody className="space-y-4">
-          <div className="max-w-xs">
-            <Field label="Bulan">
-              <TextInput type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
-            </Field>
-          </div>
-
-          {grid.isLoading ? (
-            <Skeleton className="h-72 w-full" />
-          ) : grid.isError ? (
-            <p className="text-sm text-danger">Matriks tidak dapat dimuat: {grid.error.message}</p>
-          ) : (
-            <div className="overflow-x-auto rounded-lg border border-line">
-              <table className="min-w-max border-collapse text-xs">
-                <thead className="bg-panel-sunk text-ink-muted">
-                  <tr>
-                    <th className="sticky left-0 z-20 min-w-48 border-b border-r border-line bg-panel-sunk px-3 py-2 text-left">
-                      Id Registrasi / Pangkalan
-                    </th>
-                    <th className="border-b border-r border-line px-3 py-2 text-right">Alokasi</th>
-                    {grid.data?.dates.map((day) => (
-                      <th key={day} className="min-w-12 border-b border-r border-line px-2 py-2 text-right">
-                        {Number(day.slice(-2))}
-                      </th>
-                    ))}
-                    <th className="border-b border-r border-line px-3 py-2 text-right">Total</th>
-                    <th className="border-b border-line px-3 py-2 text-right">Sisa</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {grid.data?.rows.map((row) => (
-                    <tr key={row.outletId} className="border-b border-line last:border-0">
-                      <th className="sticky left-0 z-10 border-r border-line bg-panel px-3 py-2 text-left font-medium text-ink">
-                        <span className="block font-mono text-[10px] text-ink-muted">{row.outletCode}</span>
-                        {row.outletName}
-                      </th>
-                      <td className="border-r border-line px-3 py-2 text-right tabular-nums">{formatNumber(row.targetQty)}</td>
-                      {grid.data?.dates.map((day) => (
-                        <td key={day} className="border-r border-line px-2 py-2 text-right tabular-nums">
-                          {row.cells[day] == null ? "·" : formatNumber(row.cells[day])}
-                        </td>
-                      ))}
-                      <td className="border-r border-line px-3 py-2 text-right font-medium tabular-nums">{formatNumber(row.total)}</td>
-                      <td className={cn("px-3 py-2 text-right font-medium tabular-nums", row.remainingQty < 0 && "text-danger")}>
-                        {formatNumber(row.remainingQty)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="bg-panel-sunk font-medium">
-                  <tr>
-                    <th className="sticky left-0 border-r border-t border-line bg-panel-sunk px-3 py-2 text-left">Total rencana / target SA</th>
-                    <td className="border-r border-t border-line" />
-                    {grid.data?.footer.map((day) => (
-                      <td key={day.date} className={cn("border-r border-t border-line px-2 py-2 text-right tabular-nums", day.shortfall !== 0 && "text-warning")}>
-                        {formatNumber(day.planned)} / {day.hasTarget ? formatNumber(day.required) : "—"}
-                      </td>
-                    ))}
-                    <td className="border-r border-t border-line px-3 py-2 text-right">{formatNumber(grid.data?.totals.planned ?? 0)}</td>
-                    <td className="border-t border-line px-3 py-2 text-right">{formatNumber(grid.data?.totals.shortfall ?? 0)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
-          <p className="text-xs text-ink-muted">
-            Titik berarti belum direncanakan; angka 0 berarti nol memang dicatat. Sisa negatif tetap ditampilkan agar kelebihan alokasi tidak tersembunyi.
-          </p>
-        </PanelBody>
-      </Panel>
-
-      <Panel>
-        <PanelHeader title="Kontrol pembayaran sebelum berangkat" hint="Hanya pembayaran terverifikasi yang dihitung sebagai dana tersedia" />
+        <PanelHeader title="Verifikasi pembayaran sebelum berangkat" hint="Hanya pembayaran terverifikasi yang dihitung sebagai dana tersedia" />
         <PanelBody className="space-y-4">
           <div className="max-w-xs">
             <Field label="Tanggal pengiriman">
@@ -178,18 +92,18 @@ export function AllocationControlPanel() {
             </Field>
           </div>
           {!canSeePayments ? (
-            <p className="text-sm text-ink-muted">Anda dapat melihat matriks distribusi, tetapi status pembayaran memerlukan izin membaca penerimaan kas.</p>
+            <p className="text-sm text-ink-muted">Status pembayaran memerlukan izin membaca penerimaan kas.</p>
           ) : board.isLoading ? (
             <Skeleton className="h-48 w-full" />
           ) : board.isError ? (
-            <p className="text-sm text-danger">Kontrol pembayaran tidak dapat dimuat: {board.error.message}</p>
+            <p className="text-sm text-danger">Verifikasi pembayaran tidak dapat dimuat: {board.error.message}</p>
           ) : (
             <>
               <div className="grid gap-3 sm:grid-cols-4">
                 {[
                   ["Direncanakan", board.data?.summary.planned ?? 0],
                   ["Terverifikasi", board.data?.summary.funded ?? 0],
-                  ["Belum didanai", board.data?.summary.unpaid ?? 0],
+                  ["Belum dialokasikan", board.data?.summary.unpaid ?? 0],
                   ["Terkirim", board.data?.summary.delivered ?? 0],
                 ].map(([label, value]) => (
                   <div key={String(label)} className="rounded-lg border border-line bg-panel-sunk px-4 py-3">
@@ -205,7 +119,7 @@ export function AllocationControlPanel() {
                       <th className="px-4 py-2 text-left">Pangkalan</th>
                       <th className="px-4 py-2 text-right">Rencana</th>
                       <th className="px-4 py-2 text-right">Terverifikasi</th>
-                      <th className="px-4 py-2 text-right">Belum didanai</th>
+                      <th className="px-4 py-2 text-right">Belum dialokasikan</th>
                       <th className="px-4 py-2 text-right">Kredit</th>
                       <th className="px-4 py-2 text-right">Terkirim</th>
                       <th className="px-4 py-2 text-left">Status</th>
@@ -267,7 +181,7 @@ export function AllocationControlPanel() {
                                 disabled
                                 title="Pangkalan ini ada pada lebih dari satu rencana untuk tanggal ini — pilih rencana yang benar secara manual."
                               >
-                                Danai
+                                Alokasikan
                               </Button>
                             ) : isFunded ? (
                               <Button
@@ -287,7 +201,7 @@ export function AllocationControlPanel() {
                             ) : (
                               <Button size="xs" onClick={() => setFunding(target)}>
                                 <Wallet className="mr-1 h-3 w-3" />
-                                Danai
+                                Alokasikan
                               </Button>
                             )}
                           </td>
@@ -308,7 +222,7 @@ export function AllocationControlPanel() {
 }
 
 /**
- * Danai's picker. A stop is funded from an existing, already-recorded
+ * Alokasikan's picker. A stop is funded from an existing, already-recorded
  * receipt -- not by recording one here -- because a receipt can arrive
  * before or after the plan, and RecordPaymentDialog on PaymentPage is
  * already the one place that creates one. This dialog answers a narrower
@@ -326,9 +240,9 @@ function FundStopDialog({ target, onClose }: { target: StopTarget | null; onClos
   const mutation = useDeskMutation({
     mutationFn: (input: { paymentId: string; distributionOrderId: string; outletId: string }) =>
       fundDistributionStop(input),
-    errorTitle: "Gagal mendanai titik ini",
+    errorTitle: "Gagal mengalokasikan titik ini",
     success: (result) => ({
-      title: "Titik didanai",
+      title: "Titik dialokasikan",
       description: `Sisa penerimaan setelah ini: ${formatRupiahShort(result.availableBalance)}.`,
       tone: "success",
     }),
@@ -342,16 +256,16 @@ function FundStopDialog({ target, onClose }: { target: StopTarget | null; onClos
     <Dialog open={!!target} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Danai {target?.outletName}</DialogTitle>
+          <DialogTitle>Alokasikan penerimaan untuk {target?.outletName}</DialogTitle>
           <DialogDescription>
             Pilih penerimaan yang menutup seluruh titik ini pada rencana hari ini. Satu
-            penerimaan mendanai satu titik secara penuh — tidak ada pendanaan sebagian.
+            penerimaan mengalokasikan satu titik secara penuh — tidak ada alokasi sebagian.
           </DialogDescription>
         </DialogHeader>
 
         {target?.hasUnpricedLine && (
           <p className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-            Salah satu produk pada titik ini belum punya harga jual yang berlaku. Pendanaan
+            Salah satu produk pada titik ini belum punya harga jual yang berlaku. Alokasi
             akan ditolak sampai harga ditetapkan.
           </p>
         )}
@@ -361,7 +275,7 @@ function FundStopDialog({ target, onClose }: { target: StopTarget | null; onClos
         ) : (receipts.data ?? []).length === 0 ? (
           <p className="py-4 text-center text-sm text-ink-muted">
             Belum ada penerimaan tercatat untuk pangkalan ini. Catat penerimaan dari halaman
-            Pembayaran terlebih dahulu.
+            Pembayaran, lalu kembali ke sini untuk mengalokasikan titik ini.
           </p>
         ) : (
           <Field label="Penerimaan">
@@ -376,24 +290,40 @@ function FundStopDialog({ target, onClose }: { target: StopTarget | null; onClos
           </Field>
         )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Batal
-          </Button>
-          <Button
-            disabled={!paymentId || mutation.isPending}
-            onClick={() =>
-              target &&
-              mutation.mutate({
-                paymentId,
-                distributionOrderId: target.distributionOrderId,
-                outletId: target.outletId,
-              })
-            }
-          >
-            Danai titik ini
-          </Button>
-        </DialogFooter>
+        {/* No receipt exists yet -- the disabled "Alokasikan ke titik ini" this
+            branch used to show next to Batal was a dead end: two buttons that
+            read as a real choice when only one of them could ever be clicked.
+            Sending the operator straight to where a receipt gets recorded,
+            with the outlet already chosen, is the actual next step. */}
+        {!receipts.isLoading && (receipts.data ?? []).length === 0 ? (
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Tutup
+            </Button>
+            <Button asChild onClick={onClose}>
+              <Link to={`/payments?outlet=${target?.outletId ?? ""}`}>Catat penerimaan</Link>
+            </Button>
+          </DialogFooter>
+        ) : (
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Batal
+            </Button>
+            <Button
+              disabled={!paymentId || mutation.isPending}
+              onClick={() =>
+                target &&
+                mutation.mutate({
+                  paymentId,
+                  distributionOrderId: target.distributionOrderId,
+                  outletId: target.outletId,
+                })
+              }
+            >
+              Alokasikan ke titik ini
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

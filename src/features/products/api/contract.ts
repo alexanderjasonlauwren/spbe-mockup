@@ -8,11 +8,11 @@
  * # Why `stokTersedia` exists
  *
  * `internal/controller/product` is real and mounted, but it is a catalogue
- * module, not a stock module: `core.products` has no quantity column, cost
- * price is a separate tiered-pricing resource with no write route at all
- * ("pricing has effective dates and an approval path of its own" — the
- * response DTO's own comment), and stock lives in `core.stock_levels`, which
- * nothing serves yet. Reporting a live count, a cost-based stock value, or a
+ * module, not a stock module: `core.products` has no quantity column, and
+ * stock lives in `core.stock_levels`, which nothing serves yet. Cost/sell
+ * pricing is a separate tiered resource but does have a write route now
+ * (`POST /products/:id/pricing`) — only the stock half of the mock model is
+ * still unbacked. Reporting a live count, a cost-based stock value, or a
  * low-stock flag against an API this build cannot ask would be a confident
  * zero standing in for "unknown" — the same lie `OutletView.statistikTersedia`
  * exists to avoid, and the same fix: a flag the screen checks to hide the

@@ -238,14 +238,14 @@ async function submitCreditNote(input: CreditNoteInput): Promise<CreditNoteView>
  *
  * Known gap, deliberately not papered over (same policy as the HTTP
  * adapter's own header comment): the mock has no notion of "this line is
- * funded by receipt X". `AllocationControlPanel`'s Lunas/Belum Lunas signal
+ * funded by receipt X". `PaymentControlBoard`'s Lunas/Belum Lunas signal
  * comes from `outletExposure`'s credit standing (distributionApi.mock's
  * `getPaymentBoard`), a wholly different, pre-existing concept -- so acting
  * here cannot flip it, the way FundStop flips payment_state on the real API.
  *
  * What this DOES do honestly: track which receipt is assigned to which
  * outlet's stop, in module-local memory (not the persisted `db`, so it does
- * not survive a reload), so Danai/Lepas round-trip sensibly within one
+ * not survive a reload), so Alokasikan/Lepas round-trip sensibly within one
  * session and the console can show "funded by PAY-..." without inventing a
  * number. `fundedAmount`/`plannedAmount` on the mock board stay 0 for the
  * same reason as `hasUnpricedLine: true` there -- the mock has never priced
@@ -289,7 +289,7 @@ async function releaseDistributionStop(input: FundStopInput): Promise<FundingRes
   const key = stopFundingKey(input.outletId, input.distributionOrderId);
   const funded = mockStopFunding.get(key);
   if (!funded || funded.paymentId !== input.paymentId) {
-    throw new ApiError("Titik ini tidak didanai oleh pembayaran tersebut.", 404);
+    throw new ApiError("Titik ini tidak dialokasikan ke pembayaran tersebut.", 404);
   }
   mockStopFunding.delete(key);
   const payment = (await getPayments()).find((p) => p.id === input.paymentId)!;

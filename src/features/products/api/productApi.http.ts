@@ -1,13 +1,13 @@
 /**
  * The catalogue, against the real API.
  *
- * `internal/controller/product` is real and mounted, but see this feature's
- * own contract.ts for why it only covers half the console's mock model:
- * cost price and stock quantity have no write route at all in this build
- * (pricing is a separate, read-only, tiered resource; stock lives in
- * `core.stock_levels`, which nothing serves yet). `stokTersedia: false` on
- * every row this adapter returns is how the console screens know to hide
- * the panels that depend on either.
+ * `internal/controller/product` is real and mounted. Stock quantity still has
+ * no write route at all in this build -- stock lives in `core.stock_levels`,
+ * which nothing serves yet -- but cost/sell pricing now does: `POST
+ * /products/:id/pricing`. `stokTersedia: false` on every row this adapter
+ * returns is how the console screens know to hide the stock panels that
+ * still have nothing behind them; pricing carries no such flag because it is
+ * fully live here.
  *
  * # The category this build always picks
  *
@@ -43,6 +43,9 @@ interface ProductResponse {
   barcode?: string;
   min_stock: number;
   current_sell_price?: number;
+  current_cost_price?: number;
+  margin?: number;
+  margin_percent?: number;
   status: string;
   version: number;
   created_at: string;
@@ -92,7 +95,6 @@ function parseWeightKg(ukuran: string): number {
 }
 
 function toView(row: ProductResponse): ProductView {
-  const hargaJual = row.current_sell_price ?? 0;
   return {
     id: row.id,
     kode: row.code,
@@ -101,18 +103,48 @@ function toView(row: ProductResponse): ProductView {
     satuan: row.unit_abbreviation ?? row.unit_name ?? "—",
     // Not modeled server-side; nothing reads this in the console today.
     returnable: false,
-    hargaJual,
-    // No cost-price read in this response — see this file's header.
-    hargaBeli: 0,
+    hargaJual: row.current_sell_price ?? 0,
+    hargaBeli: row.current_cost_price ?? 0,
     stok: 0,
     stokMinimum: row.min_stock,
     aktif: row.status === "atv",
-    margin: 0,
-    marginPersen: 0,
+    // Absent (either price not yet set) reads the same as 0 here — ProductView
+    // has no separate "unknown" state, unlike the response DTO it comes from.
+    margin: row.margin ?? 0,
+    marginPersen: row.margin_percent ?? 0,
     stokRendah: false,
     nilaiStok: 0,
     stokTersedia: false,
   };
+}
+
+function todayIso(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/**
+ * Adds a new price row for one tier, if the form's value actually changed.
+ *
+ * A price is a fact about a period, not a column to overwrite — see
+ * CreatePricingRequest's own doc on the backend. Skipped entirely when the
+ * value is unchanged (including on create, when `previous` is 0 and a blank
+ * field means "no price yet"), so saving a product nobody touched the price
+ * on does not churn out an identical new pricing row every time.
+ */
+async function syncPricing(
+  productId: string,
+  tier: "cost" | "sell",
+  next: number,
+  previous: number,
+): Promise<void> {
+  if (next <= 0 || next === previous) return;
+  await send("post", `/products/${productId}/pricing`, {
+    pricing_tier: tier,
+    price: next,
+    effective_from: todayIso(),
+  });
 }
 
 async function getProducts(filters?: ProductFilters): Promise<ProductView[]> {
@@ -161,14 +193,21 @@ async function createOrUpdateProduct(
 
   if (!input.id) {
     const category = await resolveDefaultCategory();
+    const created = await send<ProductResponse>("post", "/products", {
+      code: input.kode?.trim() || generateCode(input.nama ?? ""),
+      name: input.nama,
+      category,
+      weight_kg: weightKg,
+      min_stock: input.stokMinimum,
+    });
+    const pricedCost = !!input.hargaBeli;
+    const pricedSell = !!input.hargaJual;
+    if (pricedCost) await syncPricing(created.id, "cost", input.hargaBeli!, 0);
+    if (pricedSell) await syncPricing(created.id, "sell", input.hargaJual!, 0);
     return toView(
-      await send<ProductResponse>("post", "/products", {
-        code: input.kode?.trim() || generateCode(input.nama ?? ""),
-        name: input.nama,
-        category,
-        weight_kg: weightKg,
-        min_stock: input.stokMinimum,
-      }),
+      pricedCost || pricedSell
+        ? await getOne<ProductResponse>(`/products/${created.id}`)
+        : created,
     );
   }
 
@@ -181,7 +220,17 @@ async function createOrUpdateProduct(
     min_stock: input.stokMinimum,
     status: input.aktif !== undefined ? (input.aktif ? "atv" : "ina") : undefined,
   });
-  return toView(updated);
+  if (input.hargaBeli !== undefined) {
+    await syncPricing(input.id, "cost", input.hargaBeli, current.current_cost_price ?? 0);
+  }
+  if (input.hargaJual !== undefined) {
+    await syncPricing(input.id, "sell", input.hargaJual, current.current_sell_price ?? 0);
+  }
+  return toView(
+    input.hargaBeli !== undefined || input.hargaJual !== undefined
+      ? await getOne<ProductResponse>(`/products/${input.id}`)
+      : updated,
+  );
 }
 
 async function removeProduct(id: string): Promise<void> {

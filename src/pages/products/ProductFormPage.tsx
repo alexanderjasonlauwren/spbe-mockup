@@ -89,13 +89,9 @@ export function ProductFormPage() {
     e.preventDefault();
     const next: typeof errors = {};
     if (!form.nama.trim()) next.nama = "Nama produk wajib diisi.";
-    // Pricing has no write route in this build (see productApi.http.ts's own
-    // header) -- the fields are read-only here, so nothing to validate.
-    if (!usesApi) {
-      if (form.hargaJual <= 0) next.hargaJual = "Harga jual harus lebih dari nol.";
-      if (form.hargaBeli > form.hargaJual)
-        next.hargaBeli = "Harga beli melebihi harga jual — margin akan negatif.";
-    }
+    if (form.hargaJual <= 0) next.hargaJual = "Harga jual harus lebih dari nol.";
+    if (form.hargaBeli > form.hargaJual)
+      next.hargaBeli = "Harga beli melebihi harga jual — margin akan negatif.";
     setErrors(next);
     if (Object.keys(next).length > 0) return;
     saveMutation.mutate(form);
@@ -122,7 +118,7 @@ export function ProductFormPage() {
         title={isEdit ? `Ubah ${detail.data?.nama ?? "produk"}` : "Tambah produk"}
         description={
           usesApi
-            ? "Harga dan stok dikelola dari modul harga/gudang terpisah di build ini; stok minimum tetap dapat diubah di sini."
+            ? "Harga jual dipakai untuk menghitung nilai tagihan. Stok dikelola dari modul gudang terpisah di build ini; stok minimum tetap dapat diubah di sini."
             : "Harga jual dipakai untuk menghitung nilai tagihan, dan stok minimum memicu peringatan otomatis."
         }
       />
@@ -171,35 +167,26 @@ export function ProductFormPage() {
                 />
               </Field>
 
-              {!usesApi && (
-                <Field label="Harga beli" htmlFor="beli" error={errors.hargaBeli}>
-                  <TextInput
-                    id="beli"
-                    type="number"
-                    min={0}
-                    step="any"
-                    mono
-                    value={form.hargaBeli}
-                    invalid={!!errors.hargaBeli}
-                    onChange={(e) => set("hargaBeli", Number(e.target.value))}
-                  />
-                </Field>
-              )}
+              <Field label="Harga beli" htmlFor="beli" error={errors.hargaBeli}>
+                <TextInput
+                  id="beli"
+                  type="number"
+                  min={0}
+                  step="any"
+                  mono
+                  value={form.hargaBeli}
+                  invalid={!!errors.hargaBeli}
+                  onChange={(e) => set("hargaBeli", Number(e.target.value))}
+                />
+              </Field>
 
-              <Field
-                label="Harga jual"
-                htmlFor="jual"
-                error={errors.hargaJual}
-                required={!usesApi}
-                hint={usesApi ? "Dikelola dari modul harga terpisah." : undefined}
-              >
+              <Field label="Harga jual" htmlFor="jual" error={errors.hargaJual} required>
                 <TextInput
                   id="jual"
                   type="number"
                   min={1}
                   step="any"
                   mono
-                  disabled={usesApi}
                   value={form.hargaJual}
                   invalid={!!errors.hargaJual}
                   onChange={(e) => set("hargaJual", Number(e.target.value))}
@@ -209,19 +196,17 @@ export function ProductFormPage() {
           </Panel>
 
           <div className="space-y-4">
-            {!usesApi && (
-              <Panel>
-                <PanelHeader title="Margin" />
-                <PanelBody>
-                  <p className="data truncate text-figure font-semibold text-ink">
-                    {formatRupiah(margin)}
-                  </p>
-                  <p className="mt-1 text-xs text-ink-muted">
-                    {formatPercentId(marginPct, 1)} dari harga jual
-                  </p>
-                </PanelBody>
-              </Panel>
-            )}
+            <Panel>
+              <PanelHeader title="Margin" />
+              <PanelBody>
+                <p className="data truncate text-figure font-semibold text-ink">
+                  {formatRupiah(margin)}
+                </p>
+                <p className="mt-1 text-xs text-ink-muted">
+                  {formatPercentId(marginPct, 1)} dari harga jual
+                </p>
+              </PanelBody>
+            </Panel>
 
             <Panel>
               <PanelHeader title="Stok" />

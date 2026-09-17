@@ -1220,7 +1220,7 @@ function StopRow({
                 row.statusBayar === "Kredit" ? "text-ink-muted" : "text-warning",
               )}
             >
-              {row.statusBayar === "Kredit" ? "Kredit disetujui" : "Belum didanai"}
+              {row.statusBayar === "Kredit" ? "Kredit disetujui" : "Belum dialokasikan"}
             </span>
           )}
         </td>

@@ -23,7 +23,7 @@
 import { getList, getOne, send } from "@/lib/api";
 import { exportCsv, timestampSuffix } from "@/lib/export";
 import { outletLabel } from "@/lib/lexicon";
-import type { OutletEntity, OutletStatus } from "@/mocks/types";
+import type { BankNameEntity, OutletEntity, OutletStatus } from "@/mocks/types";
 import type { OutletApi, OutletFilters, OutletView } from "./contract";
 
 /** Mirrors the backend's OutletResponse. */
@@ -35,6 +35,8 @@ interface OutletResponse {
   owner_name: string;
   phone: string;
   npwp?: string;
+  bank_name?: string;
+  bank_account_number?: string;
   email?: string;
   address: string;
   district?: string;
@@ -101,6 +103,12 @@ function toView(row: OutletResponse): OutletView {
     lng: row.longitude ?? 0,
     penanggungJawab: row.owner_name,
     telepon: row.phone,
+    // Free text server-side (see CreateOutletRequest's own doc) -- an
+    // unrecognised value still round-trips, it just will not match one of
+    // the picker's five options, the same as a bank name typed into the
+    // payment form's own free-standing state would.
+    bank: row.bank_name as BankNameEntity | undefined,
+    noRekening: row.bank_account_number,
     status: toStatus(row.status),
     // The monthly obligation, from core.outlet_targets via the LATERAL subquery
     // on the outlet read. Zero means nobody has planned this month for this
@@ -146,6 +154,8 @@ function toWire(input: Partial<OutletEntity>, forUpdate: boolean) {
   put("name", input.nama);
   put("owner_name", input.penanggungJawab);
   put("phone", input.telepon);
+  put("bank_name", input.bank);
+  put("bank_account_number", input.noRekening);
   put("address", input.alamat);
   put("district", input.kecamatan);
   put("city", input.kota);

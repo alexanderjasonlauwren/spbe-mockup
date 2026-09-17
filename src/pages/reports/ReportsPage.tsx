@@ -22,10 +22,13 @@ import {
   getTopOutlet,
   printReport,
   RANGE_LABEL,
+  resolveRange,
   type ReportRange,
 } from "@/features/reports/api/reportApi";
+import { getProfitAndLoss } from "@/features/finance/api/financeApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { useTheme } from "@/hooks/useTheme";
+import { useAuthStore } from "@/features/auth/store/authStore";
 import { CanAccess } from "@/features/rbac/components/CanAccess";
 import { PERMISSIONS } from "@/features/rbac/permissions";
 import { PageHeader } from "@/components/common/PageHeader";
@@ -69,6 +72,16 @@ export function ReportsPage() {
   const drivers = useQuery({
     queryKey: [...scopeKey(), "report-drivers", range],
     queryFn: () => getDriverPerformance(range),
+  });
+  // Realised margin is ledger data (revenue minus COGS, posted per delivery
+  // as it's actually confirmed) — a different permission than the rest of
+  // this page's INVOICES_VIEW-gated figures, so it is fetched only when held
+  // and the tile simply does not render otherwise, rather than 403ing.
+  const canSeeMargin = useAuthStore((state) => state.hasPermission(PERMISSIONS.JOURNALS_VIEW));
+  const margin = useQuery({
+    queryKey: [...scopeKey(), "report-margin", range],
+    queryFn: () => getProfitAndLoss(resolveRange(range)),
+    enabled: canSeeMargin,
   });
 
   const exportMutation = useDeskMutation({
@@ -274,6 +287,15 @@ export function ReportsPage() {
           isLoading={summary.isLoading}
           tone={s && s.suratJalanTertunda > 0 ? "rust" : undefined}
         />
+        {canSeeMargin && (
+          <Stat
+            label="Margin kotor"
+            value={formatRupiahShort(margin.data?.labaKotor ?? 0)}
+            hint="Pendapatan dikurangi harga pokok penjualan, dari surat jalan yang benar-benar terkirim"
+            isLoading={margin.isLoading}
+            tone="pine"
+          />
+        )}
       </div>
 
       {/* Two measures, two charts — never two y-axes on one plot. */}

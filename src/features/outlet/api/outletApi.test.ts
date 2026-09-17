@@ -113,6 +113,30 @@ it("maps the current month's target onto the monthly quota", async () => {
   expect((await outletApiHttp.getOutletDetail(ID)).kuotaBulanan).toBe(420);
 });
 
+/**
+ * The expected receiving account -- what a payment recorded for this outlet
+ * defaults to. Absent is a real state (an outlet whose account is not on
+ * file yet), not an error, so both fields must round-trip as undefined
+ * rather than empty strings that would render as a blank-looking value.
+ */
+it("maps the outlet's default bank and account number", async () => {
+  getOne.mockResolvedValue(wire({ bank_name: "BNI", bank_account_number: "1234567890" }));
+
+  const outlet = await outletApiHttp.getOutletDetail(ID);
+
+  expect(outlet.bank).toBe("BNI");
+  expect(outlet.noRekening).toBe("1234567890");
+});
+
+it("leaves bank and account number undefined when the outlet has none on file", async () => {
+  getOne.mockResolvedValue(wire());
+
+  const outlet = await outletApiHttp.getOutletDetail(ID);
+
+  expect(outlet.bank).toBeUndefined();
+  expect(outlet.noRekening).toBeUndefined();
+});
+
 describe("filtering", () => {
   /**
    * Filters go to the server, not to the array.
@@ -180,6 +204,23 @@ describe("writing", () => {
     expect(path).toBe("/outlets");
     expect(body.version).toBeUndefined();
     expect(getOne).not.toHaveBeenCalled();
+  });
+
+  /** The default receiving account is written like any other field -- this
+   *  is what makes recording it in the outlet form persist at all. */
+  it("writes the default bank and account number", async () => {
+    send.mockResolvedValue(wire());
+
+    await outletApiHttp.createOrUpdateOutlet({
+      nama: "Baru",
+      kode: "PKL-009",
+      bank: "BNI",
+      noRekening: "1234567890",
+    });
+
+    const [, , body] = send.mock.calls[0];
+    expect(body.bank_name).toBe("BNI");
+    expect(body.bank_account_number).toBe("1234567890");
   });
 
   /**

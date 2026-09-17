@@ -221,7 +221,7 @@ export interface DistributionPaymentBoard {
     plannedAmount: number;
     fundedAmount: number;
     hasUnpricedLine: boolean;
-    /** Which plan Danai/Lepas would act on. planCount > 1 is the anomaly the
+    /** Which plan Alokasikan/Lepas would act on. planCount > 1 is the anomaly the
      *  console must refuse to guess through -- disable both actions and say
      *  why rather than picking one plan silently. */
     distributionOrderId: string;

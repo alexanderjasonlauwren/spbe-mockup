@@ -1,6 +1,6 @@
 import { scopeKey } from "@/mocks/scope";
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Plus, Split, Wallet, XCircle } from "lucide-react";
 import {
@@ -12,6 +12,7 @@ import {
   type PaymentView,
 } from "@/features/finance/api/financeApi";
 import { getOutletOptions } from "@/features/distribution/api/distributionApi";
+import { getOutletDetail } from "@/features/outlet/api/outletApi";
 import { useDeskMutation } from "@/hooks/useDeskMutation";
 import { CanAccess } from "@/features/rbac/components/CanAccess";
 import { PERMISSIONS } from "@/features/rbac/permissions";
@@ -61,7 +62,12 @@ export function PaymentPage() {
   } | null>(null);
   const [alasan, setAlasan] = useState("");
   const [allocating, setAllocating] = useState<PaymentView | null>(null);
-  const [recording, setRecording] = useState(false);
+  // Arriving from Verifikasi Pembayaran's "Alokasikan" dialog with no receipt yet
+  // recorded: ?outlet=<id> opens this dialog with that outlet pre-selected,
+  // so recording one is a single trip rather than a menu hunt back here.
+  const [searchParams] = useSearchParams();
+  const outletFromLink = searchParams.get("outlet") ?? "";
+  const [recording, setRecording] = useState(!!outletFromLink);
 
   const payments = useQuery({
     queryKey: [...scopeKey(), "payments", tab, search],
@@ -280,7 +286,11 @@ export function PaymentPage() {
         />
       </Panel>
 
-      <RecordPaymentDialog open={recording} onOpenChange={setRecording} />
+      <RecordPaymentDialog
+        open={recording}
+        onOpenChange={setRecording}
+        initialOutletId={outletFromLink}
+      />
       <AllocateDialog payment={allocating} onClose={() => setAllocating(null)} />
 
       <Dialog open={!!decision} onOpenChange={(o) => !o && setDecision(null)}>
@@ -541,16 +551,16 @@ function AllocateDialog({
 function RecordPaymentDialog({
   open,
   onOpenChange,
+  initialOutletId = "",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialOutletId?: string;
 }) {
-  const [form, setForm] = useState({
-    outletId: "",
+  const [rest, setRest] = useState({
+    outletId: initialOutletId,
     jumlah: 0,
     tanggal: todayIso(),
-    bank: "BCA" as BankNameEntity,
-    noRekening: "",
     keterangan: "",
   });
 
@@ -558,6 +568,36 @@ function RecordPaymentDialog({
     queryKey: [...scopeKey(), "outlet-options"],
     queryFn: getOutletOptions,
   });
+
+  const selectedOutlet = useQuery({
+    queryKey: [...scopeKey(), "outlet-detail", rest.outletId],
+    queryFn: () => getOutletDetail(rest.outletId),
+    enabled: !!rest.outletId,
+  });
+
+  // Recomputed during render, not in an effect (see useResettableState's own
+  // doc for why), whenever selectedOutlet.data's identity changes -- which
+  // React Query only does when the outlet selection actually changes, not on
+  // every keystroke elsewhere in the form. Only takes bank/noRekening from
+  // the outlet when IT has a default on file; one with none on file falls
+  // back to the BNI default rather than an empty field, since SIM3LON is
+  // itself described as tied to BNI Direct (flow doc §8) -- not a claim
+  // every pangkalan uses it, just the better blank guess.
+  const [bankInfo, setBankInfo] = useResettableState([selectedOutlet.data], () => ({
+    bank: (selectedOutlet.data?.bank ?? "BNI") as BankNameEntity,
+    noRekening: selectedOutlet.data?.noRekening ?? "",
+  }));
+
+  const form = { ...rest, ...bankInfo };
+  const setForm = (next: typeof form) => {
+    setRest({
+      outletId: next.outletId,
+      jumlah: next.jumlah,
+      tanggal: next.tanggal,
+      keterangan: next.keterangan,
+    });
+    setBankInfo({ bank: next.bank, noRekening: next.noRekening });
+  };
 
   const mutation = useDeskMutation({
     mutationFn: () => submitPayment(form),

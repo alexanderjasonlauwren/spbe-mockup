@@ -49,11 +49,28 @@ beforeEach(() => {
 });
 
 describe("reading", () => {
-  it("flags stock and cost price unavailable rather than reporting zero as real", async () => {
+  it("flags stock unavailable rather than reporting zero as real", async () => {
     getOne.mockResolvedValue(wire());
     const p = await productApiHttp.getProductDetail(ID);
     expect(p.stokTersedia).toBe(false);
     expect(p.hargaJual).toBe(22000);
+  });
+
+  it("reads cost price and margin from the response", async () => {
+    getOne.mockResolvedValue(
+      wire({ current_cost_price: 18000, margin: 4000, margin_percent: 18.18 }),
+    );
+    const p = await productApiHttp.getProductDetail(ID);
+    expect(p.hargaBeli).toBe(18000);
+    expect(p.margin).toBe(4000);
+    expect(p.marginPersen).toBe(18.18);
+  });
+
+  it("reads margin as 0 when the backend has not priced both tiers yet", async () => {
+    getOne.mockResolvedValue(wire({ current_cost_price: undefined, margin: undefined }));
+    const p = await productApiHttp.getProductDetail(ID);
+    expect(p.hargaBeli).toBe(0);
+    expect(p.margin).toBe(0);
   });
 
   it("formats ukuran from weight_kg", async () => {
@@ -174,5 +191,81 @@ describe("writing", () => {
    *  so reaching this in practice is already a bug elsewhere. */
   it("refuses a stock adjustment -- core.stock_levels has no service in this build", async () => {
     await expect(productApiHttp.changeStock(ID, 10, "test")).rejects.toThrow(/belum tersedia/);
+  });
+
+  describe("pricing", () => {
+    it("posts a pricing row per tier when creating with prices set", async () => {
+      getOne
+        .mockResolvedValueOnce([{ code: "subsidi", name: "Subsidi", sort_order: 0 }])
+        .mockResolvedValueOnce(wire({ current_cost_price: 10000, current_sell_price: 15000 }));
+      send.mockResolvedValue(wire());
+
+      await productApiHttp.createOrUpdateProduct({
+        kode: "LPG-010",
+        nama: "LPG 10 Kg",
+        ukuran: "10 kg",
+        stokMinimum: 0,
+        hargaBeli: 10000,
+        hargaJual: 15000,
+      });
+
+      const pricingCalls = send.mock.calls.filter(([, path]) => String(path).endsWith("/pricing"));
+      expect(pricingCalls).toHaveLength(2);
+      const tiers = pricingCalls.map(([, , body]) => (body as { pricing_tier: string }).pricing_tier);
+      expect(tiers.sort()).toEqual(["cost", "sell"]);
+    });
+
+    it("does not touch pricing on create when no price was entered", async () => {
+      getOne.mockResolvedValue([{ code: "subsidi", name: "Subsidi", sort_order: 0 }]);
+      send.mockResolvedValue(wire());
+
+      await productApiHttp.createOrUpdateProduct({
+        kode: "LPG-011",
+        nama: "LPG 11 Kg",
+        ukuran: "11 kg",
+        stokMinimum: 0,
+      });
+
+      expect(send.mock.calls.some(([, path]) => String(path).endsWith("/pricing"))).toBe(false);
+    });
+
+    it("posts a new sell price on update only when it actually changed", async () => {
+      getOne
+        .mockResolvedValueOnce(wire({ current_sell_price: 15000, current_cost_price: 10000 }))
+        .mockResolvedValueOnce(wire({ current_sell_price: 17000, current_cost_price: 10000 }));
+      send.mockResolvedValue(wire());
+
+      const result = await productApiHttp.createOrUpdateProduct({
+        id: ID,
+        kode: "LPG-003",
+        nama: "LPG 3 Kg Subsidi",
+        ukuran: "3 kg",
+        stokMinimum: 20,
+        hargaBeli: 10000,
+        hargaJual: 17000,
+      });
+
+      const pricingCalls = send.mock.calls.filter(([, path]) => String(path).endsWith("/pricing"));
+      expect(pricingCalls).toHaveLength(1);
+      expect(pricingCalls[0][2]).toMatchObject({ pricing_tier: "sell", price: 17000 });
+      expect(result.hargaJual).toBe(17000);
+    });
+
+    it("does not re-post a price that did not change", async () => {
+      getOne.mockResolvedValue(wire({ current_sell_price: 15000, current_cost_price: 10000 }));
+      send.mockResolvedValue(wire());
+
+      await productApiHttp.createOrUpdateProduct({
+        id: ID,
+        kode: "LPG-003",
+        nama: "LPG 3 Kg Subsidi",
+        ukuran: "3 kg",
+        stokMinimum: 20,
+        hargaBeli: 10000,
+        hargaJual: 15000,
+      });
+
+      expect(send.mock.calls.some(([, path]) => String(path).endsWith("/pricing"))).toBe(false);
+    });
   });
 });

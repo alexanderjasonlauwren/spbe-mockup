@@ -4,6 +4,7 @@ import {
   Network,
   Bell,
   BookOpen,
+  ClipboardCheck,
   ClipboardList,
   FileSignature,
   FileText,
@@ -90,6 +91,13 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Map,
         hint: "Posisi armada dan status tiap surat jalan",
         permission: [PERMISSIONS.DELIVERIES_VIEW, PERMISSIONS.GPS_TRACKS_VIEW],
+      },
+      {
+        name: "Verifikasi Pembayaran",
+        href: "/payment-control",
+        icon: ClipboardCheck,
+        hint: "Dana terverifikasi per pangkalan sebelum armada berangkat",
+        permission: PERMISSIONS.PAYMENTS_VIEW,
       },
       {
         name: "Klaim Transportasi",

@@ -4,7 +4,7 @@ import { scopeKey } from "@/mocks/scope";
 import { useDistributionPlan } from "@/features/distribution/hooks/useDistributionPlan";
 import { PlanListPanel } from "@/features/distribution/components/PlanListPanel";
 import { PlanDetailPanel } from "@/features/distribution/components/PlanDetailPanel";
-import { AllocationControlPanel } from "@/features/distribution/components/AllocationControlPanel";
+import { AllocationMatrixPanel } from "@/features/distribution/components/AllocationMatrixPanel";
 import { getUsers } from "@/features/users/api/userApi";
 import { PageHeader } from "@/components/common/PageHeader";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -151,12 +151,12 @@ export function DistributionPage() {
           variant={view === "allocation" ? "default" : "ghost"}
           onClick={() => setView("allocation")}
         >
-          Alokasi & pembayaran
+          Matriks alokasi
         </Button>
       </div>
 
       {view === "allocation" ? (
-        <AllocationControlPanel />
+        <AllocationMatrixPanel />
       ) : (
         <div className="grid min-h-[36rem] grid-cols-1 gap-4 lg:grid-cols-12">
           <div className="lg:col-span-3">
